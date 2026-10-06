@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="icon" href="/icon-192.png">
+<meta name="theme-color" content="#000000">
+<title>Deur</title>
+<style>
+  :root {
+    --u: 8px; --c: #30d158;
+    --bg: #000; --s1: #111113; --s2: #1c1c1f; --line: #26262a; --fg: #f5f5f7; --dim: #9a9aa2; --mute: #5c5c64;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
+  body { overflow: hidden; font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; touch-action: manipulation; overscroll-behavior: none; }
+  body.idle { cursor: none; }
+  body.visit { overflow: auto; }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+  svg.i { width: 1.2em; height: 1.2em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  #app { position: fixed; top: 0; left: 0; display: flex; flex-direction: column; padding: calc(var(--u)*4.5); gap: calc(var(--u)*3); overflow: hidden; transform-origin: top left;
+    background: radial-gradient(80% 50% at 50% 32%, color-mix(in srgb, var(--c) 12%, transparent), transparent 75%), var(--bg); transition: background 1s; }
+  #app.landscape { background: radial-gradient(55% 75% at 28% 50%, color-mix(in srgb, var(--c) 12%, transparent), transparent 75%), var(--bg); }
+  body.visit #app { position: relative; min-height: 100vh; overflow: visible; }
+
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: calc(var(--u)*2); color: var(--dim); font-size: calc(var(--u)*2.6); font-weight: 500; }
+  #name { color: var(--fg); font-weight: 600; }
+  #subtitle { margin-left: calc(var(--u)*1.2); }
+  #time { font-variant-numeric: tabular-nums; }
+
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--u)*4); }
+  #app.landscape main { display: grid; grid-template-columns: 1.2fr 1fr; gap: calc(var(--u)*6); align-items: center; }
+
+  /* status */
+  .hero { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: calc(var(--u)*1.4); min-height: 0; }
+  .ring { width: calc(var(--u)*3.4); height: calc(var(--u)*3.4); border-radius: 50%; background: var(--c); box-shadow: 0 0 calc(var(--u)*4) var(--c); animation: breathe 3.6s ease-in-out infinite; margin-bottom: calc(var(--u)*2); }
+  @keyframes breathe { 50% { box-shadow: 0 0 calc(var(--u)*1.5) var(--c); } }
+  .ring.ding { animation: ding .5s ease-in-out 4; }
+  @keyframes ding { 50% { transform: scale(1.8); box-shadow: 0 0 calc(var(--u)*7) var(--c); } }
+  #label { font-size: calc(var(--u)*17); font-weight: 800; letter-spacing: -.045em; line-height: .92; color: var(--c); white-space: nowrap; max-width: 100%; }
+  #app.portrait #label { font-size: calc(var(--u)*20); }
+  #until { font-size: calc(var(--u)*4.2); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; max-width: 22ch; text-wrap: balance; margin-top: calc(var(--u)*.6); }
+  #untilAt { font-size: calc(var(--u)*3); color: var(--c); font-weight: 600; font-variant-numeric: tabular-nums; margin-top: calc(var(--u)*-.4); }
+  #until:empty, #untilAt:empty { display: none; }
+  #message { font-size: calc(var(--u)*2.8); color: var(--dim); max-width: 24ch; text-wrap: balance; line-height: 1.3; }
+  #note { font-size: calc(var(--u)*3.3); font-weight: 600; line-height: 1.3; color: var(--fg); background: var(--s1); border-radius: calc(var(--u)*2.2); padding: calc(var(--u)*2) calc(var(--u)*3); max-width: 30ch; text-wrap: balance; margin-top: calc(var(--u)*2); }
+  #note:empty { display: none; }
+  #extra { font-size: calc(var(--u)*2.2); color: var(--mute); margin-top: calc(var(--u)*1.2); }
+  #extra:empty { display: none; }
+
+  /* visitors */
+  .ask { display: flex; flex-direction: column; gap: calc(var(--u)*1.2); }
+  .ask h2 { margin: 0 0 calc(var(--u)*.8); font-size: calc(var(--u)*2.6); font-weight: 600; color: var(--dim); }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(var(--u)*1.2); }
+  .tile { display: flex; align-items: center; justify-content: center; gap: calc(var(--u)*1.2); background: var(--s1); border-radius: calc(var(--u)*2); padding: calc(var(--u)*2.6) calc(var(--u)*1.6); font-size: calc(var(--u)*2.5); font-weight: 600; transition: transform .12s, background .12s; }
+  .tile:active { transform: scale(.97); background: var(--s2); }
+  .tile svg { color: var(--c); }
+  .tile.wait { color: var(--mute); }
+  .tile.wait svg { color: var(--mute); }
+  .tile.wide { grid-column: 1 / -1; }
+  #reasons:empty { display: none; }
+  #actions .tile { flex-direction: column; gap: calc(var(--u)*1.4); padding: calc(var(--u)*3.4) calc(var(--u)*1.2); font-size: calc(var(--u)*2.6); }
+  #actions .tile svg { width: 1.6em; height: 1.6em; }
+
+  /* sheet */
+  #modal { position: absolute; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; padding: calc(var(--u)*3); z-index: 20; }
+  body.visit #modal { position: fixed; }
+  #modal.open { display: flex; }
+  .sheet { background: var(--s1); border-radius: calc(var(--u)*3); padding: calc(var(--u)*3.5); width: 100%; max-width: calc(var(--u)*88); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: calc(var(--u)*1.6); animation: rise .2s ease-out; }
+  @keyframes rise { from { transform: translateY(calc(var(--u)*1.5)); } }
+  .sheet h3 { margin: 0 0 calc(var(--u)*.6); font-size: calc(var(--u)*3.4); font-weight: 700; letter-spacing: -.02em; }
+  .sheet input, .sheet textarea { width: 100%; font: inherit; font-size: calc(var(--u)*2.7); padding: calc(var(--u)*1.7) calc(var(--u)*2); border-radius: calc(var(--u)*1.5); border: 1px solid var(--line); background: var(--bg); color: var(--fg); user-select: text; -webkit-user-select: text; }
+  .sheet input:focus, .sheet textarea:focus { outline: none; border-color: var(--dim); }
+  .sheet textarea { min-height: 4em; resize: none; }
+  .btns { display: flex; gap: calc(var(--u)*1.2); margin-top: calc(var(--u)*.6); }
+  .btns > * { flex: 1; }
+  .btn { padding: calc(var(--u)*2); border-radius: calc(var(--u)*1.5); font-size: calc(var(--u)*2.5); font-weight: 600; background: var(--s2); }
+  .btn.go { background: var(--fg); color: #000; }
+  .btn:disabled { opacity: .4; }
+  .err { color: #ff453a; font-size: calc(var(--u)*2.1); font-weight: 600; }
+  .err:empty { display: none; }
+  .day { font-size: calc(var(--u)*2); font-weight: 600; color: var(--dim); margin: calc(var(--u)*.8) 0 calc(var(--u)*.6); }
+  .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--u)*11.5), 1fr)); gap: calc(var(--u)*.8); }
+  .slot { padding: calc(var(--u)*1.4) 0; border-radius: calc(var(--u)*1.2); background: var(--bg); font-size: calc(var(--u)*2.2); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .slot.sel { background: var(--fg); color: #000; }
+  .daytabs { display: flex; gap: calc(var(--u)*.8); overflow-x: auto; scrollbar-width: none; }
+  .daytab { flex: none; padding: calc(var(--u)*1.2) calc(var(--u)*2.2); border-radius: 999px; background: var(--s2); font-size: calc(var(--u)*2.2); font-weight: 600; }
+  .daytab.sel { background: var(--fg); color: #000; }
+  .sheet.book .slots { min-height: calc(var(--u)*12); }
+  .picked { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--u)*1.5); background: var(--bg); border-radius: calc(var(--u)*1.5); padding: calc(var(--u)*1.6) calc(var(--u)*2); font-size: calc(var(--u)*2.6); font-weight: 650; }
+  .link { color: var(--c); font-size: calc(var(--u)*2.2); font-weight: 600; }
+  .muted { color: var(--dim); font-size: calc(var(--u)*2.2); margin: 0; }
+  .done { align-items: center; text-align: center; padding: calc(var(--u)*5) calc(var(--u)*3.5); gap: calc(var(--u)*1.4); }
+  .badge { width: calc(var(--u)*10); height: calc(var(--u)*10); border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); font-size: calc(var(--u)*5); margin-bottom: calc(var(--u)*1); }
+  .wait-line { display: flex; align-items: center; gap: calc(var(--u)*1.2); color: var(--dim); font-size: calc(var(--u)*2.2); }
+  .spin { width: calc(var(--u)*2.2); height: calc(var(--u)*2.2); border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--dim); animation: spin .9s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .reply { font-size: calc(var(--u)*4.6); font-weight: 750; letter-spacing: -.025em; line-height: 1.12; text-wrap: balance; }
+
+  /* keyboard */
+  .kb { display: grid; gap: calc(var(--u)*.7); }
+  .kr { display: flex; gap: calc(var(--u)*.7); justify-content: center; }
+  .kb button { flex: 1; max-width: calc(var(--u)*7.6); padding: calc(var(--u)*1.5) 0; border-radius: calc(var(--u)*1); background: var(--s2); font-size: calc(var(--u)*2.3); }
+  .kb button.w { max-width: none; flex: 1.8; } .kb button.ww { max-width: none; flex: 6; }
+  .kb button:active { background: var(--fg); color: #000; }
+
+  #toast { position: absolute; left: 50%; bottom: calc(var(--u)*4); transform: translateX(-50%); background: var(--fg); color: #000; padding: calc(var(--u)*1.4) calc(var(--u)*2.8); border-radius: 999px; font-size: calc(var(--u)*2.2); font-weight: 600; opacity: 0; transition: opacity .25s; z-index: 40; pointer-events: none; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+  #offline { position: absolute; top: calc(var(--u)*1.5); left: 50%; transform: translateX(-50%); font-size: calc(var(--u)*1.8); color: var(--dim); background: var(--s2); padding: calc(var(--u)*.6) calc(var(--u)*1.8); border-radius: 999px; z-index: 35; display: none; }
+  #offline.show { display: block; }
+  #dim { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 2s; z-index: 30; }
+  #dim.on { pointer-events: auto; }
+  #boot { position: fixed; inset: 0; display: grid; place-items: center; color: #5c5c64; font: 500 16px system-ui, sans-serif; background: #000; z-index: 100; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="boot">Verbinden…</div>
+<div id="app">
+  <header>
+    <div><span id="name"></span><span id="subtitle"></span></div>
+    <div id="time"></div>
+  </header>
+  <main>
+    <section class="hero">
+      <div class="ring"></div>
+      <div id="label"></div>
+      <div id="until"></div>
+      <div id="untilAt"></div>
+      <div id="message"></div>
+      <div id="note"></div>
+      <div id="extra"></div>
+    </section>
+    <section class="ask" id="ask">
+      <h2>Niet kloppen — tik hier</h2>
+      <div class="grid" id="reasons"></div>
+      <div class="grid" id="actions"></div>
+    </section>
+  </main>
+  <div id="modal"><div class="sheet" id="sheet"></div></div>
+  <div id="offline">Verbinding herstellen…</div>
+  <div id="toast"></div>
+  <div id="dim"></div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const app = $('app');
+  const params = new URLSearchParams(location.search);
+  const VISIT = location.pathname.startsWith('/visit');
+  if (VISIT) document.body.classList.add('visit');
+
+  let S = null, offset = 0, pending = null, idleTimer = null, wakeUntil = 0, visitorSig = '';
+
+  // ---------- helpers ----------
+  function h(tag, props, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (k === 'class') el.className = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (v !== false && v != null) el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const k of kids.flat()) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(String(k)));
+    return el;
+  }
+  const ICONS = {
+    bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+  };
+  const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.innerHTML = ICONS[n]; return s; };
+  const pad = (n) => String(n).padStart(2, '0');
+  const now = () => Date.now() + offset;
+  const fmtTime = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const dayStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const dayDiff = (t) => Math.round((dayStart(t) - dayStart(now())) / 864e5);
+  function fmtWhen(t) {
+    const d = dayDiff(t), time = fmtTime(t);
+    if (d === 0) return time;
+    if (d === 1) return `morgen ${time}`;
+    if (d < 7) return `${new Date(t).toLocaleDateString('nl-NL', { weekday: 'long' })} ${time}`;
+    return `${new Date(t).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} ${time}`;
+  }
+  function dayLabel(t) {
+    const d = dayDiff(t);
+    return d === 0 ? 'Vandaag' : d === 1 ? 'Morgen' : new Date(t).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  // "Over 30 minuten gaan we sluiten" + "om 15:10" — what happens next, in plain words
+  function atText(t) {
+    const d = dayDiff(t), time = fmtTime(t);
+    if (d === 0) return `om ${time}`;
+    if (d === 1) return `morgen om ${time}`;
+    if (d < 7) return `${new Date(t).toLocaleDateString('nl-NL', { weekday: 'long' })} om ${time}`;
+    return `${new Date(t).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })} om ${time}`;
+  }
+  function duration(ms) {
+    const mins = Math.max(1, Math.ceil(ms / 60000));
+    if (mins < 60) return mins === 1 ? '1 minuut' : `${mins} minuten`;
+    const hrs = Math.floor(mins / 60), rest = mins % 60;
+    return rest ? `${hrs} uur en ${rest} min` : `${hrs} uur`;
+  }
+  function untilText(v, t) {
+    const left = v.until - t;
+    const soon = left < 3 * 3600e3 && dayDiff(v.until) === 0;
+    const over = `Over ${duration(left)}`;
+    const at = atText(v.until);
+    if (v.then === 'closed') return soon ? [`${over} gaan we sluiten`, at] : ['We sluiten', at];
+    if (v.then === 'open') return soon ? [`${over} zijn we weer open`, at] : ['Weer open', at];
+    if (v.then === 'busy') return soon ? [`${over} zijn we bezet`, at] : ['Bezet vanaf', at];
+    return ['', `tot ${fmtWhen(v.until)}`];
+  }
+
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); }
+
+  // ---------- sound ----------
+  let actx;
+  function chime(kind) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const notes = kind === 'reply' ? [523.25, 783.99] : [659.25, 523.25];
+      notes.forEach((f, i) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        const t = actx.currentTime + i * 0.38;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 1);
+        o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 1.05);
+      });
+    } catch {}
+  }
+
+  // ---------- layout: vertical / horizontal / rotated ----------
+  function layout() {
+    const L = S?.settings.layout || {};
+    const rotate = VISIT ? 0 : Number(params.get('rotate') ?? L.rotate ?? 0);
+    const orient = VISIT ? 'portrait' : (params.get('orientation') || L.orientation || 'auto');
+    const vw = VISIT ? document.documentElement.clientWidth : window.innerWidth, vh = window.innerHeight;
+    const side = rotate === 90 || rotate === 270;
+    const W = side ? vh : vw, H = side ? vw : vh;
+    app.style.width = VISIT ? '100%' : W + 'px';
+    app.style.height = VISIT ? 'auto' : H + 'px';
+    app.style.transform = rotate === 90 ? `translateX(${vw}px) rotate(90deg)` : rotate === 270 ? `translateY(${vh}px) rotate(-90deg)` : rotate === 180 ? `translate(${vw}px,${vh}px) rotate(180deg)` : '';
+    const land = orient === 'landscape' || (orient === 'auto' && W > H);
+    app.classList.toggle('landscape', land);
+    app.classList.toggle('portrait', !land);
+    const base = VISIT ? Math.min(W, 520) * 1.1 : land ? Math.min(W * 0.6, H) : Math.min(W, H * 0.6);
+    document.documentElement.style.setProperty('--u', (base / 100) + 'px');
+  }
+  function fitLabel() {
+    const el = $('label');
+    el.style.fontSize = '';
+    const room = el.parentElement.clientWidth;
+    if (room > 0 && el.scrollWidth > room) el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * (room / el.scrollWidth) * 0.97}px`;
+  }
+  window.addEventListener('resize', () => { layout(); fitLabel(); });
+  window.addEventListener('orientationchange', () => setTimeout(layout, 200));
+
+  // ---------- render ----------
+  const COLORS = { open: '#30d158', closed: '#ff453a', busy: '#ff9f0a' };
+  function render() {
+    const st = S.settings, v = S.view;
+    document.documentElement.style.setProperty('--c', COLORS[v.mode]);
+    document.title = `${v.label} — ${st.name}`;
+    layout();
+    $('name').textContent = st.name;
+    $('subtitle').textContent = st.subtitle ? `· ${st.subtitle}` : '';
+    $('label').textContent = v.label;
+    fitLabel();
+    $('message').textContent = v.message;
+    // your own message (big) and, quietly, the next planned busy time
+    const next = v.upcoming[0];
+    $('note').textContent = st.note || '';
+    const hrs = st.hours;
+    const todayHours = hrs.enabled ? (hrs.days.includes(new Date(now()).getDay()) ? `Vandaag open ${hrs.from}–${hrs.to}` : 'Vandaag gesloten') : '';
+    $('extra').textContent = [next && `${st.texts.busy.label} ${fmtTime(next.from)}–${fmtTime(next.to)}`, todayHours].filter(Boolean).join('  ·  ');
+    renderVisitors();
+    tick();
+    checkReply();
+  }
+
+  // doorbell cooldown: the server allows one ring every 45 s; show the countdown on the tile
+  let bellBtn = null, bellLabel = null;
+  const bellWait = () => Math.max(0, Math.ceil(((S?.bellReadyAt || 0) - now()) / 1000));
+  function updateBell() {
+    if (!bellBtn) return;
+    if (!bellAllowed()) { bellBtn.classList.add('wait'); bellLabel.textContent = 'Deurbel uit'; return; }
+    const w = bellWait();
+    bellBtn.classList.toggle('wait', w > 0);
+    bellLabel.textContent = w > 0 ? `Deurbel · ${w}s` : 'Deurbel';
+  }
+  const bellAllowed = () => S.view.mode === 'open' || S.settings.visitors.bellWhenBlocked;
+
+  // only rebuilt when something relevant changes, so taps are never lost mid-update
+  function renderVisitors() {
+    const st = S.settings, v = st.visitors;
+    const sig = JSON.stringify([v, st.reasons, bellAllowed()]);
+    if (sig === visitorSig) return;
+    visitorSig = sig;
+    const reasons = v.reasons ? st.reasons : [];
+    $('reasons').replaceChildren(...reasons.map((r) => h('button', { class: 'tile', onclick: () => openReason(r) }, r)));
+    if (reasons.length % 2) $('reasons').lastElementChild.classList.add('wide');
+    const acts = [];
+    bellBtn = bellLabel = null;
+    if (v.doorbell) {
+      bellLabel = h('span', {}, 'Deurbel');
+      bellBtn = h('button', { class: 'tile', onclick: ringBell }, icon('bell'), bellLabel);
+      acts.push(bellBtn);
+    }
+    if (v.appointments) acts.push(h('button', { class: 'tile', onclick: () => openAppointment() }, icon('cal'), 'Tijd booken'));
+    if (v.messages) acts.push(h('button', { class: 'tile', onclick: openQuestion }, icon('msg'), 'Vraagje'));
+    $('actions').style.gridTemplateColumns = `repeat(${Math.max(1, acts.length)}, 1fr)`;
+    $('actions').replaceChildren(...acts);
+    $('ask').classList.toggle('hidden', !acts.length && !reasons.length);
+  }
+
+  function tick() {
+    if (!S) return;
+    updateBell();
+    const t = now(), v = S.view;
+    $('time').textContent = fmtTime(t);
+    const [line, at] = v.until && v.until > t ? untilText(v, t) : ['', ''];
+    $('until').textContent = line;
+    $('untilAt').textContent = at;
+
+    const dm = S.settings.dim;
+    let dimOn = false;
+    if (!VISIT && dm.enabled && Date.now() > wakeUntil) {
+      const d = new Date(t), cur = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      dimOn = dm.from <= dm.to ? cur >= dm.from && cur < dm.to : cur >= dm.from || cur < dm.to;
+    }
+    $('dim').style.opacity = dimOn ? String(Math.max(0, Math.min(1, 1 - dm.level))) : '0';
+    $('dim').classList.toggle('on', dimOn);
+  }
+  setInterval(tick, 1000);
+  $('dim').addEventListener('pointerdown', (e) => { e.preventDefault(); wakeUntil = Date.now() + 60000; tick(); });
+
+  // ---------- sheet + on-screen keyboard ----------
+  let activeInput = null;
+  const useKB = () => !VISIT && S?.settings.layout.keyboard && params.get('keyboard') !== '0';
+
+  function openSheet(cls, ...kids) {
+    $('sheet').className = 'sheet ' + (cls || '');
+    $('sheet').replaceChildren(...kids.filter(Boolean));
+    $('modal').classList.add('open');
+    bumpIdle();
+    const first = $('sheet').querySelector('input,textarea');
+    activeInput = first || null;
+    if (first && !useKB()) setTimeout(() => first.focus(), 60);
+  }
+  function closeSheet() { $('modal').classList.remove('open'); pending = null; activeInput = null; clearTimeout(idleTimer); }
+  function bumpIdle(ms = 60000) { clearTimeout(idleTimer); idleTimer = setTimeout(closeSheet, ms); }
+  $('modal').addEventListener('pointerdown', (e) => { if (e.target === $('modal')) closeSheet(); else bumpIdle(pending ? 300000 : 60000); });
+  $('modal').addEventListener('focusin', (e) => { if (e.target.matches('input,textarea')) activeInput = e.target; });
+
+  function field(tag, props) {
+    const el = h(tag, { ...props, inputmode: useKB() ? 'none' : null, autocomplete: 'off', spellcheck: 'false' });
+    el.addEventListener('pointerdown', () => { activeInput = el; });
+    return el;
+  }
+  function keyboard() {
+    if (!useKB()) return null;
+    let shift = true;
+    const kb = h('div', { class: 'kb' });
+    const press = (fn) => (e) => { e.preventDefault(); bumpIdle(); if (!activeInput) return; fn(activeInput); activeInput.dispatchEvent(new Event('input')); };
+    const draw = () => kb.replaceChildren(
+      ...['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'].map((row) => h('div', { class: 'kr' }, ...[...row].map((ch) => {
+        const c = shift ? ch.toUpperCase() : ch;
+        return h('button', { onpointerdown: press((el) => { if (el.value.length < (el.maxLength > 0 ? el.maxLength : 500)) el.value += c; if (shift && /[a-z]/i.test(c)) { shift = false; draw(); } }) }, c);
+      }))),
+      h('div', { class: 'kr' },
+        h('button', { class: 'w', onpointerdown: (e) => { e.preventDefault(); shift = !shift; draw(); } }, shift ? 'abc' : 'ABC'),
+        h('button', { onpointerdown: press((el) => { el.value += ','; }) }, ','),
+        h('button', { class: 'ww', onpointerdown: press((el) => { el.value += ' '; }) }, 'spatie'),
+        h('button', { onpointerdown: press((el) => { el.value += '.'; }) }, '.'),
+        h('button', { class: 'w', onpointerdown: press((el) => { el.value = el.value.slice(0, -1); if (!el.value) { shift = true; draw(); } }) }, '⌫')));
+    draw();
+    return kb;
+  }
+
+  // ---------- sending ----------
+  let sending = false;
+  async function sendVisit(payload, errEl, btn) {
+    if (sending) return;
+    sending = true; if (btn) btn.disabled = true;
+    try {
+      const res = await fetch('/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(out.error || 'Versturen mislukt — probeer opnieuw');
+      pending = { id: out.id, shown: false, instant: out.reply };
+      showSent(payload);
+    } catch (e) {
+      const msg = e instanceof TypeError ? 'Geen verbinding — probeer opnieuw' : e.message;
+      if (errEl) errEl.textContent = msg; else toast(msg);
+    } finally { sending = false; if (btn) btn.disabled = false; }
+  }
+
+  function showSent(payload) {
+    openSheet('done',
+      h('div', { class: 'badge' }, payload.type === 'bell' ? icon('bell') : icon('check')),
+      h('h3', {}, payload.type === 'bell' ? 'Er is aangebeld' : payload.type === 'appointment' ? 'Aanvraag verstuurd' : 'Verstuurd'),
+      payload.type === 'appointment' ? h('p', { class: 'muted' }, `Voor ${atText(payload.at)}`) : null,
+      h('div', { id: 'replyBox', class: 'wait-line' }, h('div', { class: 'spin' }), 'Even wachten op antwoord…'),
+      h('div', { class: 'btns', style: 'width:100%' }, h('button', { class: 'btn', onclick: closeSheet }, 'Sluiten')));
+    bumpIdle(300000);
+    checkReply();
+  }
+
+  function checkReply() {
+    if (!pending || pending.shown) return;
+    const text = pending.instant || (S?.replies || []).find((x) => x.id === pending.id)?.reply;
+    const box = $('replyBox');
+    if (!text || !box) return;
+    pending.shown = true;
+    chime('reply');
+    box.className = 'reply';
+    box.replaceChildren(text);
+    bumpIdle(30000);
+  }
+
+  // ---------- visitor flows ----------
+  let lastLocalRing = 0;
+  function ringBell() {
+    if (!bellAllowed()) return toast('De deurbel staat nu uit — stel een vraagje');
+    if (bellWait() > 0) return toast(`Er is net aangebeld — nog ${bellWait()} s`);
+    lastLocalRing = Date.now();
+    chime('bell');
+    sendVisit({ type: 'bell' });
+  }
+
+  function formButtons(label, onSend) {
+    const go = h('button', { class: 'btn go' }, label);
+    go.onclick = () => onSend(go);
+    return h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, 'Annuleren'), go);
+  }
+
+  function openReason(reason) {
+    const name = field('input', { placeholder: 'Je naam (optioneel)', maxlength: 60 });
+    const err = h('div', { class: 'err' });
+    openSheet('', h('h3', {}, reason), name, keyboard(), err,
+      formButtons('Versturen', (b) => sendVisit({ type: 'reason', reason, name: name.value }, err, b)));
+  }
+
+  function openQuestion() {
+    const name = field('input', { placeholder: 'Je naam', maxlength: 60 });
+    const msg = field('textarea', { placeholder: 'Je vraag', maxlength: 500 });
+    const err = h('div', { class: 'err' });
+    openSheet('', h('h3', {}, 'Vraagje'), name, msg, keyboard(), err,
+      formButtons('Versturen', (b) => { if (!msg.value.trim()) { err.textContent = 'Typ eerst je vraag'; return; } sendVisit({ type: 'message', name: name.value, message: msg.value }, err, b); }));
+  }
+
+  const shortDay = (t) => { const d = dayDiff(t); if (d === 0) return 'Vandaag'; if (d === 1) return 'Morgen'; const x = new Date(t).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }); return x[0].toUpperCase() + x.slice(1); };
+
+  // step 1: pick a day (tabs) and a time
+  async function openAppointment(preselect) {
+    let sel = typeof preselect === 'number' ? preselect : null;
+    const err = h('div', { class: 'err' });
+    const tabs = h('div', { class: 'daytabs' });
+    const grid = h('div', { class: 'slots' }, h('div', { class: 'wait-line' }, h('div', { class: 'spin' }), 'Tijden laden…'));
+    const next = h('button', { class: 'btn go', disabled: !sel }, 'Volgende');
+    next.onclick = () => { if (sel) askBookingName(sel); };
+    openSheet('book', h('h3', {}, 'Tijd booken'), h('p', { class: 'muted' }, 'Kies een dag en een tijd.'), tabs, grid, err,
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, 'Annuleren'), next));
+    let slots;
+    try { ({ slots } = await fetch('/api/slots', { cache: 'no-store' }).then((r) => r.json())); }
+    catch { grid.replaceChildren(h('p', { class: 'muted' }, 'Tijden konden niet geladen worden — probeer opnieuw.')); return; }
+    if (!slots.length) { tabs.remove(); grid.replaceChildren(h('p', { class: 'muted' }, 'Geen vrije tijden de komende dagen — stel gerust een vraagje.')); return; }
+    const days = new Map();
+    for (const t of slots) { const k = dayStart(t); if (!days.has(k)) days.set(k, []); days.get(k).push(t); }
+    let day = sel && days.has(dayStart(sel)) ? dayStart(sel) : [...days.keys()][0];
+    const draw = () => {
+      tabs.replaceChildren(...[...days.keys()].map((k) => h('button', { class: 'daytab' + (k === day ? ' sel' : ''), onclick: () => { day = k; draw(); bumpIdle(); } }, shortDay(k))));
+      grid.replaceChildren(...days.get(day).map((t) => h('button', { class: 'slot' + (t === sel ? ' sel' : ''), onclick: () => { sel = t; next.disabled = false; err.textContent = ''; draw(); bumpIdle(); } }, fmtTime(t))));
+    };
+    draw();
+  }
+
+  // step 2: who are you (and optionally: what about)
+  function askBookingName(at) {
+    const name = field('input', { placeholder: 'Je naam', maxlength: 60 });
+    const reason = field('input', { placeholder: 'Waarover? (optioneel)', maxlength: 80 });
+    const err = h('div', { class: 'err' });
+    const go = h('button', { class: 'btn go' }, 'Aanvragen');
+    go.onclick = () => {
+      if (!name.value.trim()) { err.textContent = 'Vul je naam in'; return; }
+      sendVisit({ type: 'appointment', name: name.value, reason: reason.value, at }, err, go);
+    };
+    openSheet('', h('h3', {}, 'Tijd booken'),
+      h('div', { class: 'picked' }, h('span', {}, `${shortDay(at)} om ${fmtTime(at)}`), h('button', { class: 'link', onclick: () => openAppointment(at) }, 'Wijzigen')),
+      name, reason, keyboard(), err,
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => openAppointment(at) }, 'Terug'), go));
+  }
+
+
+  // ---------- connection: live updates + fallback polling + watchdog ----------
+  let es = null, lastMsg = 0, online = true;
+  function apply(data) {
+    lastMsg = Date.now();
+    if (S && data.build && S.build && data.build !== S.build && !$('modal').classList.contains('open')) { location.reload(); return; }
+    S = data;
+    offset = S.serverTime - Date.now();
+    $('boot').classList.add('hidden');
+    setOnline(true);
+    render();
+  }
+  // someone rang (here, on another door screen or on the phone page): ring on this screen too
+  function onRing() {
+    lastMsg = Date.now();
+    const ring = document.querySelector('.ring');
+    ring.classList.remove('ding'); void ring.offsetWidth; ring.classList.add('ding');
+    if (Date.now() - lastLocalRing < 5000) return; // this screen already played the bell
+    chime('bell');
+    if (!$('modal').classList.contains('open')) toast('Er is aangebeld');
+  }
+  // browsers only allow sound after the first tap; unlock it on any touch
+  const unlockAudio = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {} };
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+
+  function setOnline(ok) {
+    online = ok;
+    clearTimeout(setOnline.t);
+    if (ok) $('offline').classList.remove('show');
+    else setOnline.t = setTimeout(() => { if (!online) $('offline').classList.add('show'); }, 6000);
+  }
+  async function poll() {
+    try { const r = await fetch('/api/state', { cache: 'no-store' }); if (r.ok) apply(await r.json()); }
+    catch { if (!S) $('boot').textContent = 'Deurserver niet bereikbaar — opnieuw proberen…'; }
+  }
+  function connect() {
+    if (es) es.close();
+    es = new EventSource('/events?role=display');
+    es.addEventListener('state', (e) => { try { apply(JSON.parse(e.data)); } catch {} });
+    es.addEventListener('ping', () => { lastMsg = Date.now(); });
+    es.addEventListener('ring', onRing);
+    es.onerror = () => setOnline(false);
+  }
+  setInterval(() => {
+    if (Date.now() - lastMsg > 45000) { connect(); poll(); } // live connection went quiet: rebuild it
+    else if (!online) poll();
+  }, 8000);
+  window.addEventListener('online', () => { connect(); poll(); });
+
+  // keep the screen awake, hide the mouse pointer, double-tap the clock for full screen
+  async function keepAwake() { try { if (!VISIT && 'wakeLock' in navigator && document.visibilityState === 'visible') await navigator.wakeLock.request('screen'); } catch {} }
+  document.addEventListener('visibilitychange', keepAwake);
+  keepAwake();
+  let idleCursor;
+  document.addEventListener('pointermove', () => { document.body.classList.remove('idle'); clearTimeout(idleCursor); idleCursor = setTimeout(() => document.body.classList.add('idle'), 4000); });
+  $('time').addEventListener('dblclick', () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.(); });
+
+  // door screen lock-down: no right-click menu, no zooming, no browser shortcuts that leave the page
+  if (!VISIT) {
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && ['+', '-', '=', '0', 'l', 'n', 't', 'o', 'p', 's'].includes(e.key.toLowerCase())) e.preventDefault(); });
+  }
+
+  layout();
+  poll();
+  connect();
+})();
+</script>
+</body>
+</html>

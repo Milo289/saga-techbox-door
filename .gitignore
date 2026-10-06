@@ -1,0 +1,7 @@
+# live data (status, settings, visitors) — never overwritten by restoring code
+data/
+# zip snapshots
+backups/
+.env
+node_modules/
+.DS_Store

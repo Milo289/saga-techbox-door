@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Deurbediening</title>
+<link rel="manifest" href="/admin.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Deur">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<style>
+  :root {
+    --bg: #000; --s1: #0e0e10; --s2: #18181b; --s3: #232327; --line: #232327; --fg: #f5f5f7; --dim: #a1a1aa; --mute: #63636b;
+    --open: #30d158; --closed: #ff453a; --busy: #ff9f0a; --c: #30d158;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--s2); border-radius: 10px; padding: 9px 14px; font-weight: 550; transition: background .12s, border-color .12s, transform .1s; }
+  button:hover { border-color: #3a3a40; }
+  button:active { transform: scale(.98); }
+  button.ghost { background: transparent; }
+  button.white { background: var(--fg); color: #000; border-color: transparent; }
+  button.sm { padding: 5px 11px; font-size: 13px; border-radius: 8px; }
+  button.danger { color: var(--closed); }
+  button.on { background: var(--fg); color: #000; border-color: transparent; }
+  input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; outline: none; }
+  input:focus, select:focus, textarea:focus { border-color: #4a4a52; }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--fg); padding: 0; }
+  textarea { width: 100%; min-height: 120px; resize: vertical; }
+  .hidden { display: none !important; }
+
+  .top { position: sticky; top: 0; z-index: 10; background: rgba(0,0,0,.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 960px; margin: 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px; }
+  .bar h1 { font-size: 17px; margin: 0; font-weight: 650; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .live { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; white-space: nowrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); flex: none; }
+  #conn { width: 7px; height: 7px; border-radius: 50%; background: var(--closed); flex: none; }
+  #conn.ok { background: var(--mute); }
+  nav { max-width: 960px; margin: 0 auto; padding: 0 10px; display: flex; gap: 4px; }
+  nav button { border: 0; background: none; border-radius: 0; padding: 12px 10px 11px; color: var(--mute); border-bottom: 2px solid transparent; font-weight: 600; }
+  nav button.cur { color: var(--fg); border-bottom-color: var(--fg); }
+  .badge { background: var(--closed); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 12px; margin-left: 5px; }
+
+  main { max-width: 960px; margin: 0 auto; padding: 18px 16px 60px; display: grid; gap: 14px; }
+  .card { background: var(--s1); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+  .card > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--mute); margin: 0 0 14px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+  .card > h2 .sp { flex: 1; }
+  .muted { color: var(--mute); font-size: 13px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .row > .grow { flex: 1; min-width: 160px; }
+
+  /* now */
+  .now { display: flex; align-items: center; gap: 16px; }
+  .now .big { font-size: 34px; font-weight: 800; letter-spacing: -.03em; color: var(--c); line-height: 1; }
+  .now .until { font-size: 20px; font-weight: 600; }
+  .now .until .k { color: var(--dim); font-weight: 400; }
+  .now .meta { color: var(--mute); font-size: 13px; margin-top: 4px; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mode { border-radius: 16px; padding: 18px 12px; text-align: center; background: var(--s2); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .mode .n { font-size: 20px; font-weight: 750; letter-spacing: -.01em; }
+  .mode .s { font-size: 12.5px; color: var(--dim); font-weight: 500; }
+  .mode .d { width: 12px; height: 12px; border-radius: 50%; }
+  .mode.cur { border-color: var(--mc); background: color-mix(in srgb, var(--mc) 14%, var(--s1)); }
+  .mode.cur .n { color: var(--mc); }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .label { font-size: 13px; color: var(--dim); font-weight: 600; min-width: 64px; }
+  .block { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .block:first-child { border-top: 0; }
+  .block .d { width: 9px; height: 9px; border-radius: 50%; background: var(--busy); flex: none; }
+  .block .t { font-weight: 650; font-variant-numeric: tabular-nums; }
+  .block .x { margin-left: auto; }
+  .block.paused .t::after { content: "paused — you changed the status by hand"; margin-left: 8px; font-size: 11px; color: var(--dim); font-weight: 500; }
+  .block.active .t::after { content: "now"; margin-left: 8px; font-size: 11px; background: var(--busy); color: #000; border-radius: 6px; padding: 1px 6px; vertical-align: 2px; }
+
+  /* inbox */
+  .req { border: 1px solid var(--line); background: var(--bg); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+  .req.new { border-color: #4a4a52; box-shadow: inset 3px 0 0 var(--fg); }
+  .req.done { opacity: .45; }
+  .req .head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .req .type { font-weight: 700; }
+  .req .what { font-size: 16px; }
+  .req .reply { color: var(--dim); font-size: 14px; }
+  .list { display: grid; gap: 10px; }
+
+  /* settings */
+  .form { display: grid; grid-template-columns: 170px 1fr; gap: 12px 16px; align-items: center; }
+  .form > label { font-weight: 600; font-size: 14px; color: var(--dim); }
+  .check { display: inline-flex; gap: 8px; align-items: center; font-weight: 500; color: var(--fg); }
+  .days { display: flex; gap: 4px; }
+  .days button { width: 38px; padding: 7px 0; font-size: 12.5px; }
+  @media (max-width: 640px) { .form { grid-template-columns: 1fr; gap: 6px; } .form > label { margin-top: 8px; } .modes .s { font-size: 11.5px; } }
+  details summary { cursor: pointer; color: var(--dim); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  td { padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+
+  /* floating, so the page never shifts when it disappears (a shift mid-click would make you miss) */
+  #banner { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 45; background: var(--fg); color: #000; padding: 10px 18px; border-radius: 999px; cursor: pointer; font-weight: 650; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.6); white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+  #toast { position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--fg); color: #000; padding: 10px 18px; border-radius: 999px; opacity: 0; transition: .25s; pointer-events: none; z-index: 60; font-weight: 650; max-width: calc(100vw - 32px); }
+  #toast.show { opacity: 1; transform: translateX(-50%); }
+  #alert { position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  #alert.open { display: flex; }
+  #alert .card { max-width: 520px; width: 100%; }
+  #login { max-width: 380px; margin: 14vh auto 0; }
+  .save { position: sticky; bottom: 14px; display: flex; justify-content: flex-end; }
+  .save button { box-shadow: 0 8px 30px rgba(0,0,0,.6); }
+  select.tp, select.dp { padding: 8px 8px; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .tpick { display: inline-flex; align-items: center; gap: 4px; }
+  .tpick b { color: var(--dim); }
+  .sub-h { font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--mute); font-weight: 650; margin: 18px 0 10px; }
+  .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .preset { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border-radius: 12px; }
+  .preset b { font-size: 16px; }
+  .preset span { font-size: 12.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) { .presets { grid-template-columns: repeat(2, 1fr); } }
+  .row.appt .label { min-width: 0; }
+  input.bigin { font-size: 18px; padding: 14px 16px; border-radius: 12px; }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  #soundBtn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  #soundBtn.off { color: var(--closed); border-color: color-mix(in srgb, var(--closed) 45%, transparent); }
+  @media (max-width: 560px) { #soundBtn .t { display: none; } }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 2px; text-align: left; font-weight: 500; }
+  .stat b { font-size: 26px; font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .stat span { color: var(--dim); font-size: 13px; }
+  .tl { margin-top: 14px; }
+  .tli { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .tli.past { opacity: .4; }
+  .tli.now .tlt { color: var(--busy); }
+  .tlt { font-variant-numeric: tabular-nums; font-weight: 650; min-width: 104px; }
+  .tli svg { color: var(--dim); }
+  .type { display: inline-flex; align-items: center; gap: 6px; }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .pophead { display: flex; gap: 14px; align-items: center; }
+  .popicon { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--s2); flex: none; }
+  .popicon svg { width: 22px; height: 22px; }
+  .poptitle { font-size: 22px; font-weight: 750; letter-spacing: -.02em; }
+  #alertCard.bellpop { box-shadow: 0 0 0 2px var(--fg), 0 24px 70px rgba(0,0,0,.7); }
+  #alertCard.bellpop .popicon { background: var(--fg); color: #000; animation: shake .45s ease-in-out 4; }
+  @keyframes shake { 25% { transform: rotate(-16deg); } 75% { transform: rotate(16deg); } }
+</style>
+</head>
+<body>
+<div id="banner" class="hidden">Klik ergens op deze pagina om het geluid aan te zetten</div>
+
+<div id="login" class="card hidden">
+  <h2>Bedieningspaneel</h2>
+  <div class="row"><input id="pin" type="password" inputmode="numeric" class="grow" placeholder="Pincode" autocomplete="current-password"><button class="white" id="pinBtn">Ontgrendelen</button></div>
+  <p class="muted" id="pinErr"></p>
+</div>
+
+<div id="shell" class="hidden">
+  <div class="top">
+    <div class="bar">
+      <h1 id="hName">Deur</h1>
+      <span class="live"><span class="dot"></span><span id="hStatus"></span></span>
+      <button class="sm ghost" id="soundBtn" title="Geluid aan/uit op dit apparaat"></button>
+      <span id="conn" title="Live verbinding"></span>
+      <a href="/" target="_blank" rel="noopener"><button class="sm ghost">Deurscherm ↗</button></a>
+    </div>
+    <nav id="tabs"></nav>
+  </div>
+  <main id="view"></main>
+</div>
+
+<div id="alert"><div class="card" id="alertCard"></div></div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+  let PIN = store.get('doorPin', '');
+  let S = null;
+  let tab = store.get('doorTab', 'now');
+  if (!['now', 'inbox', 'settings'].includes(tab)) tab = 'now';
+  let inboxFilter = 'open';
+  let alertId = null;
+  let es = null, lastMsg = 0;
+
+  const COLORS = { open: '#30d158', closed: '#ff453a', busy: '#ff9f0a' };
+  const DAYS = ['Zo', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za'];
+  const TYPE = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraak', message: 'Vraagje' };
+  const TYPE_ICON = { bell: 'bell', reason: 'msg', appointment: 'cal', message: 'msg' };
+  const ICONS = {
+    bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/>',
+    cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  };
+  const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.innerHTML = ICONS[n] || ICONS.msg; return s; };
+
+  function h(tag, props, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (k === 'class') el.className = v;
+      else if (k === 'style') el.style.cssText = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (k === 'value') el.value = v;
+      else if (k === 'checked') el.checked = !!v;
+      else if (v !== false && v != null) el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const k of kids.flat()) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(String(k)));
+    return el;
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmt = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const dayStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  function fmtWhen(t) {
+    const diff = Math.round((dayStart(t) - dayStart(Date.now())) / 864e5);
+    if (diff === 0) return fmt(t);
+    if (diff === 1) return `morgen ${fmt(t)}`;
+    return `${new Date(t).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })} ${fmt(t)}`;
+  }
+  const ago = (t) => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? 'zojuist' : s < 3600 ? `${Math.floor(s / 60)} min geleden` : s < 86400 ? `${Math.floor(s / 3600)} uur geleden` : new Date(t).toLocaleDateString('nl-NL'); };
+  const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const atLocal = (date, time) => new Date(`${date}T${time}`).getTime();
+  const hmOf = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const nextHour = (plus = 1) => { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + plus); return hmOf(d); };
+  function timePicker(value, onChange, step = 5, key) {
+    const [hh, mm] = (value || '09:00').split(':').map(Number);
+    const mins = Array.from({ length: 60 / step }, (_, i) => i * step);
+    if (!mins.includes(mm)) { mins.push(mm); mins.sort((a, b) => a - b); }
+    const hSel = h('select', { class: 'tp', 'aria-label': 'uur', 'data-keep': key ? key + '-h' : null }, ...Array.from({ length: 24 }, (_, i) => h('option', { value: pad(i), selected: i === hh }, pad(i))));
+    const mSel = h('select', { class: 'tp', 'aria-label': 'minuten', 'data-keep': key ? key + '-m' : null }, ...mins.map((m) => h('option', { value: pad(m), selected: m === mm }, pad(m))));
+    const el = h('span', { class: 'tpick' }, hSel, h('b', {}, ':'), mSel);
+    el.get = () => `${hSel.value}:${mSel.value}`;
+    hSel.onchange = mSel.onchange = () => onChange && onChange(el.get());
+    return el;
+  }
+  function dayLabel(t) {
+    const diff = Math.round((dayStart(t) - dayStart(Date.now())) / 864e5);
+    return diff === 0 ? 'Vandaag' : diff === 1 ? 'Morgen' : new Date(t).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  function dayPicker(value, key) {
+    const days = Array.from({ length: 21 }, (_, i) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + i); return d; });
+    if (value && !days.some((d) => ymd(d) === value)) days.unshift(new Date(`${value}T12:00`));
+    return h('select', { class: 'dp', 'data-keep': key || null }, ...days.map((d) => h('option', { value: ymd(d), selected: ymd(d) === (value || ymd()) }, dayLabel(d.getTime()))));
+  }
+  function nextAt(hhmm) { const [hh, mm] = hhmm.split(':').map(Number); const t = new Date(); t.setHours(hh, mm, 0, 0); if (t <= new Date()) t.setDate(t.getDate() + 1); return t.getTime(); }
+
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2400); }
+
+  async function api(path, body) {
+    let res;
+    try {
+      res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'x-pin': PIN }, body: body ? JSON.stringify(body) : undefined });
+    } catch { toast('Geen verbinding met de deurserver'); throw new Error('offline'); }
+    if (res.status === 401) { showLogin(PIN ? 'Verkeerde pincode' : ''); throw new Error('pin'); }
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(out.error || 'Er ging iets mis'); throw new Error(out.error); }
+    return out;
+  }
+
+  // ---------- login + live connection ----------
+  function showLogin(msg) {
+    $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
+    $('pinErr').textContent = msg || '';
+    if (es) { es.close(); es = null; }
+    setTimeout(() => $('pin').focus(), 50);
+  }
+  $('pinBtn').onclick = () => { PIN = $('pin').value.trim(); store.set('doorPin', PIN); start(); };
+  $('pin').onkeydown = (e) => { if (e.key === 'Enter') $('pinBtn').click(); };
+
+  function apply(data) {
+    lastMsg = Date.now(); S = data; renderAll(false);
+    if (alertId && alertId !== 'test') {
+      const r = S.requests.find((x) => x.id === alertId);
+      if (!r || r.state === 'done' || (r.state === 'replied' && !r.autoReplied)) closeAlert();
+    }
+  }
+  function connect() {
+    if (es) es.close();
+    es = new EventSource('/events?role=admin&pin=' + encodeURIComponent(PIN));
+    es.addEventListener('state', (e) => { try { apply(JSON.parse(e.data)); } catch {} });
+    es.addEventListener('ping', () => { lastMsg = Date.now(); $('conn').classList.add('ok'); });
+    es.addEventListener('visit', (e) => { try { onVisit(JSON.parse(e.data)); } catch {} });
+    es.onopen = () => $('conn').classList.add('ok');
+    es.onerror = () => $('conn').classList.remove('ok');
+  }
+  async function start() {
+    try { S = await api('/api/admin-state'); } catch { return; }
+    lastMsg = Date.now();
+    $('login').classList.add('hidden'); $('shell').classList.remove('hidden');
+    renderAll(true);
+    updateSoundUi();
+    connect();
+  }
+  setInterval(async () => {
+    if (!es || Date.now() - lastMsg < 45000) return;
+    try { apply(await api('/api/admin-state')); connect(); } catch {}
+  }, 10000);
+
+  // ---------- visitor alerts: sound per device (on/off), pop-up always ----------
+  const prefs = { sound: store.get('doorSound', '1') === '1', desktop: store.get('doorDesktop', '0') === '1' };
+  const canNotify = 'Notification' in window && window.isSecureContext;
+  let actx = null;
+  const audioReady = () => !!actx && actx.state === 'running';
+  // browsers only allow sound after you've clicked or typed on the page once
+  function unlockAudio() {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state !== 'running') actx.resume().then(updateSoundUi, () => {});
+    } catch {}
+    updateSoundUi();
+  }
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+  document.addEventListener('keydown', unlockAudio);
+
+  function tone(f, t, len, vol) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + len + 0.05);
+  }
+  function chime(kind) {
+    if (!prefs.sound || !actx) return;
+    try {
+      if (actx.state !== 'running') actx.resume().catch(() => {});
+      const t0 = actx.currentTime + 0.03;
+      const notes = kind === 'bell'
+        ? [[659.25, 0], [523.25, 0.45], [659.25, 1.35], [523.25, 1.8]]   // ding-dong, twice
+        : [[880, 0], [1174.66, 0.16]];                                 // short "pling" for other requests
+      for (const [f, o] of notes) tone(f, t0 + o, kind === 'bell' ? 1.4 : 0.6, kind === 'bell' ? 0.5 : 0.3);
+    } catch {}
+  }
+
+  function updateSoundUi() {
+    // update in place: rebuilding the button mid-click would swallow the click
+    const btn = $('soundBtn');
+    if (!btn.firstChild) btn.append(icon('bell'), h('span', { class: 't' }));
+    btn.querySelector('svg').innerHTML = ICONS[prefs.sound ? 'bell' : 'bellOff'];
+    btn.querySelector('.t').textContent = prefs.sound ? 'Geluid aan' : 'Geluid uit';
+    btn.classList.toggle('off', !prefs.sound);
+    $('banner').classList.toggle('hidden', !prefs.sound || audioReady() || $('shell').classList.contains('hidden'));
+  }
+  function setSound(on) {
+    prefs.sound = on;
+    store.set('doorSound', on ? '1' : '0');
+    if (on) { unlockAudio(); chime('soft'); }
+    updateSoundUi();
+    toast(on ? 'Geluid aan' : 'Geluid uit — je krijgt alleen nog een pop-up');
+    if (tab === 'settings') renderAll(true);
+  }
+  $('soundBtn').onclick = () => setSound(!prefs.sound);
+  $('banner').onclick = () => { unlockAudio(); setTimeout(() => chime('soft'), 50); };
+
+  const what = (r) => [r.reason, r.at && `wil ${fmtWhen(r.at)}`, r.message && `“${r.message}”`].filter(Boolean).join(' · ');
+
+  function closeAlert() { $('alert').classList.remove('open'); alertId = null; }
+  function onVisit(r) {
+    const bell = r.type === 'bell';
+    chime(bell ? 'bell' : 'soft');
+    const title = bell ? 'Er wordt aangebeld' : `${TYPE[r.type] || 'Verzoek'}${r.name ? ' — ' + r.name : ''}`;
+    if (prefs.desktop && canNotify && Notification.permission === 'granted' && document.hidden) {
+      try { new Notification(title, { body: what(r) || 'Er staat iemand aan de deur', tag: r.id, requireInteraction: bell }); } catch {}
+    }
+    flashTitle(title);
+    alertId = r.id;
+    $('alertCard').className = 'card' + (bell ? ' bellpop' : '');
+    $('alertCard').replaceChildren(...[
+      h('div', { class: 'pophead' },
+        h('span', { class: 'popicon' }, icon(TYPE_ICON[r.type])),
+        h('div', {}, h('div', { class: 'poptitle' }, title), h('div', { class: 'muted' }, `${fmt(r.createdAt)} · status was ${r.statusAtTime}${r.test ? ' · test' : ''}`))),
+      what(r) ? h('div', { class: 'what', style: 'margin-top:12px' }, what(r)) : null,
+      r.reply ? h('div', { class: 'muted', style: 'margin-top:10px' }, `Automatisch antwoord getoond: ${r.reply}`) : null,
+      r.test ? null : h('div', { style: 'margin-top:14px' }, replyControls(r, closeAlert)),
+      h('div', { class: 'row', style: 'margin-top:14px' },
+        r.test ? null : h('button', { class: 'ghost', onclick: () => { closeAlert(); setTab('inbox'); } }, 'Naar bezoekers'),
+        h('span', { style: 'flex:1' }),
+        r.test ? null : h('button', { class: 'ghost', onclick: async () => { await api('/api/requests/done', { id: r.id }); closeAlert(); toast('Afgehandeld'); } }, 'Afhandelen'),
+        h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten'))].filter(Boolean));
+    $('alert').classList.add('open');
+  }
+  const testBell = () => onVisit({ id: 'test', test: true, type: 'bell', name: '', createdAt: Date.now(), statusAtTime: S.view.label, reply: '' });
+  $('alert').onclick = (e) => { if (e.target === $('alert')) closeAlert(); };
+
+  let flashT;
+  function flashTitle(msg) {
+    clearInterval(flashT);
+    let on = false, n = 0;
+    flashT = setInterval(() => { document.title = (on = !on) ? msg : 'Deurbediening'; if (++n > 20 || !document.hidden) { clearInterval(flashT); updateTitle(); } }, 900);
+  }
+  function updateTitle() { const n = S ? S.requests.filter((r) => r.state === 'new').length : 0; document.title = (n ? `(${n}) ` : '') + 'Deurbediening'; }
+
+  // ---------- frame ----------
+  const TABS = [['now', 'Status'], ['inbox', 'Bezoekers'], ['settings', 'Instellingen']];
+  function setTab(t) { tab = t; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); }
+
+  // never redraw while a finger/mouse button is down, or that click would get lost
+  let pressing = false, redrawLater = false;
+  document.addEventListener('pointerdown', () => { pressing = true; }, true);
+  const release = () => { pressing = false; if (redrawLater) { redrawLater = false; setTimeout(() => renderAll(false), 0); } };
+  document.addEventListener('pointerup', release, true);
+  document.addEventListener('pointercancel', release, true);
+
+  function renderAll(force) {
+    if (!S) return;
+    if (!force && pressing) { redrawLater = true; return; }
+    const v = S.view;
+    document.documentElement.style.setProperty('--c', COLORS[v.mode]);
+    $('hName').textContent = S.settings.name;
+    $('hStatus').textContent = v.until ? `${v.label} tot ${fmtWhen(v.until)}` : v.label;
+    const unread = S.requests.filter((r) => r.state === 'new').length;
+    $('tabs').replaceChildren(...TABS.map(([k, l]) => h('button', { class: tab === k ? 'cur' : '', onclick: () => setTab(k) }, l, k === 'inbox' && unread ? h('span', { class: 'badge' }, unread) : null)));
+    updateTitle();
+    if (!force && tab === 'settings') return; // never wipe a settings form you're editing
+    // keep what you typed when live updates redraw the page
+    const kept = {};
+    $('view').querySelectorAll('[data-keep]').forEach((i) => { kept[i.dataset.keep] = i.value; });
+    const focused = document.activeElement?.dataset?.keep;
+    $('view').replaceChildren(...VIEWS[tab]().filter(Boolean));
+    $('view').querySelectorAll('[data-keep]').forEach((i) => {
+      if (i.dataset.keep in kept && i.value !== kept[i.dataset.keep]) { i.value = kept[i.dataset.keep]; if (i.tagName === 'SELECT') i.dispatchEvent(new Event('change')); }
+      if (i.dataset.keep === focused) i.focus();
+    });
+  }
+
+  function replyControls(r, after) {
+    const input = h('input', { class: 'grow', placeholder: 'Typ een antwoord…', 'data-keep': 'reply-' + r.id, maxlength: 200 });
+    const send = async (text) => { if (!text.trim()) return toast('Typ eerst een antwoord'); await api('/api/requests/reply', { id: r.id, reply: text }); toast('Getoond op de deur'); after && after(); };
+    input.onkeydown = (e) => { if (e.key === 'Enter') send(input.value); };
+    const wrap = h('div', { class: 'list' },
+      h('div', { class: 'seg' }, ...S.settings.quickReplies.map((q) => h('button', { class: 'sm', onclick: () => send(q) }, q))),
+      h('div', { class: 'row' }, input, h('button', { class: 'white sm', onclick: () => send(input.value) }, 'Stuur')));
+    if (r.type === 'appointment') {
+      const date = dayPicker(r.at ? ymd(new Date(r.at)) : ymd(), 'ad-' + r.id);
+      const time = timePicker(r.at ? hmOf(r.at) : nextHour(), null, 5, 'at-' + r.id);
+      wrap.append(h('div', { class: 'row appt' }, h('span', { class: 'label' }, 'Afspraak'), date, time,
+        h('button', { class: 'white sm', onclick: async () => {
+          const at = atLocal(date.value, time.get());
+          if (at < Date.now()) return toast('Die tijd is al voorbij');
+          await api('/api/requests/accept', { id: r.id, at }); toast('Afspraak bevestigd'); after && after();
+        } }, 'Bevestigen'),
+        h('button', { class: 'sm ghost danger', onclick: async () => {
+          await api('/api/requests/reply', { id: r.id, reply: 'Dit tijdstip lukt helaas niet — stel gerust een vraagje.' });
+          await api('/api/requests/done', { id: r.id }); toast('Afgewezen'); after && after();
+        } }, 'Afwijzen')));
+    }
+    return wrap;
+  }
+
+  // ---------- today: numbers + timeline ----------
+  function todayCard() {
+    const start = dayStart(Date.now()), end = start + 864e5, nowTs = Date.now();
+    const today = S.requests.filter((r) => r.createdAt >= start);
+    const open = S.requests.filter((r) => r.state === 'new' || r.state === 'seen').length;
+    const bells = today.filter((r) => r.type === 'bell').length;
+    const lastBell = S.requests.find((r) => r.type === 'bell');
+    const items = [
+      ...S.appointments.filter((a) => a.at >= start && a.at < end).map((a) => ({ t: a.at, end: a.at + (S.settings.slotMinutes || 30) * 60e3, span: false, icon: 'cal', text: `Afspraak — ${a.name}${a.reason ? ' · ' + a.reason : ''}` })),
+      ...S.busy.filter((b) => b.from < end && b.to > start).map((b) => ({ t: b.from, end: b.to, span: true, icon: 'clock', text: `${S.settings.texts.busy.label}${b.note ? ' — ' + b.note : ''}` })),
+    ].sort((a, b) => a.t - b.t);
+    const appts = items.filter((i) => i.icon === 'cal').length;
+    const stat = (n, label, go) => h(go ? 'button' : 'div', { class: 'stat', onclick: go || null }, h('b', {}, n), h('span', {}, label));
+    return h('div', { class: 'card' }, h('h2', {}, 'Vandaag'),
+      h('div', { class: 'stats' },
+        stat(bells, bells === 1 ? 'keer aangebeld' : 'keer aangebeld', () => { inboxFilter = 'bell'; setTab('inbox'); }),
+        stat(open, open === 1 ? 'open verzoek' : 'open verzoeken', () => { inboxFilter = 'open'; setTab('inbox'); }),
+        stat(appts, appts === 1 ? 'afspraak' : 'afspraken'),
+        stat(lastBell ? (lastBell.createdAt >= start ? fmt(lastBell.createdAt) : ago(lastBell.createdAt)) : '—', 'laatst aangebeld')),
+      items.length
+        ? h('div', { class: 'tl' }, ...items.map((i) => h('div', { class: 'tli' + (i.end <= nowTs ? ' past' : i.t <= nowTs ? ' now' : '') },
+            h('span', { class: 'tlt' }, i.span ? `${fmt(i.t)}–${fmt(i.end)}` : fmt(i.t)), icon(i.icon), h('span', {}, i.text))))
+        : h('p', { class: 'muted', style: 'margin:14px 0 0' }, 'Geen afspraken of bezette tijden vandaag.'));
+  }
+
+  // ---------- views ----------
+  const VIEWS = {
+    now() {
+      const v = S.view;
+      const source = { manual: 'met de hand ingesteld', hours: 'volgens openingstijden', planned: 'geplande bezette tijd', default: 'standaard' }[v.source];
+      const roundUp = (t) => Math.ceil(t / 60000) * 60000;
+
+      // tap a status: it's on the door right away (without an end time)
+      const setMode = async (mode) => { await api('/api/status', { mode }); toast(`${S.settings.texts[mode].label} staat op de deur`); };
+      // tap a duration or set a time: applies right away to the status that's on the door now
+      const setUntil = async (until) => {
+        await api('/api/status', { mode: v.mode, until });
+        toast(until ? `${v.label} tot ${fmtWhen(until)}` : `${v.label}, zonder eindtijd`);
+      };
+
+      const modes = ['open', 'closed', 'busy'].map((m) => h('button', { class: 'mode' + (v.mode === m ? ' cur' : ''), style: `--mc:${COLORS[m]}`, onclick: () => setMode(m) },
+        h('span', { class: 'd', style: `background:${COLORS[m]}` }), h('span', { class: 'n' }, S.settings.texts[m].label),
+        h('span', { class: 's' }, v.mode === m ? (v.until ? `tot ${fmtWhen(v.until)}` : 'nu op de deur') : '')));
+
+      const presets = [[15, '15 min'], [30, '30 min'], [60, '1 uur'], [120, '2 uur']].map(([m, l]) => {
+        const t = roundUp(Date.now() + m * 60e3);
+        return h('button', { class: 'preset', onclick: () => setUntil(t) }, h('b', {}, l), h('span', {}, `tot ${fmt(t)}`));
+      });
+      const custom = timePicker(v.until && v.source === 'manual' ? hmOf(v.until) : nextHour(), () => drawHint(), 5, 'until');
+      const hint = h('span', { class: 'muted' });
+      const drawHint = () => { const t = nextAt(custom.get()); hint.textContent = dayStart(t) === dayStart(Date.now()) ? 'vandaag' : 'morgen'; };
+      drawHint();
+
+      // busy during
+      const bDay = dayPicker(ymd(), 'bday');
+      const bFrom = timePicker(nextHour(), null, 5, 'bfrom');
+      const bTo = timePicker(nextHour(2), null, 5, 'bto');
+      const bNote = h('input', { class: 'grow', placeholder: 'Notitie (optioneel), bijv. Teamoverleg', maxlength: 100, 'data-keep': 'bnote' });
+      const addBusy = async () => {
+        const from = atLocal(bDay.value, bFrom.get());
+        let to = atLocal(bDay.value, bTo.get());
+        if (to <= from) to += 864e5; // e.g. 23:00 – 01:00
+        await api('/api/busy/add', { from, to, note: bNote.value });
+        bNote.value = '';
+        toast('Bezette tijd gepland');
+      };
+      const nowTs = Date.now();
+      const blocks = S.busy.map((b) => h('div', { class: 'block' + (b.from <= nowTs && nowTs < b.to ? (v.source === 'planned' ? ' active' : ' paused') : '') },
+        h('span', { class: 'd' }),
+        h('div', {}, h('div', { class: 't' }, `${dayLabel(b.from)} ${fmt(b.from)} – ${fmt(b.to)}`), b.note ? h('div', { class: 'muted' }, b.note) : null),
+        h('button', { class: 'sm ghost danger x', onclick: () => api('/api/busy/remove', { id: b.id }) }, 'Verwijderen')));
+
+      const note = h('input', { class: 'grow bigin', value: S.settings.note, placeholder: 'Bijv. “Pakketjes graag bij de receptie”', maxlength: 120, 'data-keep': 'note' });
+      const saveNote = () => api('/api/settings', { note: note.value }).then(() => toast(note.value.trim() ? 'Bericht staat op de deur' : 'Bericht weggehaald'));
+      note.onkeydown = (e) => { if (e.key === 'Enter') saveNote(); };
+
+      return [
+        h('div', { class: 'card' },
+          h('div', { class: 'now' },
+            h('div', { style: 'flex:1;min-width:0' },
+              h('div', { class: 'big' }, v.label),
+              h('div', { class: 'until', style: 'margin-top:6px' }, v.until
+                ? [h('span', { class: 'k' }, 'tot '), fmtWhen(v.until), v.thenLabel ? h('span', { class: 'k' }, `, daarna ${v.thenLabel}`) : null]
+                : h('span', { class: 'k' }, 'geen eindtijd')),
+              h('div', { class: 'meta' }, source)),
+            h('div', { class: 'row', style: 'flex-direction:column;align-items:stretch' },
+              v.until && v.source !== 'hours' ? h('button', { class: 'sm', onclick: () => setUntil(v.until + 15 * 60e3) }, '+15 min') : null,
+              v.until && v.source === 'manual' ? h('button', { class: 'sm ghost', onclick: () => setUntil(null) }, 'Geen eind') : null,
+              v.mode === 'busy' && v.source === 'planned' ? h('button', { class: 'sm ghost', onclick: () => api('/api/busy/end').then(() => toast('Bezet beëindigd')) }, 'Bezet nu stoppen') : null,
+              S.manual && S.settings.hours.enabled ? h('button', { class: 'sm ghost', onclick: () => api('/api/status/auto').then(() => toast('Volgt openingstijden')) }, 'Openingstijden volgen') : null)),
+          h('div', { class: 'modes', style: 'margin-top:16px' }, ...modes),
+          h('div', { class: 'sub-h' }, `${v.label} tot wanneer?`),
+          h('div', { class: 'presets' }, ...presets),
+          h('div', { class: 'row', style: 'margin-top:10px' },
+            h('span', { class: 'label' }, 'Of tot'), custom, hint,
+            h('button', { class: 'white', onclick: () => setUntil(nextAt(custom.get())) }, 'Instellen'))),
+
+        h('div', { class: 'card' },
+          h('h2', {}, 'Bericht op de deur'),
+          h('div', { class: 'row' }, note,
+            h('button', { class: 'white', onclick: saveNote }, 'Plaatsen'),
+            S.settings.note ? h('button', { class: 'ghost', onclick: () => { note.value = ''; api('/api/settings', { note: '' }).then(() => toast('Bericht weggehaald')); } }, 'Weghalen') : null),
+          h('p', { class: 'muted', style: 'margin:10px 0 0' }, S.settings.note ? 'Staat nu groot op de deur.' : 'Komt groot onder de status te staan, tot je het weghaalt.')),
+
+        todayCard(),
+
+        h('div', { class: 'card' },
+          h('h2', {}, 'Bezet tijdens'),
+          h('div', { class: 'row' }, bDay, h('span', { class: 'muted' }, 'van'), bFrom, h('span', { class: 'muted' }, 'tot'), bTo),
+          h('div', { class: 'row', style: 'margin-top:10px' }, bNote, h('button', { class: 'white', onclick: addBusy }, 'Toevoegen')),
+          S.busy.length ? h('div', { style: 'margin-top:10px' }, ...blocks) : h('p', { class: 'muted', style: 'margin:12px 0 0' }, 'Niets gepland. De deur springt op de begintijd vanzelf op Bezet, en daarna weer terug.')),
+      ];
+    },
+
+    inbox() {
+      const F = {
+        open: ['Open', (r) => r.state === 'new' || r.state === 'seen'],
+        bell: ['Aangebeld', (r) => r.type === 'bell'],
+        message: ['Vraagjes', (r) => r.type === 'message'],
+        appointment: ['Afspraken', (r) => r.type === 'appointment'],
+        all: ['Alles', () => true],
+      };
+      if (!F[inboxFilter]) inboxFilter = 'open';
+      const reqs = S.requests.filter(F[inboxFilter][1]);
+      const filters = h('div', { class: 'filters' }, ...Object.entries(F).map(([k, [label, fn]]) =>
+        h('button', { class: 'sm' + (inboxFilter === k ? ' on' : ''), onclick: () => { inboxFilter = k; renderAll(true); } }, `${label} (${S.requests.filter(fn).length})`)));
+      const appts = S.appointments.filter((a) => a.at > Date.now() - 3600e3);
+      return [
+        h('div', { class: 'card' },
+          h('h2', {}, 'Bezoekers', h('span', { class: 'sp' }),
+            h('button', { class: 'sm ghost', onclick: () => api('/api/requests/seen') }, 'Alles gezien'),
+            h('button', { class: 'sm ghost', onclick: () => api('/api/requests/clear') }, 'Afgehandelde wissen')),
+          filters,
+          reqs.length ? h('div', { class: 'list' }, ...reqs.map((r) => h('div', { class: `req ${r.state}` },
+            h('div', { class: 'head' }, h('span', { class: 'type' }, icon(TYPE_ICON[r.type]), TYPE[r.type] || 'Verzoek'), h('span', {}, r.name || 'Anoniem'), h('span', { class: 'muted' }, `${ago(r.createdAt)} · status was ${r.statusAtTime}`),
+              h('span', { style: 'flex:1' }), r.state !== 'done' ? h('button', { class: 'sm ghost', onclick: () => api('/api/requests/done', { id: r.id }) }, 'Afgehandeld') : h('span', { class: 'muted' }, 'Afgehandeld')),
+            what(r) ? h('div', { class: 'what' }, what(r)) : null,
+            r.reply ? h('div', { class: 'reply' }, `${r.autoReplied ? 'Automatisch antwoord' : 'Jouw antwoord'}: ${r.reply}`) : null,
+            r.state !== 'done' ? replyControls(r) : null)))
+            : h('p', { class: 'muted', style: 'margin:0' }, inboxFilter === 'open' ? 'Alles is afgehandeld.' : 'Hier staat nog niets. Als iemand op de deur een knop aantikt, zie je het hier meteen.')),
+        appts.length ? h('div', { class: 'card' }, h('h2', {}, 'Afspraken'),
+          ...appts.map((a) => h('div', { class: 'block' }, h('div', {}, h('div', { class: 't' }, fmtWhen(a.at)), h('div', { class: 'muted' }, `${a.name}${a.reason ? ' — ' + a.reason : ''}`)),
+            h('button', { class: 'sm ghost danger x', onclick: () => api('/api/appointments/remove', { id: a.id }) }, 'Verwijderen')))) : null,
+      ];
+    },
+
+    settings() {
+      const st = structuredClone(S.settings);
+      const text = (obj, key, props = {}) => h('input', { value: obj[key], ...props, oninput: (e) => { obj[key] = props.type === 'number' ? Number(e.target.value) : e.target.value; } });
+      const chk = (obj, key, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: obj[key], onchange: (e) => { obj[key] = e.target.checked; } }), label);
+      const sel = (obj, key, opts, num) => h('select', { onchange: (e) => { obj[key] = num ? Number(e.target.value) : e.target.value; } }, ...opts.map(([v, l]) => h('option', { value: v, selected: String(obj[key]) === String(v) }, l)));
+      const lines = (key) => h('textarea', { oninput: (e) => { st[key] = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); } }, st[key].join('\n'));
+      const days = (obj) => { const wrap = h('div', { class: 'days' }); const draw = () => wrap.replaceChildren(...DAYS.map((d, n) => h('button', { type: 'button', class: obj.days.includes(n) ? 'on' : '', onclick: () => { obj.days = obj.days.includes(n) ? obj.days.filter((x) => x !== n) : [...obj.days, n]; draw(); } }, d))); draw(); return wrap; };
+      const save = async () => { await api('/api/settings', st); toast('Opgeslagen'); renderAll(true); };
+
+      const importFile = h('input', { type: 'file', accept: 'application/json', class: 'hidden', onchange: async (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        let data; try { data = JSON.parse(await file.text()); } catch { return toast('Dit bestand kan niet gelezen worden'); }
+        await api('/api/import', data); toast('Back-up teruggezet'); renderAll(true);
+      } });
+
+      const desktopBox = h('input', { type: 'checkbox', checked: prefs.desktop, onchange: async (e) => {
+        let on = e.target.checked;
+        if (on && Notification.permission !== 'granted') on = (await Notification.requestPermission().catch(() => 'denied')) === 'granted';
+        if (e.target.checked && !on) toast('Je browser blokkeert meldingen voor deze pagina');
+        e.target.checked = prefs.desktop = on;
+        store.set('doorDesktop', on ? '1' : '0');
+      } });
+      return [
+        h('div', { class: 'card' }, h('h2', {}, 'Meldingen op dit apparaat'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Geluid'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: prefs.sound, onchange: (e) => setSound(e.target.checked) }), 'Geluid bij aanbellen en verzoeken'),
+            h('label', {}, 'Pop-up'), h('span', { class: 'muted' }, 'Altijd aan — ook als het geluid uit staat, bijvoorbeeld als je in een andere ruimte of in overleg zit. Snel wisselen kan met de knop bovenaan.'),
+            canNotify ? h('label', {}, 'Systeemmelding') : null,
+            canNotify ? h('label', { class: 'check' }, desktopBox, 'Ook een melding van je computer als dit tabblad op de achtergrond staat') : null,
+            h('span', {}), h('div', { class: 'row' }, h('button', { onclick: testBell }, 'Test de bel'), h('span', { class: 'muted' }, 'Toont de pop-up en speelt het geluid af op dit apparaat.')))),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Deur'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Naam'), text(st, 'name', { maxlength: 60 }),
+            h('label', {}, 'Ondertitel'), text(st, 'subtitle', { maxlength: 80, placeholder: 'bijv. Ruimte 2.14 · Studio' }),
+            ...['open', 'closed', 'busy'].flatMap((m) => [
+              h('label', {}, h('span', { style: `display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLORS[m]};margin-right:8px` }), `Tekst bij ${{ open: 'Open', closed: 'Gesloten', busy: 'Bezet' }[m]}`),
+              h('div', { class: 'row' }, text(st.texts[m], 'label', { maxlength: 24, style: 'width:130px' }), text(st.texts[m], 'message', { maxlength: 120, class: 'grow' }))]))),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Openingstijden'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Automatisch'), chk(st.hours, 'enabled', 'Vanzelf openen en sluiten'),
+            h('label', {}, 'Dagen'), days(st.hours),
+            h('label', {}, 'Tijden'), h('div', { class: 'row' }, timePicker(st.hours.from, (x) => { st.hours.from = x; }, 15), h('span', { class: 'muted' }, 'tot'), timePicker(st.hours.to, (x) => { st.hours.to = x; }, 15)),
+            h('span', {}), h('span', { class: 'muted' }, `De status met de hand wijzigen kan altijd; dat geldt tot de volgende openings- of sluitingstijd. Tijdzone van de server: ${S.timeZone}.`))),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Bezoekers'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje')),
+            h('label', {}, 'Bel'), chk(st.visitors, 'bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'),
+            h('label', {}, 'Redenen'), h('div', {}, lines('reasons'), h('div', { class: 'muted' }, 'Eén per regel. Houd het kort: 3 tot 4 werkt het rustigst.')),
+            h('label', {}, 'Snelle antwoorden'), h('div', {}, lines('quickReplies'), h('div', { class: 'muted' }, 'Eén per regel — één tik en het staat op de deur.')),
+            h('label', {}, 'Bij gesloten'), text(st, 'closedReply', { placeholder: 'Direct antwoord als je gesloten bent (leeg = geen)' }),
+            h('label', {}, 'Geen reactie'), h('div', { class: 'row' }, h('span', { class: 'muted' }, 'na'), text(st, 'autoReplyMinutes', { type: 'number', min: 0, style: 'width:70px' }), h('span', { class: 'muted' }, 'min tonen:'), text(st, 'autoReplyText', { class: 'grow' })),
+            h('label', {}, 'Afspraakblokken'), h('div', { class: 'row' }, text(st, 'slotMinutes', { type: 'number', min: 10, step: 5, style: 'width:80px' }), h('span', { class: 'muted' }, 'minuten, binnen de openingstijden (anders werkdagen 09:00–17:00)')))),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Scherm'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Indeling'), sel(st.layout, 'orientation', [['auto', 'Automatisch'], ['portrait', 'Verticaal'], ['landscape', 'Horizontaal']]),
+            h('label', {}, 'Draaien'), sel(st.layout, 'rotate', [[0, 'Niet'], [90, '90° met de klok mee'], [180, '180°'], [270, '90° tegen de klok in']], true),
+            h('span', {}), h('span', { class: 'muted' }, 'Gebruik Draaien als de monitor op zijn kant staat maar de computer nog een liggend beeld stuurt.'),
+            h('label', {}, 'Toetsenbord'), chk(st.layout, 'keyboard', 'Aanraaktoetsenbord op het deurscherm'),
+            h('label', {}, 'Nacht'), h('div', { class: 'row' }, chk(st.dim, 'enabled', 'Dimmen van'), timePicker(st.dim.from, (x) => { st.dim.from = x; }, 15), h('span', { class: 'muted' }, 'tot'), timePicker(st.dim.to, (x) => { st.dim.to = x; }, 15)))),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Meldingen op je telefoon'),
+          h('p', { class: 'muted', style: 'margin-top:0' }, 'Installeer de gratis app “ntfy”, abonneer je op een moeilijk te raden onderwerpnaam en vul diezelfde naam hier in. Je krijgt dan bij elke bezoeker een melding, ook als deze pagina dicht is.'),
+          h('div', { class: 'form' },
+            h('label', {}, 'ntfy-onderwerp'), text(st, 'ntfyTopic', { placeholder: 'bijv. deur-7f3k2q' }),
+            h('label', {}, 'ntfy-server'), text(st, 'ntfyServer'),
+            h('label', {}, 'Webhook'), text(st, 'webhookUrl', { placeholder: 'Slack / Discord / Home Assistant (optioneel)' }),
+            h('span', {}), h('div', {}, h('button', { onclick: async () => { await api('/api/settings', st); const r = await api('/api/test-notify', {}); toast(r.results.length ? r.results.join(', ') : 'Vul eerst een onderwerp of webhook in'); } }, 'Test versturen')))),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Meer'),
+          h('div', { class: 'row' },
+            h('button', { onclick: async () => { const res = await fetch('/api/export', { headers: { 'x-pin': PIN } }); if (!res.ok) return toast('Downloaden mislukt'); const a = h('a', { href: URL.createObjectURL(await res.blob()), download: `deur-backup-${ymd()}.json` }); a.click(); } }, 'Back-up downloaden'),
+            h('button', { onclick: () => importFile.click() }, 'Back-up terugzetten'), importFile,
+            S.pinRequired ? h('button', { class: 'ghost danger', onclick: () => { store.set('doorPin', ''); location.reload(); } }, 'Dit apparaat vergrendelen') : null),
+          h('details', { style: 'margin-top:16px' }, h('summary', {}, 'Activiteitenlog'),
+            h('table', { style: 'margin-top:10px' }, ...S.history.slice(0, 150).map((e) => h('tr', {},
+              h('td', { class: 'muted', style: 'white-space:nowrap' }, `${new Date(e.at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} ${fmt(e.at)}`),
+              h('td', {}, e.text)))))),
+
+        h('div', { class: 'save' }, h('button', { class: 'white', onclick: save }, 'Instellingen opslaan')),
+      ];
+    },
+  };
+
+  window.addEventListener('unhandledrejection', (e) => e.preventDefault()); // api() already shows a message
+  setInterval(() => { if (tab !== 'settings') renderAll(false); }, 30000); // refresh "x min ago" and the time buttons
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/admin' }).catch(() => {});
+  start();
+})();
+</script>
+</body>
+</html>

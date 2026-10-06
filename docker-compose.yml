@@ -1,0 +1,17 @@
+services:
+  door-display:
+    build: .
+    container_name: door-display
+    ports:
+      - "8080:8080"
+    environment:
+      # Your time zone, so schedules and the clock are right (e.g. Europe/Amsterdam, America/New_York)
+      - TZ=${TZ:-Europe/Amsterdam}
+      # PIN for the control panel at /admin. Leave empty for no PIN (only do that on a trusted network).
+      - ADMIN_PIN=${ADMIN_PIN:-1234}
+    volumes:
+      - door-data:/data
+    restart: unless-stopped
+
+volumes:
+  door-data:

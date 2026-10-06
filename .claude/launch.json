@@ -1,0 +1,1 @@
+{"version":"0.0.1","configurations":[{"name":"door","runtimeExecutable":"node","runtimeArgs":["server.js"],"port":8080,"env":{"ADMIN_PIN":"1234"}}]}

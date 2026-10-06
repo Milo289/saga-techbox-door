@@ -1,0 +1,6 @@
+data
+node_modules
+*.md
+.env
+backups
+.git
