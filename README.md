@@ -49,6 +49,56 @@ Set your PIN and time zone in `docker-compose.yml` (or `ADMIN_PIN=4821 TZ=Europe
 ADMIN_PIN=1234 node server.js
 ```
 
+## Accounts, rights and the API
+
+By default the control panel opens with a PIN (`ADMIN_PIN`) — or without protection if you set nothing.
+For real accounts, give the server an **owner**:
+
+| Setting | Meaning |
+|---|---|
+| `OWNER_USER` | name of the owner (default `owner`) |
+| `OWNER_PASSWORD` | the owner's password |
+| `OWNER_PASSWORD_HASH` | same, but as a hash, so the password itself is never stored: `node server.js --hash "my password"` |
+
+The owner lives in the start-up settings, **not** in the code or the data file: it can't be changed or deleted from the website
+and always has every right. (In the desktop app: *Instellingen → Eigenaar en beveiliging*.)
+
+The owner then gets a **Beheer** tab:
+- **Gebruikers** — create accounts with a role (*beheerder*, *medewerker*, *kijker*) and tick exactly which rights each person has:
+  see status · change status/message/busy times · see and answer visitors · manage people · change settings · set up mail ·
+  backups · see the log · manage users · manage API keys. Nobody can give rights they don't have themselves.
+- **Ingelogd** — who is logged in where; end sessions at once.
+- **API-sleutels** — keys for scripts and other programs, each with only the rights you choose; shown once, revocable.
+- **Activiteitenlog** — who did what, including failed logins and refused actions.
+- **Server** — version, uptime, connected screens.
+
+People only see the tabs and buttons they have rights for, and the server enforces it as well. Passwords are stored as scrypt hashes;
+too many wrong attempts are blocked for a while. The old PIN keeps working as a *beheerder* (remove `ADMIN_PIN` to turn it off).
+
+### API (for scripts, Home Assistant, your own website)
+Send a key from the Beheer tab as `Authorization: Bearer door_…`.
+```
+GET  /api/v1/status                      POST /api/v1/status          {"mode":"closed","minutes":30}
+GET  /api/v1/requests?state=open         POST /api/v1/requests/reply  {"id":"…","reply":"Ik kom eraan"}
+GET  /api/v1/users                       POST /api/v1/users           {"username":"anna","name":"Anna","password":"…","role":"medewerker"}
+                                         POST /api/v1/users/remove    {"id":"…"}
+GET  /api/v1/people                      POST /api/v1/people/upsert   {"nr":"1042","name":"Sam","email":"sam@bedrijf.nl"}
+GET  /api/v1/audit
+```
+Examples with `curl` are shown in the Beheer tab itself.
+
+## What only the desktop app can do
+Install the app (see above) and you get, on top of the website:
+- an **icon in the system tray** with quick *Open / Gesloten / Bezet* buttons and the number of open requests (also a badge on the app icon on Mac/Linux)
+- **global shortcuts** — Ctrl/Cmd+Alt+**O** / **G** / **B** set the status from any program
+- real **system notifications**, the window can **stay running in the tray** when closed
+- the door screen on a **chosen monitor**, optionally in a window, with a **daily refresh** (e.g. 04:00)
+- **always on top**, **zoom**, start at login (Windows, macOS, Linux)
+- backups **saved to / restored from a file** with the normal save/open dialogs, and *open data folder*
+- the **owner account** for the built-in server
+
+All of these are in *Instellingen → Venster en sneltoetsen* (Ctrl/Cmd+Shift+S) and on the *Deze app* card in the control panel.
+
 ## Look
 - **Donker** — black, calm.
 - **Licht** — light background with the status in a big full-colour card (green / red / orange).

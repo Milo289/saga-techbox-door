@@ -36,6 +36,15 @@
   .check input { width: 18px; height: 18px; accent-color: var(--acc); }
   .ok { color: var(--acc); font-weight: 600; } .bad { color: var(--err); font-weight: 600; }
   .err { color: var(--err); font-weight: 600; min-height: 1.2em; margin: 0; }
+  select { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--s2); color: var(--fg); width: 100%; outline: none; }
+  select:focus { border-color: var(--acc); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 650; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--acc) 16%, transparent); color: var(--acc); margin-left: 8px; vertical-align: 1px; }
+  details.adv { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+  details.adv > summary { cursor: pointer; font-weight: 650; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+  details.adv > summary::after { content: "▾"; color: var(--dim); transition: transform .2s; }
+  details.adv[open] > summary::after { transform: rotate(180deg); }
+  details.adv .body { display: grid; gap: 12px; margin-top: 14px; }
   .hidden { display: none !important; }
   @media (max-width: 520px) { .opts { grid-template-columns: 1fr; } }
 </style>
@@ -73,6 +82,42 @@
 
   <label class="check"><input type="checkbox" id="autostart"> Automatisch starten als de computer opstart</label>
 
+  <details class="adv" id="advWindow">
+    <summary>Venster en sneltoetsen <span class="tag">alleen in de app</span></summary>
+    <div class="body">
+      <div class="grid2">
+        <label class="f">Zoom<select id="zoom"><option value="0.8">80%</option><option value="0.9">90%</option><option value="1">100%</option><option value="1.1">110%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option></select></label>
+        <label class="f">Dagelijks verversen om<input type="text" id="reloadAt" placeholder="bijv. 04:00 (leeg = nooit)" maxlength="5" inputmode="numeric"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="alwaysOnTop"> Venster altijd bovenaan houden</label>
+      <label class="check"><input type="checkbox" id="tray"> Icoon bij de klok (tray) met snelle statusknoppen en het aantal open verzoeken</label>
+      <label class="check" id="rowCloseTray"><input type="checkbox" id="closeToTray"> Venster sluiten laat de app doorlopen in de tray</label>
+      <label class="check" id="rowHotkeys"><input type="checkbox" id="hotkeys"> Sneltoetsen voor de status, ook in andere programma’s: <b>Ctrl/Cmd+Alt+O</b> Open · <b>G</b> Gesloten · <b>B</b> Bezet</label>
+      <div id="rowDoor" class="body" style="margin:0">
+        <label class="f">Op welke monitor staat het deurscherm?<select id="display"></select></label>
+        <label class="check"><input type="checkbox" id="windowed"> Het deurscherm in een gewoon venster tonen (niet schermvullend)</label>
+      </div>
+    </div>
+  </details>
+
+  <details class="adv" id="advOwner">
+    <summary>Eigenaar en beveiliging <span class="tag">alleen in de app</span></summary>
+    <div class="body">
+      <p class="hint" style="margin:0">Het eigenaaraccount heeft altijd alle rechten: gebruikers en rechten beheren, API-sleutels maken, activiteitenlog. Alleen een hash van het wachtwoord wordt bewaard — nooit het wachtwoord zelf.</p>
+      <div class="grid2">
+        <label class="f">Gebruikersnaam<input type="text" id="ownerUser" autocomplete="off" spellcheck="false" placeholder="bijv. milo"></label>
+        <label class="f">Wachtwoord<input type="password" id="ownerPassword" autocomplete="new-password" placeholder="minstens 8 tekens"></label>
+      </div>
+      <p class="hint" id="ownerState" style="margin:0"></p>
+      <label class="check hidden" id="rowOwnerClear"><input type="checkbox" id="ownerClear"> Eigenaaraccount verwijderen (dan geldt weer alleen de pincode)</label>
+    </div>
+  </details>
+
+  <div class="card" id="aboutBox">
+    <p class="hint" id="about" style="margin:0"></p>
+    <div class="row"><button type="button" id="reveal" class="hidden">Open de gegevensmap</button></div>
+  </div>
+
   <p class="err" id="err"></p>
   <button class="go" id="save">Opslaan en starten</button>
   <p class="hint" id="keys"></p>
@@ -94,6 +139,27 @@
   $('port').value = c.port || 8080;
   $('url').value = c.url || '';
   $('autostart').checked = c.autostart !== false;
+  $('zoom').value = String(c.zoom || 1);
+  if (![...$('zoom').options].some((o) => o.value === $('zoom').value)) $('zoom').add(new Option(`${Math.round(c.zoom * 100)}%`, c.zoom, true, true));
+  $('reloadAt').value = c.reloadAt || '';
+  $('alwaysOnTop').checked = !!c.alwaysOnTop; $('tray').checked = c.tray !== false; $('closeToTray').checked = !!c.closeToTray; $('hotkeys').checked = !!c.hotkeys;
+  $('windowed').checked = !!c.windowed;
+  $('display').replaceChildren(...info.displays.map((d) => new Option(d.label, d.id, false, d.id === c.display)));
+  $('ownerUser').value = c.ownerUser || '';
+  $('ownerState').textContent = c.ownerSet ? `Er is een eigenaaraccount (${c.ownerUser}). Laat het wachtwoord leeg om het te behouden.` : 'Nog geen eigenaaraccount. Zonder account geldt alleen de pincode (of geen beveiliging als die leeg is).';
+  $('rowOwnerClear').classList.toggle('hidden', !c.ownerSet);
+  $('about').textContent = `Versie ${info.version} · ${info.platform} · gegevens in ${info.dataDir}`;
+  const roleSync = () => {
+    const door = val('role') === 'door', here = val('mode') !== 'remote';
+    $('rowDoor').classList.toggle('hidden', !door);
+    $('rowHotkeys').classList.toggle('hidden', door);
+    $('rowCloseTray').classList.toggle('hidden', door);
+    $('advOwner').classList.toggle('hidden', !here);
+    $('reveal').classList.toggle('hidden', !here);
+  };
+  document.querySelectorAll('input[name=role], input[name=mode]').forEach((r) => r.addEventListener('change', roleSync));
+  $('reveal').onclick = () => window.setup.reveal();
+  roleSync();
 
   const showLan = () => {
     const port = parseInt($('port').value, 10) || 8080;
@@ -124,6 +190,9 @@
     const res = await window.setup.save({
       role: val('role'), serverMode: val('mode'), url: $('url').value.trim(),
       port: $('port').value, pin: $('pin').value, autostart: $('autostart').checked,
+      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
+      closeToTray: $('closeToTray').checked, hotkeys: $('hotkeys').checked, display: $('display').value, windowed: $('windowed').checked,
+      ownerUser: $('ownerUser').value, ownerPassword: $('ownerPassword').value, ownerClear: $('ownerClear').checked,
     });
     if (!res || !res.ok) { $('err').textContent = (res && res.error) || 'Opslaan lukte niet.'; $('save').disabled = false; }
   };

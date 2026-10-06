@@ -16,6 +16,8 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const ADMIN_PIN = process.env.ADMIN_PIN || '';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const BUILD = crypto.randomBytes(4).toString('hex'); // screens reload themselves when this changes
+let APP_VERSION = '—';
+try { APP_VERSION = require('./package.json').version; } catch {}
 const MODES = ['open', 'closed', 'busy'];
 
 // ---------- defaults ----------
@@ -57,6 +59,9 @@ const freshState = () => ({
   appointments: [], // { id, at, name, reason }
   requests: [],
   people: [], // { id, nr, name, email, note } — visitors type their number and everything is filled in
+  users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
+  apiKeys: [], // { id, name, prefix, hash, perms[], createdAt, lastUsed, by }
+  sessions: [], // { id, hash, userId, createdAt, lastSeen, ip, ua }
   history: [],
 });
 
@@ -120,7 +125,7 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, people: Array.isArray(raw.people) ? raw.people : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
@@ -137,9 +142,10 @@ function save() {
     } catch (e) { console.error('save failed:', e.message); }
   }, 150);
 }
-function log(type, text) {
-  state.history.unshift({ at: Date.now(), type, text: str(text, 300) });
-  state.history.length = Math.min(state.history.length, 300);
+let actor = ''; // who is doing the current action (shown in the activity log)
+function log(type, text, by) {
+  state.history.unshift({ at: Date.now(), type, text: str(text, 300), by: by ?? actor });
+  state.history.length = Math.min(state.history.length, 500);
 }
 
 // ---------- what should the door show? ----------
@@ -246,29 +252,119 @@ function publicState() {
     serverTime: now,
   };
 }
-function adminState() {
+// ---------- accounts, permissions, sessions, API keys ----------
+const PERM_LABELS = {
+  view: 'Status zien', status: 'Status, bericht en bezet-tijden wijzigen', inbox: 'Bezoekers zien en beantwoorden', people: 'Personenlijst beheren',
+  settings: 'Instellingen wijzigen', mail: 'E-mail en meldingen instellen', export: 'Back-up maken en terugzetten', audit: 'Activiteitenlog zien',
+  users: 'Gebruikers en rechten beheren', api: 'API-sleutels beheren',
+};
+const ALL_PERMS = Object.keys(PERM_LABELS);
+const ROLE_PRESETS = {
+  owner: ALL_PERMS,
+  beheerder: ['view', 'status', 'inbox', 'people', 'settings', 'mail', 'export', 'audit'],
+  medewerker: ['view', 'status', 'inbox'],
+  kijker: ['view'],
+};
+// The owner account comes from the start-up settings, never from the data file or the source code.
+const OWNER_USER = (process.env.OWNER_USER || 'owner').trim().toLowerCase();
+function hashPassword(pw) {
+  const salt = crypto.randomBytes(16);
+  return `scrypt$${salt.toString('hex')}$${crypto.scryptSync(String(pw), salt, 64).toString('hex')}`;
+}
+function verifyPassword(pw, stored) {
+  try {
+    const [alg, salt, hash] = String(stored).split('$');
+    if (alg !== 'scrypt') return false;
+    const want = Buffer.from(hash, 'hex');
+    return crypto.timingSafeEqual(crypto.scryptSync(String(pw), Buffer.from(salt, 'hex'), want.length), want);
+  } catch { return false; }
+}
+const OWNER_HASH = process.env.OWNER_PASSWORD_HASH || (process.env.OWNER_PASSWORD ? hashPassword(process.env.OWNER_PASSWORD) : '');
+const DUMMY_HASH = hashPassword(crypto.randomBytes(8).toString('hex')); // so an unknown user takes as long as a wrong password
+const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
+const authMode = () => (OWNER_HASH || state.users.length ? 'login' : ADMIN_PIN ? 'pin' : 'open');
+const permsOf = (list) => [...new Set((Array.isArray(list) ? list : []).filter((x) => ALL_PERMS.includes(x)))];
+const can = (id, perm) => !!id && id.perms.includes(perm);
+const ownerIdentity = () => ({ kind: 'user', userId: 'owner', username: OWNER_USER, name: 'Eigenaar', role: 'owner', perms: ALL_PERMS, owner: true });
+const SESSION_DAYS = 30;
+
+function identifyFrom(tok, pin) {
+  tok = String(tok || '');
+  if (tok.startsWith('door_')) {
+    const h = sha(tok), k = state.apiKeys.find((x) => x.hash === h);
+    if (!k) return null;
+    if (Date.now() - (k.lastUsed || 0) > 60e3) { k.lastUsed = Date.now(); save(); }
+    return { kind: 'key', keyId: k.id, name: `API: ${k.name}`, role: 'api', perms: permsOf(k.perms) };
+  }
+  if (tok) {
+    const h = sha(tok), ss = state.sessions.find((x) => x.hash === h);
+    if (!ss || Date.now() - ss.lastSeen > SESSION_DAYS * 864e5) return null;
+    if (Date.now() - ss.lastSeen > 60e3) { ss.lastSeen = Date.now(); save(); }
+    if (ss.userId === 'owner') return OWNER_HASH ? { ...ownerIdentity(), sessionId: ss.id } : null;
+    const u = state.users.find((x) => x.id === ss.userId);
+    return u && !u.disabled ? { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms), sessionId: ss.id } : null;
+  }
+  if (pin && ADMIN_PIN) {
+    const a = Buffer.from(String(pin)), b = Buffer.from(ADMIN_PIN);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return { kind: 'pin', name: 'Pincode', role: 'beheerder', perms: ROLE_PRESETS.beheerder };
+  }
+  if (authMode() === 'open') return { kind: 'open', name: 'Open toegang', role: 'beheerder', perms: ROLE_PRESETS.beheerder };
+  return null;
+}
+function identify(req, url) {
+  const auth = String(req.headers.authorization || '');
+  const tok = auth.startsWith('Bearer ') ? auth.slice(7).trim() : String(req.headers['x-session'] || url.searchParams.get('token') || '');
+  return identifyFrom(tok, req.headers['x-pin'] || url.searchParams.get('pin'));
+}
+const failures = new Map();
+const authFail = (ip) => failures.set(ip, [...(failures.get(ip) || []).filter((t) => Date.now() - t < 10 * 60e3), Date.now()]);
+const authBlocked = (ip) => (failures.get(ip) || []).filter((t) => Date.now() - t < 10 * 60e3).length >= 20;
+const publicUser = (u) => ({ id: u.id, username: u.username, name: u.name, role: u.role, perms: permsOf(u.perms), disabled: !!u.disabled, createdAt: u.createdAt, lastLogin: u.lastLogin || 0 });
+function kick(match) { for (const c of [...clients]) if (match(c)) { try { c.res.end(); } catch {} clients.delete(c); } }
+function newSession(userId, req) {
+  const token = 's_' + crypto.randomBytes(32).toString('hex');
+  state.sessions.push({ id: newId(), hash: sha(token), userId, createdAt: Date.now(), lastSeen: Date.now(), ip: (req.socket.remoteAddress || '').replace('::ffff:', ''), ua: str(req.headers['user-agent'], 120) });
+  state.sessions = state.sessions.filter((x) => Date.now() - x.lastSeen < SESSION_DAYS * 864e5).slice(-200);
+  return token;
+}
+
+function adminState(id) {
+  const full = (perm) => can(id, perm);
+  const settings = { ...state.settings, mail: { ...state.settings.mail, pass: state.settings.mail.pass ? PASS_MASK : '' } };
+  if (!full('mail')) { settings.mail = { enabled: settings.mail.enabled }; settings.ntfyTopic = ''; settings.ntfyServer = ''; settings.webhookUrl = ''; }
   return {
     build: BUILD,
-    settings: { ...state.settings, mail: { ...state.settings.mail, pass: state.settings.mail.pass ? PASS_MASK : '' } },
-    people: state.people,
+    settings,
+    people: full('people') ? state.people : [],
     mailOn: mailOn(),
     manual: state.manual,
     view: computeView(),
     busy: [...state.busy].sort((a, b) => a.from - b.from),
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
-    requests: state.requests,
-    history: state.history,
+    requests: full('inbox') ? state.requests : [],
+    history: full('audit') ? state.history : [],
+    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, owner: !!id.owner },
+    permLabels: PERM_LABELS, rolePresets: ROLE_PRESETS,
+    users: full('users') ? state.users.map(publicUser) : undefined,
+    sessions: full('users') ? state.sessions.map((x) => ({ id: x.id, userId: x.userId, who: x.userId === 'owner' ? 'Eigenaar' : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
+    apiKeys: full('api') ? state.apiKeys.map(({ id: kid, name, prefix, perms, createdAt, lastUsed, by }) => ({ id: kid, name, prefix, perms, createdAt, lastUsed, by })) : undefined,
+    server: full('users') ? { version: APP_VERSION, uptime: Math.round(process.uptime()), node: process.version, platform: `${process.platform} ${process.arch}`, dataDir: DATA_DIR, clients: clients.size, authMode: authMode(), ownerConfigured: !!OWNER_HASH, ownerUser: OWNER_USER, pin: !!ADMIN_PIN } : undefined,
     serverTime: Date.now(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    pinRequired: !!ADMIN_PIN,
+    authMode: authMode(),
   };
 }
 function write(c, event, data) {
   try { c.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { clients.delete(c); }
 }
 function broadcast() {
-  const pub = publicState(), adm = adminState();
-  for (const c of clients) write(c, 'state', c.role === 'admin' ? adm : pub);
+  const pub = publicState();
+  for (const c of [...clients]) {
+    if (c.role !== 'admin') { write(c, 'state', pub); continue; }
+    const id = identifyFrom(c.tok, c.pin); // still allowed? (session ended, user disabled, rights changed)
+    if (!id) { try { c.res.end(); } catch {} clients.delete(c); continue; }
+    write(c, 'state', adminState(id));
+  }
 }
 let lastView = '';
 function changed() { save(); lastView = JSON.stringify(computeView()); broadcast(); }
@@ -442,11 +538,6 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
-function authed(req, url) {
-  if (!ADMIN_PIN) return true;
-  const a = Buffer.from(String(req.headers['x-pin'] || url.searchParams.get('pin') || '')), b = Buffer.from(ADMIN_PIN);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
 function serveFile(res, file) {
   const full = path.normalize(path.join(PUBLIC_DIR, file));
   if (!full.startsWith(PUBLIC_DIR + path.sep)) return send(res, 404, { error: 'Niet gevonden' });
@@ -460,7 +551,80 @@ const bad = (msg) => Object.assign(new Error(msg), { code: 400 });
 const findReq = (id) => { const r = state.requests.find((x) => x.id === id); if (!r) throw bad('Dat verzoek bestaat niet meer'); return r; };
 
 const adminRoutes = {
-  'GET /api/admin-state': () => adminState(),
+  'GET /api/admin-state': (b, id) => adminState(id),
+  'GET /api/me': (b, id) => adminState(id).me,
+
+  // ----- people with accounts (permission: users) -----
+  'POST /api/users/save': (b, id) => {
+    const username = str(b.username, 32).toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    if (username.length < 3) throw bad('Gebruikersnaam: minstens 3 tekens (letters, cijfers, punt, streepje)');
+    if (OWNER_HASH && username === OWNER_USER) throw bad('Die naam is gereserveerd voor de eigenaar');
+    const existing = b.id ? state.users.find((u) => u.id === b.id) : null;
+    if (b.id && !existing) throw bad('Die gebruiker bestaat niet meer');
+    if (state.users.some((u) => u.username === username && u !== existing)) throw bad('Die gebruikersnaam is al in gebruik');
+    const role = ROLE_PRESETS[b.role] && b.role !== 'owner' ? b.role : 'medewerker';
+    const perms = Array.isArray(b.perms) ? permsOf(b.perms) : ROLE_PRESETS[role];
+    if (!perms.every((x) => can(id, x))) throw bad('Je kunt geen rechten geven die je zelf niet hebt');
+    if (existing && !permsOf(existing.perms).every((x) => can(id, x))) throw bad('Deze gebruiker heeft meer rechten dan jij');
+    const password = typeof b.password === 'string' ? b.password : '';
+    if (!existing && password.length < 8) throw bad('Wachtwoord: minstens 8 tekens');
+    if (password && password.length < 8) throw bad('Wachtwoord: minstens 8 tekens');
+    const u = existing || { id: newId(), createdAt: Date.now(), hash: '' };
+    if (existing && id.userId === existing.id && (b.disabled || !perms.includes('users'))) throw bad('Je kunt jezelf niet uitschakelen of je beheerrechten afnemen');
+    Object.assign(u, { username, name: str(b.name, 60) || username, role, perms, disabled: !!b.disabled });
+    if (password) u.hash = hashPassword(password);
+    if (!existing) state.users.push(u);
+    // new password, disabled or changed rights: end that person's sessions (they log in again)
+    if (existing && (password || u.disabled)) { state.sessions = state.sessions.filter((x) => x.userId !== u.id); kick((c) => c.userId === u.id); }
+    log('gebruikers', `${existing ? 'Gebruiker gewijzigd' : 'Gebruiker aangemaakt'}: ${u.username} (${u.role})`);
+    return { ok: true, user: publicUser(u) };
+  },
+  'POST /api/users/remove': (b, id) => {
+    const u = state.users.find((x) => x.id === b.id);
+    if (!u) return;
+    if (id.userId === u.id) throw bad('Je kunt jezelf niet verwijderen');
+    if (!permsOf(u.perms).every((x) => can(id, x))) throw bad('Deze gebruiker heeft meer rechten dan jij');
+    state.users = state.users.filter((x) => x !== u);
+    state.sessions = state.sessions.filter((x) => x.userId !== u.id);
+    kick((c) => c.userId === u.id);
+    log('gebruikers', `Gebruiker verwijderd: ${u.username}`);
+  },
+  'POST /api/sessions/revoke': (b, id) => {
+    const sel = (x) => (b.all ? true : b.userId ? x.userId === b.userId : x.id === b.id);
+    const gone = state.sessions.filter((x) => sel(x) && x.id !== id.sessionId);
+    state.sessions = state.sessions.filter((x) => !gone.includes(x));
+    kick((c) => gone.some((g) => g.id === c.sessionId));
+    log('gebruikers', `${gone.length} sessie(s) beëindigd`);
+  },
+  'POST /api/password': (b, id) => {
+    if (id.kind !== 'user') throw bad('Alleen voor gebruikers met een account');
+    if (id.owner) throw bad('Het eigenaar-wachtwoord stel je in bij het opstarten (OWNER_PASSWORD)');
+    const u = state.users.find((x) => x.id === id.userId);
+    if (!u || !verifyPassword(b.current, u.hash)) throw bad('Je huidige wachtwoord klopt niet');
+    if (String(b.next || '').length < 8) throw bad('Nieuw wachtwoord: minstens 8 tekens');
+    u.hash = hashPassword(b.next);
+    state.sessions = state.sessions.filter((x) => x.userId !== u.id || x.id === id.sessionId);
+    log('gebruikers', `${u.username} heeft het wachtwoord gewijzigd`);
+  },
+
+  // ----- API keys (permission: api) -----
+  'POST /api/keys/create': (b, id) => {
+    const name = str(b.name, 60);
+    if (!name) throw bad('Geef de sleutel een naam');
+    const perms = permsOf(b.perms);
+    if (!perms.length) throw bad('Kies minstens één recht');
+    if (!perms.every((x) => can(id, x))) throw bad('Je kunt geen rechten geven die je zelf niet hebt');
+    const key = 'door_' + crypto.randomBytes(24).toString('hex');
+    state.apiKeys.push({ id: newId(), name, prefix: key.slice(0, 10), hash: sha(key), perms, createdAt: Date.now(), lastUsed: 0, by: id.name });
+    log('api', `API-sleutel aangemaakt: ${name}`);
+    return { ok: true, key }; // shown once, never again
+  },
+  'POST /api/keys/remove': (b) => {
+    const k = state.apiKeys.find((x) => x.id === b.id);
+    if (!k) return;
+    state.apiKeys = state.apiKeys.filter((x) => x !== k);
+    log('api', `API-sleutel verwijderd: ${k.name}`);
+  },
 
   // Set Open / Closed / Busy, optionally until a time
   'POST /api/status': (b) => {
@@ -492,7 +656,9 @@ const adminRoutes = {
     log('busy', 'Bezet eerder beëindigd');
   },
 
-  'POST /api/settings': (b) => {
+  'POST /api/settings': (b, id) => {
+    if (!can(id, 'mail')) { delete b.mail; delete b.ntfyTopic; delete b.ntfyServer; delete b.webhookUrl; }
+    if (!can(id, 'settings')) for (const k of Object.keys(b)) if (!['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl', 'note'].includes(k)) delete b[k];
     if (b.mail && b.mail.pass === PASS_MASK) b.mail = { ...b.mail, pass: state.settings.mail.pass };
     const merged = { ...state.settings };
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
@@ -542,13 +708,56 @@ const adminRoutes = {
     return { ok: true };
   },
   'POST /api/test-notify': async () => ({ results: await notifyExternal(null, `Testmelding van ${state.settings.name}`) }),
-  'GET /api/export': () => state,
+  'GET /api/export': () => { const { users, apiKeys, sessions, ...rest } = state; return rest; }, // accounts and keys never leave the server
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
-    state = { ...d, ...b, settings: coerce(DEFAULT_SETTINGS, b.settings) };
+    state = { ...d, ...b, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
   },
+};
+
+// Public API for scripts and other programs (use an API key: Authorization: Bearer door_…)
+adminRoutes['GET /api/v1/status'] = () => { const v = computeView(); return { mode: v.mode, label: v.label, message: v.message, until: v.until, then: v.then, source: v.source }; };
+adminRoutes['POST /api/v1/status'] = adminRoutes['POST /api/status'];
+adminRoutes['GET /api/v1/requests'] = (b, id, url) => {
+  const stateF = url.searchParams.get('state');
+  const list = state.requests.filter((r) => !stateF || (stateF === 'open' ? r.state === 'new' || r.state === 'seen' : r.state === stateF));
+  return { requests: list.slice(0, Math.min(200, Number(url.searchParams.get('limit')) || 50)).map(({ id: rid, type, name, nr, topic, message, reason, at, email, state: st, createdAt, reply, repliedAt }) => ({ id: rid, type, name, nr, topic, message, reason, at, email, state: st, createdAt, reply, repliedAt })) };
+};
+adminRoutes['POST /api/v1/requests/reply'] = adminRoutes['POST /api/requests/reply'];
+adminRoutes['GET /api/v1/users'] = (b, id) => ({ users: state.users.map(publicUser), roles: ROLE_PRESETS, permissions: PERM_LABELS });
+adminRoutes['POST /api/v1/users'] = adminRoutes['POST /api/users/save'];
+adminRoutes['POST /api/v1/users/remove'] = adminRoutes['POST /api/users/remove'];
+adminRoutes['GET /api/v1/people'] = () => ({ people: state.people });
+adminRoutes['POST /api/v1/people'] = adminRoutes['POST /api/people'];
+adminRoutes['POST /api/v1/people/upsert'] = (b) => {
+  const items = Array.isArray(b.people) ? b.people : [b];
+  const next = [...state.people];
+  for (const x of items) {
+    const nr = str(x.nr, 20), name = str(x.name, 60);
+    if (!nr || !name) continue;
+    const row = next.find((y) => y.nr.toLowerCase() === nr.toLowerCase());
+    const rec = { nr, name, email: isEmail(str(x.email, 120)) ? str(x.email, 120) : '', note: str(x.note, 100) };
+    if (row) Object.assign(row, rec); else next.push({ id: newId(), ...rec });
+  }
+  return adminRoutes['POST /api/people']({ people: next });
+};
+adminRoutes['GET /api/v1/audit'] = () => ({ history: state.history.slice(0, 200) });
+
+const NEED = {
+  'GET /api/admin-state': 'view', 'GET /api/me': 'view', 'POST /api/password': 'view',
+  'POST /api/status': 'status', 'POST /api/status/auto': 'status', 'POST /api/busy/add': 'status', 'POST /api/busy/remove': 'status', 'POST /api/busy/end': 'status',
+  'POST /api/settings': (b) => { const ks = Object.keys(b); return ks.every((k) => k === 'note') ? 'status' : ks.every((k) => ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'].includes(k)) ? 'mail' : 'settings'; }, // the door message needs only the status right; mail fields only the mail right
+  'POST /api/test-notify': 'mail', 'POST /api/mail/test': 'mail',
+  'POST /api/requests/reply': 'inbox', 'POST /api/requests/accept': 'inbox', 'POST /api/requests/done': 'inbox', 'POST /api/requests/seen': 'inbox', 'POST /api/requests/clear': 'inbox', 'POST /api/appointments/remove': 'inbox',
+  'POST /api/people': 'people',
+  'GET /api/export': 'export', 'POST /api/import': 'export',
+  'POST /api/users/save': 'users', 'POST /api/users/remove': 'users', 'POST /api/sessions/revoke': 'users',
+  'POST /api/keys/create': 'api', 'POST /api/keys/remove': 'api',
+  'GET /api/v1/status': 'view', 'POST /api/v1/status': 'status', 'GET /api/v1/requests': 'inbox', 'POST /api/v1/requests/reply': 'inbox',
+  'GET /api/v1/users': 'users', 'POST /api/v1/users': 'users', 'POST /api/v1/users/remove': 'users',
+  'GET /api/v1/people': 'people', 'POST /api/v1/people': 'people', 'POST /api/v1/people/upsert': 'people', 'GET /api/v1/audit': 'audit',
 };
 
 const lastVisit = new Map();
@@ -595,7 +804,7 @@ function handleVisit(req, b) {
   notifyExternal(r).catch(() => {});
   mailVisitor(r, 'confirm');
   mailAdmin(r);
-  for (const c of clients) if (c.role === 'admin') write(c, 'visit', r);
+  for (const c of clients) if (c.role === 'admin' && can(identifyFrom(c.tok, c.pin), 'inbox')) write(c, 'visit', r);
   // the doorbell rings on every screen at once: door screens, phones and the control panel
   if (r.type === 'bell') for (const c of clients) write(c, 'ring', { id: r.id, at: now });
   changed();
@@ -609,16 +818,37 @@ const server = http.createServer(async (req, res) => {
     if (p === '/healthz') return send(res, 200, { ok: true });
     if (p === '/events') {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
-      if (role === 'admin' && !authed(req, url)) return send(res, 401, { error: 'Pincode nodig' });
+      const eid = role === 'admin' ? identify(req, url) : null;
+      if (role === 'admin' && !eid) return send(res, 401, { error: 'Inloggen is nodig' });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 2000\n\n');
-      const c = { res, role };
+      const c = { res, role, tok: String(url.searchParams.get('token') || ''), pin: String(url.searchParams.get('pin') || ''), userId: eid?.userId, sessionId: eid?.sessionId };
       clients.add(c);
-      write(c, 'state', role === 'admin' ? adminState() : publicState());
+      write(c, 'state', role === 'admin' ? adminState(eid) : publicState());
       req.on('close', () => clients.delete(c));
       return;
     }
     if (req.method === 'GET' && p === '/api/state') return send(res, 200, publicState());
+    if (req.method === 'GET' && p === '/api/auth-info') return send(res, 200, { mode: authMode(), pin: !!ADMIN_PIN, version: APP_VERSION });
+    if (req.method === 'POST' && p === '/api/login') {
+      const ip = (req.socket.remoteAddress || '').replace('::ffff:', '');
+      if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
+      const b = await readBody(req);
+      const username = str(b.username, 40).toLowerCase(), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
+      let user = null, ok = false;
+      if (OWNER_HASH && username === OWNER_USER) { ok = verifyPassword(password, OWNER_HASH); user = ownerIdentity(); }
+      else { const u = state.users.find((x) => x.username === username && !x.disabled); ok = verifyPassword(password, u ? u.hash : DUMMY_HASH) && !!u; if (ok) { u.lastLogin = Date.now(); user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms) }; } }
+      if (!ok) { authFail(ip); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
+      const token = newSession(user.userId, req);
+      log('login', `${user.name} ingelogd (${ip})`, user.name);
+      save();
+      return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms, owner: !!user.owner } });
+    }
+    if (req.method === 'POST' && p === '/api/logout') {
+      const id = identify(req, url);
+      if (id?.sessionId) { state.sessions = state.sessions.filter((x) => x.id !== id.sessionId); kick((c) => c.sessionId === id.sessionId); log('login', `${id.name} uitgelogd`, id.name); save(); }
+      return send(res, 200, { ok: true });
+    }
     if (req.method === 'GET' && p === '/api/slots') return send(res, 200, { slots: freeSlots() });
     if (req.method === 'POST' && p === '/api/lookup') {
       const ip = req.socket.remoteAddress || '';
@@ -631,10 +861,21 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && p === '/api/visit') return send(res, 200, handleVisit(req, await readBody(req)));
 
-    const route = adminRoutes[`${req.method} ${p}`];
+    const routeKey = `${req.method} ${p}`;
+    const route = adminRoutes[routeKey];
     if (route) {
-      if (!authed(req, url)) return send(res, 401, { error: 'pin required' });
-      const out = await route(req.method === 'POST' ? await readBody(req) : {});
+      const ip = (req.socket.remoteAddress || '').replace('::ffff:', '');
+      if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
+      const id = identify(req, url);
+      if (!id) { authFail(ip); return send(res, 401, { error: 'Inloggen is nodig' }); }
+      const body = req.method === 'POST' ? await readBody(req) : {};
+      let need = NEED[routeKey];
+      if (typeof need === 'function') need = need(body);
+      if (!need) return send(res, 403, { error: 'Niet toegestaan' }); // a route without a declared right is never reachable
+      if (!can(id, need)) { log('toegang', `${id.name}: geen recht (${need}) voor ${routeKey}`); return send(res, 403, { error: `Je hebt hier geen rechten voor (${PERM_LABELS[need]})` }); }
+      actor = id.name;
+      let out;
+      try { out = await route(body, id, url); } finally { actor = ''; }
       if (p === '/api/export') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': 'attachment; filename="door-backup.json"' });
         return res.end(JSON.stringify(out, null, 2));
@@ -654,12 +895,17 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+if (require.main === module && process.argv[2] === '--hash') {
+  if (!process.argv[3]) { console.error('Gebruik: node server.js --hash "jouw wachtwoord"'); process.exit(1); }
+  console.log(hashPassword(process.argv[3])); // use as OWNER_PASSWORD_HASH so the plain password never has to be stored
+  process.exit(0);
+}
 lastView = JSON.stringify(computeView());
 // `ready` lets the desktop app wait for the server (or show why it couldn't start)
 const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, () => {
-    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${ADMIN_PIN ? '' : '  — geen ADMIN_PIN ingesteld'}`);
+    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${{ login: `  — inloggen met account${OWNER_HASH ? ` (eigenaar: ${OWNER_USER})` : ''}`, pin: '  — pincode', open: '  — GEEN beveiliging: stel OWNER_PASSWORD of ADMIN_PIN in' }[authMode()]}`);
     resolve(PORT);
   });
 });

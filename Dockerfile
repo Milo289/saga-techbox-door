@@ -2,7 +2,7 @@ FROM node:20-alpine
 RUN apk add --no-cache tzdata \
  && mkdir -p /data && chown node:node /data
 WORKDIR /app
-COPY server.js ./
+COPY package.json server.js ./
 COPY public ./public
 ENV PORT=8080 DATA_DIR=/data NODE_ENV=production
 VOLUME /data

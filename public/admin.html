@@ -147,6 +147,25 @@
   .mode:active, .preset:active { transform: scale(.97); }
   nav button { transition: color .2s, border-color .25s; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+  .lf { display: grid; gap: 10px; margin: 0; }
+  .lf input { padding: 12px 14px; font-size: 16px; }
+  .link-btn { background: none; border: 0; color: var(--dim); padding: 8px 0 0; font-size: 13.5px; text-decoration: underline; }
+  #userBtn { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .permgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 14px; }
+  .permgrid .check { align-items: flex-start; font-size: 14px; }
+  .permgrid .check.off { opacity: .45; }
+  .urow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .urow:first-of-type { border-top: 0; }
+  .urow .who { flex: 1; min-width: 160px; }
+  .urow .who b { display: block; }
+  .chipline { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .editor { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-top: 14px; display: grid; gap: 12px; }
+  pre.code { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; overflow-x: auto; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 8px 0; user-select: all; }
+  .keybox { background: color-mix(in srgb, var(--open) 12%, var(--bg)); border: 1px solid color-mix(in srgb, var(--open) 40%, transparent); border-radius: 14px; padding: 14px; display: grid; gap: 8px; margin-bottom: 12px; }
+  .keybox code { font: 14px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; user-select: all; }
+  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 6px 14px; font-size: 14px; }
+  .kv b { color: var(--dim); font-weight: 600; }
+  @media (max-width: 640px) { .kv { grid-template-columns: 1fr; } .kv b { margin-top: 6px; } }
   input.bigin { font-size: 18px; padding: 14px 16px; border-radius: 12px; }
   svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   #soundBtn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -179,7 +198,16 @@
 
 <div id="login" class="card hidden">
   <h2>Bedieningspaneel</h2>
-  <div class="row"><input id="pin" type="password" inputmode="numeric" class="grow" placeholder="Pincode" autocomplete="current-password"><button class="white" id="pinBtn">Ontgrendelen</button></div>
+  <form id="userForm" class="lf">
+    <input id="lu" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Gebruikersnaam">
+    <input id="lp" type="password" autocomplete="current-password" placeholder="Wachtwoord">
+    <button class="white" id="loginBtn" type="submit">Inloggen</button>
+  </form>
+  <form id="pinForm" class="lf hidden">
+    <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Pincode">
+    <button class="white" id="pinBtn" type="submit">Ontgrendelen</button>
+  </form>
+  <button class="link-btn hidden" id="swapLogin" type="button"></button>
   <p class="muted" id="pinErr"></p>
 </div>
 
@@ -190,6 +218,7 @@
       <span class="live"><span class="dot"></span><span id="hStatus"></span></span>
       <button class="sm ghost" id="soundBtn" title="Geluid aan/uit op dit apparaat"></button>
       <span id="conn" title="Live verbinding"></span>
+      <button class="sm ghost hidden" id="userBtn" title="Account"></button>
       <a href="/" target="_blank" rel="noopener"><button class="sm ghost">Deurscherm ↗</button></a>
     </div>
     <nav id="tabs"></nav>
@@ -206,9 +235,12 @@
   const $ = (id) => document.getElementById(id);
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
   let PIN = store.get('doorPin', '');
+  let TOKEN = store.get('doorToken', '');
+  const authHeaders = () => (TOKEN ? { authorization: 'Bearer ' + TOKEN } : PIN ? { 'x-pin': PIN } : {});
+  const can = (p) => !!S?.me?.perms.includes(p);
   let S = null;
   let tab = store.get('doorTab', 'now');
-  if (!['now', 'inbox', 'settings'].includes(tab)) tab = 'now';
+  if (!['now', 'inbox', 'settings', 'admin'].includes(tab)) tab = 'now';
   let inboxFilter = 'open';
   let alertId = null;
   let es = null, lastMsg = 0;
@@ -296,23 +328,50 @@
   async function api(path, body) {
     let res;
     try {
-      res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'x-pin': PIN }, body: body ? JSON.stringify(body) : undefined });
+      res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: body ? JSON.stringify(body) : undefined });
     } catch { toast('Geen verbinding met de deurserver'); throw new Error('offline'); }
-    if (res.status === 401) { showLogin(PIN ? 'Verkeerde pincode' : ''); throw new Error('pin'); }
+    if (res.status === 401) { const had = TOKEN || PIN; TOKEN = ''; store.set('doorToken', ''); showLogin(had ? 'Je bent uitgelogd — log opnieuw in' : ''); throw new Error('auth'); }
     const out = await res.json().catch(() => ({}));
     if (!res.ok) { toast(out.error || 'Er ging iets mis'); throw new Error(out.error); }
     return out;
   }
 
   // ---------- login + live connection ----------
-  function showLogin(msg) {
+  let authInfo = { mode: 'login', pin: false };
+  async function showLogin(msg) {
     $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
     $('pinErr').textContent = msg || '';
     if (es) { es.close(); es = null; }
-    setTimeout(() => $('pin').focus(), 50);
+    try { authInfo = await fetch('/api/auth-info', { cache: 'no-store' }).then((r) => r.json()); } catch {}
+    const pinOnly = authInfo.mode === 'pin';
+    setLoginForm(pinOnly ? 'pin' : 'user');
+    $('swapLogin').classList.toggle('hidden', pinOnly || !authInfo.pin);
+    setTimeout(() => $(pinOnly ? 'pin' : 'lu').focus(), 50);
   }
-  $('pinBtn').onclick = () => { PIN = $('pin').value.trim(); store.set('doorPin', PIN); start(); };
-  $('pin').onkeydown = (e) => { if (e.key === 'Enter') $('pinBtn').click(); };
+  function setLoginForm(which) {
+    $('userForm').classList.toggle('hidden', which !== 'user');
+    $('pinForm').classList.toggle('hidden', which !== 'pin');
+    $('swapLogin').textContent = which === 'user' ? 'Liever met een pincode inloggen' : 'Inloggen met gebruikersnaam';
+    $('swapLogin').onclick = () => { setLoginForm(which === 'user' ? 'pin' : 'user'); $('pinErr').textContent = ''; setTimeout(() => $(which === 'user' ? 'pin' : 'lu').focus(), 30); };
+  }
+  $('userForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('loginBtn'); btn.disabled = true; $('pinErr').textContent = '';
+    try {
+      const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: $('lu').value, password: $('lp').value }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { $('pinErr').textContent = out.error || 'Inloggen lukte niet'; $('lp').value = ''; $('lp').focus(); return; }
+      TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', ''); $('lp').value = '';
+      start();
+    } catch { $('pinErr').textContent = 'Geen verbinding met de deurserver'; }
+    finally { btn.disabled = false; }
+  };
+  $('pinForm').onsubmit = (e) => { e.preventDefault(); PIN = $('pin').value.trim(); TOKEN = ''; store.set('doorToken', ''); store.set('doorPin', PIN); $('pin').value = ''; start(); };
+  async function logout() {
+    try { await fetch('/api/logout', { method: 'POST', headers: authHeaders() }); } catch {}
+    TOKEN = ''; PIN = ''; store.set('doorToken', ''); store.set('doorPin', ''); S = null; closeAlert?.();
+    showLogin('');
+  }
 
   function apply(data) {
     lastMsg = Date.now(); S = data; renderAll(false);
@@ -323,7 +382,7 @@
   }
   function connect() {
     if (es) es.close();
-    es = new EventSource('/events?role=admin&pin=' + encodeURIComponent(PIN));
+    es = new EventSource('/events?role=admin&' + (TOKEN ? 'token=' + encodeURIComponent(TOKEN) : 'pin=' + encodeURIComponent(PIN)));
     es.addEventListener('state', (e) => { try { apply(JSON.parse(e.data)); } catch {} });
     es.addEventListener('ping', () => { lastMsg = Date.now(); $('conn').classList.add('ok'); });
     es.addEventListener('visit', (e) => { try { onVisit(JSON.parse(e.data)); } catch {} });
@@ -439,7 +498,9 @@
   function updateTitle() { const n = S ? S.requests.filter((r) => r.state === 'new').length : 0; document.title = (n ? `(${n}) ` : '') + 'Deurbediening'; }
 
   // ---------- frame ----------
-  const TABS = [['now', 'Status'], ['inbox', 'Bezoekers'], ['settings', 'Instellingen']];
+  const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer']].filter(Boolean);
+  let userDraft = null, keyDraft = null, newKey = null;
+  const editing = () => tab === 'settings' || (tab === 'admin' && (userDraft || keyDraft));
   function setTab(t) { tab = t; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
 
   // never redraw while a finger/mouse button is down, or that click would get lost
@@ -457,9 +518,12 @@
     $('hName').textContent = S.settings.name;
     $('hStatus').textContent = v.until ? `${v.label} tot ${fmtWhen(v.until)}` : v.label;
     const unread = S.requests.filter((r) => r.state === 'new').length;
-    $('tabs').replaceChildren(...TABS.map(([k, l]) => h('button', { class: tab === k ? 'cur' : '', onclick: () => setTab(k) }, l, k === 'inbox' && unread ? h('span', { class: 'badge' }, unread) : null)));
+    if (!visibleTabs().some(([k]) => k === tab)) tab = 'now';
+    const ub = $('userBtn'); ub.classList.toggle('hidden', S.me.kind === 'open'); ub.textContent = S.me.name;
+    $('tabs').replaceChildren(...visibleTabs().map(([k, l]) => h('button', { class: tab === k ? 'cur' : '', onclick: () => setTab(k) }, l, k === 'inbox' && unread ? h('span', { class: 'badge' }, unread) : null)));
     updateTitle();
-    if (!force && tab === 'settings') return; // never wipe a settings form you're editing
+    if (window.doorApp) window.doorApp.report({ open: S.requests.filter((r) => r.state === 'new' || r.state === 'seen').length, mode: v.mode, label: v.label });
+    if (!force && editing()) return; // never wipe a form you're editing
     // keep what you typed when live updates redraw the page
     const kept = {};
     $('view').querySelectorAll('[data-keep]').forEach((i) => { kept[i.dataset.keep] = i.value; });
@@ -537,6 +601,153 @@
         : h('p', { class: 'muted', style: 'margin:14px 0 0' }, 'Geen afspraken of bezette tijden vandaag.'));
   }
 
+  // ---------- Beheer: accounts, sessions, API keys, log, server ----------
+  const ROLE_NAMES = { owner: 'Eigenaar', beheerder: 'Beheerder', medewerker: 'Medewerker', kijker: 'Kijker', api: 'API' };
+  const dt = (t) => (t ? `${new Date(t).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} ${fmt(t)}` : '—');
+  const permChips = (list) => h('div', { class: 'chipline' }, ...list.map((x) => h('span', { class: 'tag' }, S.permLabels[x] || x)));
+  const permGrid = (draft, key = 'perms') => h('div', { class: 'permgrid' }, ...Object.entries(S.permLabels).map(([perm, label]) => {
+    const mine = can(perm);
+    return h('label', { class: 'check' + (mine ? '' : ' off'), title: mine ? '' : 'Dit recht heb je zelf niet' },
+      h('input', { type: 'checkbox', checked: draft[key].includes(perm), disabled: !mine, onchange: (e) => { draft[key] = e.target.checked ? [...new Set([...draft[key], perm])] : draft[key].filter((x) => x !== perm); } }), label);
+  }));
+  const refresh = async () => { S = await api('/api/admin-state'); renderAll(true); };
+
+  function usersCard() {
+    const rows = S.users.map((u) => h('div', { class: 'urow' },
+      h('div', { class: 'who' }, h('b', {}, u.name, u.disabled ? h('span', { class: 'tag bad', style: 'margin-left:8px' }, 'uitgeschakeld') : null), h('span', { class: 'muted' }, `${u.username} · ${ROLE_NAMES[u.role] || u.role} · laatst ingelogd ${dt(u.lastLogin)}`), permChips(u.perms)),
+      h('button', { class: 'sm', onclick: () => { userDraft = { ...structuredClone(u), password: '' }; renderAll(true); } }, 'Wijzigen'),
+      h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm(`${u.name} verwijderen?`)) return; await api('/api/users/remove', { id: u.id }); toast('Gebruiker verwijderd'); refresh(); } }, 'Verwijderen')));
+    const d = userDraft;
+    let editor = null;
+    if (d) {
+      const pw = h('input', { type: 'password', autocomplete: 'new-password', placeholder: d.id ? 'Leeg laten = wachtwoord niet wijzigen' : 'Minstens 8 tekens', oninput: (e) => { d.password = e.target.value; } });
+      const grid = h('div', {}, permGrid(d));
+      const role = h('select', { onchange: (e) => { d.role = e.target.value; d.perms = (S.rolePresets[d.role] || []).filter(can); grid.replaceChildren(permGrid(d)); } },
+        ...['beheerder', 'medewerker', 'kijker'].map((r) => h('option', { value: r, selected: d.role === r }, `${ROLE_NAMES[r]} — ${S.rolePresets[r].length} ${S.rolePresets[r].length === 1 ? 'recht' : 'rechten'}`)));
+      editor = h('div', { class: 'editor' }, h('h2', { style: 'margin:0;text-transform:none;letter-spacing:0;font-size:16px;color:var(--fg)' }, d.id ? `Wijzig ${d.name}` : 'Nieuwe gebruiker'),
+        h('div', { class: 'form' },
+          h('label', {}, 'Gebruikersnaam'), h('input', { value: d.username, autocapitalize: 'none', spellcheck: 'false', placeholder: 'bijv. anna', oninput: (e) => { d.username = e.target.value; } }),
+          h('label', {}, 'Naam'), h('input', { value: d.name, placeholder: 'bijv. Anna de Vries', oninput: (e) => { d.name = e.target.value; } }),
+          h('label', {}, 'Wachtwoord'), pw,
+          h('label', {}, 'Rol'), h('div', {}, role, h('div', { class: 'muted', style: 'margin-top:4px' }, 'Een rol vult de rechten hieronder alvast in. Je kunt ze daarna zelf aanpassen.')),
+          h('label', {}, 'Rechten'), grid,
+          h('label', {}, 'Account'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: d.disabled, onchange: (e) => { d.disabled = e.target.checked; } }), 'Uitgeschakeld (kan niet inloggen)')),
+        h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => {
+          await api('/api/users/save', { id: d.id, username: d.username, name: d.name, role: d.role, perms: d.perms, password: d.password, disabled: d.disabled });
+          userDraft = null; toast(d.id ? 'Gebruiker opgeslagen' : 'Gebruiker aangemaakt'); refresh();
+        } }, 'Opslaan'), h('button', { class: 'ghost', onclick: () => { userDraft = null; renderAll(true); } }, 'Annuleren')));
+    }
+    return h('div', { class: 'card' }, h('h2', {}, 'Gebruikers', h('span', { class: 'sp' }), h('button', { class: 'sm', onclick: () => { userDraft = { username: '', name: '', role: 'medewerker', perms: S.rolePresets.medewerker.filter(can), password: '', disabled: false }; renderAll(true); } }, '+ Gebruiker')),
+      h('p', { class: 'muted', style: 'margin-top:0' }, S.server.ownerConfigured ? `Jij bent de eigenaar (${S.server.ownerUser}): dat account staat in de opstartinstellingen, heeft altijd alle rechten en kan hier niet worden gewijzigd.` : 'Er is nog geen eigenaaraccount. Stel OWNER_USER en OWNER_PASSWORD in bij het opstarten van de server, dan kun je alleen met een account inloggen.'),
+      S.users.length ? h('div', {}, ...rows) : h('p', { class: 'muted' }, 'Nog geen andere gebruikers. Voeg bijvoorbeeld een collega toe die alleen de status mag wijzigen.'),
+      editor);
+  }
+
+  function sessionsCard() {
+    const others = S.sessions.filter((x) => !x.current);
+    const device = (ua) => (/iPhone|iPad/.test(ua) ? 'iPhone/iPad' : /Android/.test(ua) ? 'Android' : /Electron/.test(ua) ? 'Desktop-app' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Onbekend apparaat');
+    return h('div', { class: 'card' }, h('h2', {}, 'Ingelogd', h('span', { class: 'sp' }), others.length ? h('button', { class: 'sm ghost danger', onclick: async () => { await api('/api/sessions/revoke', { all: true }); toast('Alle andere sessies beëindigd'); refresh(); } }, 'Alle andere uitloggen') : null),
+      S.sessions.length ? h('div', {}, ...S.sessions.map((x) => h('div', { class: 'urow' },
+        h('div', { class: 'who' }, h('b', {}, x.who, x.current ? h('span', { class: 'tag ok', style: 'margin-left:8px' }, 'dit apparaat') : null), h('span', { class: 'muted' }, `${device(x.ua)} · ${x.ip || '—'} · laatst actief ${dt(x.lastSeen)}`)),
+        x.current ? null : h('button', { class: 'sm ghost danger', onclick: async () => { await api('/api/sessions/revoke', { id: x.id }); refresh(); } }, 'Uitloggen')))) : h('p', { class: 'muted', style: 'margin:0' }, 'Geen sessies.'));
+  }
+
+  function keysCard() {
+    const d = keyDraft, base = location.origin;
+    const keyEditor = d ? h('div', { class: 'editor' },
+      h('div', { class: 'form' }, h('label', {}, 'Naam'), h('input', { value: d.name, placeholder: 'bijv. Home Assistant', oninput: (e) => { d.name = e.target.value; } }), h('label', {}, 'Rechten'), permGrid(d)),
+      h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => { const out = await api('/api/keys/create', { name: d.name, perms: d.perms }); newKey = { name: d.name, key: out.key }; keyDraft = null; refresh(); } }, 'Sleutel maken'), h('button', { class: 'ghost', onclick: () => { keyDraft = null; renderAll(true); } }, 'Annuleren'))) : null;
+    const reveal = newKey ? h('div', { class: 'keybox' }, h('b', {}, `Sleutel “${newKey.name}” — kopieer hem nu, hij wordt maar één keer getoond`), h('code', {}, newKey.key),
+      h('div', { class: 'row' }, h('button', { class: 'sm white', onclick: async () => { try { await navigator.clipboard.writeText(newKey.key); toast('Gekopieerd'); } catch { toast('Selecteer de tekst en kopieer hem zelf'); } } }, 'Kopiëren'), h('button', { class: 'sm ghost', onclick: () => { newKey = null; renderAll(true); } }, 'Klaar'))) : null;
+    const hdr = '-H "Authorization: Bearer door_…"';
+    return h('div', { class: 'card' }, h('h2', {}, 'API-sleutels', h('span', { class: 'sp' }), h('button', { class: 'sm', onclick: () => { keyDraft = { name: '', perms: ['view', 'status'].filter(can) }; renderAll(true); } }, '+ Sleutel')),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Voor scripts en andere programma’s (Home Assistant, Zapier, je eigen website). Elke sleutel heeft alleen de rechten die je kiest en kan altijd worden ingetrokken.'),
+      reveal, keyEditor,
+      S.apiKeys.length ? h('div', {}, ...S.apiKeys.map((k) => h('div', { class: 'urow' }, h('div', { class: 'who' }, h('b', {}, k.name), h('span', { class: 'muted' }, `${k.prefix}… · aangemaakt ${dt(k.createdAt)} door ${k.by || '—'} · laatst gebruikt ${k.lastUsed ? dt(k.lastUsed) : 'nooit'}`), permChips(k.perms)),
+        h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm(`Sleutel “${k.name}” intrekken? Programma’s die hem gebruiken stoppen direct.`)) return; await api('/api/keys/remove', { id: k.id }); toast('Sleutel ingetrokken'); refresh(); } }, 'Intrekken')))) : h('p', { class: 'muted' }, 'Nog geen sleutels.'),
+      h('details', { style: 'margin-top:14px' }, h('summary', {}, 'Hoe gebruik ik de API?'),
+        h('p', { class: 'muted' }, `Adres: ${base}/api/v1/… — stuur de sleutel mee in de header Authorization: Bearer door_… . Antwoorden zijn JSON.`),
+        h('pre', { class: 'code' }, `# status lezen\ncurl ${hdr} ${base}/api/v1/status\n\n# status zetten: gesloten voor 30 minuten\ncurl -X POST ${hdr} -H "Content-Type: application/json" \\\n  -d '{"mode":"closed","minutes":30}' ${base}/api/v1/status\n\n# open verzoeken ophalen en beantwoorden\ncurl ${hdr} "${base}/api/v1/requests?state=open"\ncurl -X POST ${hdr} -H "Content-Type: application/json" \\\n  -d '{"id":"<verzoek-id>","reply":"Ik kom eraan"}' ${base}/api/v1/requests/reply`),
+        h('pre', { class: 'code' }, `# gebruikers en rechten (sleutel met recht "users")\ncurl ${hdr} ${base}/api/v1/users\ncurl -X POST ${hdr} -H "Content-Type: application/json" \\\n  -d '{"username":"anna","name":"Anna","password":"minstens-8-tekens","role":"medewerker"}' ${base}/api/v1/users\ncurl -X POST ${hdr} -H "Content-Type: application/json" \\\n  -d '{"id":"<gebruiker-id>"}' ${base}/api/v1/users/remove\n\n# personen toevoegen of bijwerken (recht "people")\ncurl -X POST ${hdr} -H "Content-Type: application/json" \\\n  -d '{"nr":"1042","name":"Sam de Vries","email":"sam@bedrijf.nl"}' ${base}/api/v1/people/upsert\n\n# activiteitenlog (recht "audit")\ncurl ${hdr} ${base}/api/v1/audit`),
+        h('p', { class: 'muted' }, 'Rollen: ' + Object.entries(S.rolePresets).filter(([r]) => r !== 'owner').map(([r, p]) => `${r} (${p.join(', ')})`).join(' · '))));
+  }
+
+  function auditCard() {
+    return h('div', { class: 'card' }, h('h2', {}, 'Activiteitenlog'),
+      S.history.length ? h('div', { class: 'tablewrap' }, h('table', {}, ...S.history.slice(0, 200).map((e) => h('tr', {},
+        h('td', { class: 'muted', style: 'white-space:nowrap' }, dt(e.at)),
+        h('td', { style: 'white-space:nowrap' }, e.by || '—'),
+        h('td', {}, e.text))))) : h('p', { class: 'muted', style: 'margin:0' }, 'Nog niets gelogd.'));
+  }
+
+  function serverCard() {
+    const v = S.server, up = v.uptime;
+    const uptime = up >= 86400 ? `${Math.floor(up / 86400)} d ${Math.floor((up % 86400) / 3600)} u` : up >= 3600 ? `${Math.floor(up / 3600)} u ${Math.floor((up % 3600) / 60)} min` : `${Math.floor(up / 60)} min`;
+    const rows = [['Versie', v.version], ['Draait al', uptime], ['Verbonden schermen', String(v.clients)], ['Inloggen', { login: 'Met account', pin: 'Met pincode', open: 'Geen (open)' }[v.authMode] + (v.pin && v.authMode === 'login' ? ' + pincode als reserve' : '')], ['Eigenaar', v.ownerConfigured ? v.ownerUser : 'niet ingesteld'], ['Systeem', `${v.platform} · Node ${v.node}`], ['Gegevens in', v.dataDir], ['Tijdzone', S.timeZone]];
+    return h('div', { class: 'card' }, h('h2', {}, 'Server'), h('div', { class: 'kv' }, ...rows.flatMap(([k, val]) => [h('b', {}, k), h('span', {}, val)])),
+      v.pin && v.authMode === 'login' ? h('p', { class: 'muted', style: 'margin-bottom:0' }, 'Tip: de oude pincode werkt nog als beheerder. Haal ADMIN_PIN weg uit de opstartinstellingen als alleen accounts mogen inloggen.') : null);
+  }
+
+  // ---------- account dialog (name button in the header) ----------
+  function accountDialog() {
+    const me = S.me;
+    const cur = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Huidig wachtwoord' });
+    const nxt = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nieuw wachtwoord (minstens 8 tekens)' });
+    const canPw = me.kind === 'user' && !me.owner;
+    $('alertCard').className = 'card';
+    $('alertCard').replaceChildren(
+      h('div', { class: 'pophead' }, h('span', { class: 'popicon' }, icon('users')), h('div', {}, h('div', { class: 'poptitle' }, me.name), h('div', { class: 'muted' }, `${ROLE_NAMES[me.role] || me.role}${me.kind === 'pin' ? ' (pincode)' : ''}`))),
+      h('div', { style: 'margin-top:12px' }, h('div', { class: 'muted' }, 'Jouw rechten'), permChips(me.perms)),
+      canPw ? h('div', { class: 'list', style: 'margin-top:16px' }, h('div', { class: 'muted' }, 'Wachtwoord wijzigen'), cur, nxt, h('div', { class: 'row' }, h('button', { class: 'sm', onclick: async () => { await api('/api/password', { current: cur.value, next: nxt.value }); cur.value = nxt.value = ''; toast('Wachtwoord gewijzigd'); } }, 'Wijzigen'))) : me.owner ? h('p', { class: 'muted', style: 'margin-top:14px' }, 'Het eigenaar-wachtwoord stel je in bij het opstarten van de server (OWNER_PASSWORD).') : null,
+      h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten'), h('span', { style: 'flex:1' }), me.kind !== 'open' ? h('button', { class: 'danger', onclick: () => { closeAlert(); logout(); } }, 'Uitloggen') : null));
+    $('alert').classList.add('open');
+  }
+  $('userBtn').onclick = () => S && accountDialog();
+  if (window.doorApp) window.doorApp.onTrayStatus(async (mode) => {
+    if (!S) return;
+    if (!can('status')) return toast('Je hebt geen recht om de status te wijzigen');
+    try { await api('/api/status', { mode }); toast(`${S.settings.texts[mode].label} staat op de deur`); } catch {}
+  });
+
+  // ---------- "Deze app" (desktop app) or a hint about it (browser) ----------
+  const APP_FEATURES = ['icoon bij de klok met snelle statusknoppen en het aantal open verzoeken', 'sneltoetsen voor de status in alle programma’s', 'echte systeemmeldingen met teller op het icoon', 'het deurscherm op een gekozen monitor, dagelijks automatisch verversen', 'back-ups opslaan en terugzetten als bestand', 'het paneel blijft in de tray doorlopen als je het venster sluit', 'eigenaaraccount instellen voor de ingebouwde server'];
+  function appCard() {
+    if (!window.doorApp) {
+      return h('div', { class: 'card' }, h('h2', {}, 'Meer met de desktop-app'),
+        h('p', { class: 'muted', style: 'margin-top:0' }, 'Je gebruikt nu de website. De app voor macOS, Windows en Linux kan extra:'),
+        h('ul', { class: 'muted', style: 'margin:0;padding-left:20px;display:grid;gap:4px' }, ...APP_FEATURES.map((f) => h('li', {}, f))),
+        h('p', { class: 'muted', style: 'margin-bottom:0' }, 'Vraag de beheerder om de app, of kijk op de downloadpagina van het project.'));
+    }
+    const box = h('div', { class: 'kv' }, h('b', {}, 'App'), h('span', {}, 'laden…'));
+    const card = h('div', { class: 'card' }, h('h2', {}, 'Deze app'), box,
+      h('div', { class: 'row', style: 'margin-top:14px' },
+        h('button', { onclick: () => window.doorApp.openSettings() }, 'App-instellingen'),
+        can('export') ? h('button', { onclick: async () => {
+          const res = await fetch('/api/export', { headers: authHeaders() }); if (!res.ok) return toast('Back-up maken mislukt');
+          const r = await window.doorApp.saveFile(`deur-backup-${ymd()}.json`, await res.text());
+          if (r.ok) toast('Back-up opgeslagen'); else if (!r.canceled) toast('Opslaan mislukt');
+        } }, 'Back-up opslaan als bestand…') : null,
+        can('export') ? h('button', { onclick: async () => {
+          const r = await window.doorApp.openFile(); if (!r.ok) { if (r.error) toast(r.error); return; }
+          let data; try { data = JSON.parse(r.text); } catch { return toast('Dit bestand kan niet gelezen worden'); }
+          if (!confirm('De huidige instellingen worden vervangen door deze back-up. Doorgaan?')) return;
+          await api('/api/import', data); toast('Back-up teruggezet'); refresh();
+        } }, 'Back-up terugzetten uit bestand…') : null));
+    window.doorApp.info().then((i) => {
+      if (!i) return;
+      const rows = [['Versie', `${i.version} (${i.platform} ${i.arch})`], ['Server', i.serverMode === 'here' ? 'draait in deze app' : 'op een andere computer'], ['Adres voor andere apparaten', i.lan.length ? i.lan.map((u) => `${u}/admin`).join('  ·  ') : '—'],
+        ['Icoon bij de klok', i.tray ? 'aan' : 'uit'], ['Sneltoetsen', i.hotkeys ? 'Ctrl/Cmd+Alt+O · G · B' : 'uit']];
+      box.replaceChildren(...rows.flatMap(([k, v]) => [h('b', {}, k), h('span', {}, v)]));
+      if (i.dataDir) card.querySelector('.row').append(h('button', { class: 'ghost', onclick: () => window.doorApp.revealData() }, 'Open de gegevensmap'));
+    }).catch(() => {});
+    return card;
+  }
+
+  // people with only the mail right may only send the mail fields
+  const MAIL_KEYS = ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'];
+  const payloadFor = (st) => (can('settings') ? st : Object.fromEntries(MAIL_KEYS.map((k) => [k, st[k]])));
+  const CARD_PERM = { 'Deur': 'settings', 'Openingstijden': 'settings', 'Bezoekers': 'settings', 'Automatisch antwoorden': 'settings', 'E-mail': 'mail', 'Personen': 'people', 'Scherm': 'settings', 'Meldingen op je telefoon': 'mail', 'Meer': 'export' };
+
   // ---------- settings: e-mail ----------
   function mailCard(st, save) {
     const m = st.mail;
@@ -557,7 +768,7 @@
         h('label', {}, 'Afzender'), field('from', { placeholder: 'bijv. Saga Techbox <deur@jouwbedrijf.nl>' }),
         h('label', {}, 'Bezoekers krijgen'), h('div', { class: 'row' }, box('confirm', 'een bevestiging'), box('reply', 'jouw antwoord')),
         h('label', {}, 'Jij krijgt'), h('div', { class: 'row' }, box('notifyAdmin', 'een mail bij elk verzoek, op'), field('adminTo', { type: 'email', placeholder: 'jij@jouwbedrijf.nl', class: 'grow' })),
-        h('span', {}), h('div', { class: 'row' }, testTo, h('button', { onclick: async () => { await api('/api/settings', st); await api('/api/mail/test', { to: testTo.value }); toast('Testmail verstuurd — kijk in je inbox'); } }, 'Test versturen'))));
+        h('span', {}), h('div', { class: 'row' }, testTo, h('button', { onclick: async () => { await api('/api/settings', payloadFor(st)); await api('/api/mail/test', { to: testTo.value }); toast('Testmail verstuurd — kijk in je inbox'); } }, 'Test versturen'))));
   }
 
   // ---------- settings: people (number -> name + e-mail) ----------
@@ -602,6 +813,12 @@
   const VIEWS = {
     now() {
       const v = S.view;
+      if (!can('status')) {
+        return [h('div', { class: 'card' }, h('div', { class: 'now' }, h('div', { style: 'flex:1;min-width:0' },
+          h('div', { class: 'big' }, v.label),
+          h('div', { class: 'until', style: 'margin-top:6px' }, v.until ? [h('span', { class: 'k' }, 'tot '), fmtWhen(v.until), v.thenLabel ? h('span', { class: 'k' }, `, daarna ${v.thenLabel}`) : null] : h('span', { class: 'k' }, 'geen eindtijd')),
+          h('div', { class: 'meta' }, 'Je kunt de status bekijken, maar niet wijzigen.')))), can('inbox') ? todayCard() : null];
+      }
       const source = { manual: 'met de hand ingesteld', hours: 'volgens openingstijden', planned: 'geplande bezette tijd', default: 'standaard' }[v.source];
       const roundUp = (t) => Math.ceil(t / 60000) * 60000;
 
@@ -720,6 +937,16 @@
       ];
     },
 
+    admin() {
+      return [
+        can('users') ? usersCard() : null,
+        can('users') ? sessionsCard() : null,
+        can('api') ? keysCard() : null,
+        can('audit') ? auditCard() : null,
+        can('users') ? serverCard() : null,
+      ].filter(Boolean);
+    },
+
     settings() {
       const st = structuredClone(S.settings);
       const text = (obj, key, props = {}) => h('input', { value: obj[key], ...props, oninput: (e) => { obj[key] = props.type === 'number' ? Number(e.target.value) : e.target.value; } });
@@ -727,7 +954,7 @@
       const sel = (obj, key, opts, num) => h('select', { onchange: (e) => { obj[key] = num ? Number(e.target.value) : e.target.value; } }, ...opts.map(([v, l]) => h('option', { value: v, selected: String(obj[key]) === String(v) }, l)));
       const lines = (key) => h('textarea', { oninput: (e) => { st[key] = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); } }, st[key].join('\n'));
       const days = (obj) => { const wrap = h('div', { class: 'days' }); const draw = () => wrap.replaceChildren(...DAYS.map((d, n) => h('button', { type: 'button', class: obj.days.includes(n) ? 'on' : '', onclick: () => { obj.days = obj.days.includes(n) ? obj.days.filter((x) => x !== n) : [...obj.days, n]; draw(); } }, d))); draw(); return wrap; };
-      const save = async () => { await api('/api/settings', st); S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true); };
+      const save = async () => { await api('/api/settings', payloadFor(st)); S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true); };
 
       const importFile = h('input', { type: 'file', accept: 'application/json', class: 'hidden', onchange: async (e) => {
         const file = e.target.files[0]; if (!file) return;
@@ -751,6 +978,8 @@
             window.doorApp ? h('label', {}, 'Systeemmelding') : canNotify ? h('label', {}, 'Systeemmelding') : null,
             window.doorApp ? h('span', { class: 'muted' }, 'Aan — de app geeft een melding van je computer als het venster niet vooraan staat.') : canNotify ? h('label', { class: 'check' }, desktopBox, 'Ook een melding van je computer als dit tabblad op de achtergrond staat') : null,
             h('span', {}), h('div', { class: 'row' }, h('button', { onclick: testBell }, 'Test de bel'), h('span', { class: 'muted' }, 'Toont de pop-up en speelt het geluid af op dit apparaat.')))),
+
+        appCard(),
 
         h('div', { class: 'card' }, h('h2', {}, 'Deur'),
           h('div', { class: 'form' },
@@ -801,25 +1030,22 @@
             h('label', {}, 'ntfy-onderwerp'), text(st, 'ntfyTopic', { placeholder: 'bijv. deur-7f3k2q' }),
             h('label', {}, 'ntfy-server'), text(st, 'ntfyServer'),
             h('label', {}, 'Webhook'), text(st, 'webhookUrl', { placeholder: 'Slack / Discord / Home Assistant (optioneel)' }),
-            h('span', {}), h('div', {}, h('button', { onclick: async () => { await api('/api/settings', st); const r = await api('/api/test-notify', {}); toast(r.results.length ? r.results.join(', ') : 'Vul eerst een onderwerp of webhook in'); } }, 'Test versturen')))),
+            h('span', {}), h('div', {}, h('button', { onclick: async () => { await api('/api/settings', payloadFor(st)); const r = await api('/api/test-notify', {}); toast(r.results.length ? r.results.join(', ') : 'Vul eerst een onderwerp of webhook in'); } }, 'Test versturen')))),
 
         h('div', { class: 'card' }, h('h2', {}, 'Meer'),
           h('div', { class: 'row' },
-            h('button', { onclick: async () => { const res = await fetch('/api/export', { headers: { 'x-pin': PIN } }); if (!res.ok) return toast('Downloaden mislukt'); const a = h('a', { href: URL.createObjectURL(await res.blob()), download: `deur-backup-${ymd()}.json` }); a.click(); } }, 'Back-up downloaden'),
+            h('button', { onclick: async () => { const res = await fetch('/api/export', { headers: authHeaders() }); if (!res.ok) return toast('Downloaden mislukt'); const a = h('a', { href: URL.createObjectURL(await res.blob()), download: `deur-backup-${ymd()}.json` }); a.click(); } }, 'Back-up downloaden'),
             h('button', { onclick: () => importFile.click() }, 'Back-up terugzetten'), importFile,
-            S.pinRequired ? h('button', { class: 'ghost danger', onclick: () => { store.set('doorPin', ''); location.reload(); } }, 'Dit apparaat vergrendelen') : null),
-          h('details', { style: 'margin-top:16px' }, h('summary', {}, 'Activiteitenlog'),
-            h('table', { style: 'margin-top:10px' }, ...S.history.slice(0, 150).map((e) => h('tr', {},
-              h('td', { class: 'muted', style: 'white-space:nowrap' }, `${new Date(e.at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} ${fmt(e.at)}`),
-              h('td', {}, e.text)))))),
+          ),
+        ),
 
         h('div', { class: 'save' }, h('button', { class: 'white', onclick: save }, 'Instellingen opslaan')),
-      ];
+      ].filter((el) => { const need = CARD_PERM[el.querySelector?.('h2')?.childNodes[0]?.textContent]; return !need || can(need); });
     },
   };
 
   window.addEventListener('unhandledrejection', (e) => e.preventDefault()); // api() already shows a message
-  setInterval(() => { if (tab !== 'settings') renderAll(false); }, 30000); // refresh "x min ago" and the time buttons
+  setInterval(() => { if (!editing()) renderAll(false); }, 30000); // refresh "x min ago" and the time buttons
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/admin' }).catch(() => {});
   start();
 })();
