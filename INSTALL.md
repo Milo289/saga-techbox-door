@@ -11,8 +11,8 @@ Je hebt daar jouw GitHub-account voor nodig, dus alleen jij kunt ze downloaden.
 3. Kies in de app *Bedieningspaneel* of *Deurscherm*. De eerste keer vraagt de Windows-firewall of de app het netwerk op mag: kies **Toestaan** (anders kunnen andere apparaten niet verbinden).
 
 ## Mac
-1. Download `…-mac-arm64.dmg` (Mac met Apple-chip: M1 en nieuwer) of `…-mac-x64.dmg` (Intel). Sleep de app naar *Programma’s*.
-2. De eerste keer: **rechtsklik op de app → Open → Open**. Zegt macOS dat de app “beschadigd” is, voer dan één keer uit in Terminal:
+1. Download `…-mac-arm64.pkg` (Mac met Apple-chip: M1 en nieuwer) of `…-mac-x64.pkg` (Intel) en dubbelklik: de app komt vanzelf in *Programma’s*. (Liever slepen? Gebruik de `.dmg`.)
+2. De eerste keer: **rechtsklik op het bestand → Open → Open**. Zegt macOS dat de app “beschadigd” is, voer dan één keer uit in Terminal:
    ```
    xattr -cr "/Applications/Saga Techbox Deur.app"
    ```

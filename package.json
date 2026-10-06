@@ -1,7 +1,7 @@
 {
   "name": "saga-techbox-door",
   "productName": "Saga Techbox Deur",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Deurscherm en bedieningspaneel van Saga Techbox",
   "main": "app/main.js",
   "author": "Saga Techbox",
@@ -40,6 +40,13 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "pkg",
           "arch": [
             "arm64",
             "x64"
@@ -92,6 +99,12 @@
     "asarUnpack": [
       "public/icon-512.png"
     ],
-    "afterPack": "build/adhoc-sign.js"
+    "afterPack": "build/adhoc-sign.js",
+    "pkg": {
+      "installLocation": "/Applications",
+      "allowAnywhere": true,
+      "allowCurrentUserHome": false,
+      "isRelocatable": false
+    }
   }
 }

@@ -44,6 +44,7 @@ jobs:
           if-no-files-found: error
           path: |
             dist/*.dmg
+            dist/*.pkg
             dist/*.exe
             dist/*.AppImage
             dist/*.deb
