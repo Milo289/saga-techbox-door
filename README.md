@@ -18,8 +18,8 @@ Download the installer from the **Releases** page of this repository:
 
 | System | File |
 |---|---|
-| Mac with Apple chip (M1 and newer) | `…-mac-arm64.dmg` |
-| Mac with Intel chip | `…-mac-x64.dmg` |
+| Mac with Apple chip (M1 and newer) | `…-mac-arm64.pkg` (or `.dmg`) |
+| Mac with Intel chip | `…-mac-x64.pkg` (or `.dmg`) |
 | Windows | `…-windows-setup.exe` |
 | Linux PC | `…-linux-….AppImage` or `.deb` marked x64 / x86_64 / amd64 |
 | Raspberry Pi (64-bit OS) | `…-linux-arm64.AppImage` or `…-linux-arm64.deb` |
