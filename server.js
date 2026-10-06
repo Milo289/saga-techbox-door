@@ -488,13 +488,22 @@ async function notifyExternal(r, textOverride) {
 }
 
 // ---------- e-mail: a tiny SMTP client (no dependencies) ----------
+// plain Dutch for the errors people actually run into
+function friendlySmtp(code, line) {
+  const raw = String(line || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (/^53[045]/.test(code)) return `Inloggen bij de mailserver lukt niet — vul je gebruikersnaam in (je e-mailadres) en gebruik een app-wachtwoord, geen gewoon wachtwoord. (${raw})`;
+  if (/^5[05][0-9]/.test(code)) return `De mailserver weigert dit bericht — controleer het afzenderadres en het adres van de ontvanger. (${raw})`;
+  if (/^4/.test(code)) return `De mailserver is tijdelijk bezet of weigert te veel mail — probeer het zo opnieuw. (${raw})`;
+  return `Mailserver: ${raw}`;
+}
+const NET_ERRORS = { ENOTFOUND: 'De mailserver bestaat niet — controleer de naam (bijv. smtp.gmail.com)', EAI_AGAIN: 'Geen internet of de mailserver is niet te vinden', ECONNREFUSED: 'De mailserver neemt geen verbinding aan — controleer de poort (meestal 587)', ETIMEDOUT: 'De mailserver reageert niet — controleer de poort en je internet', ECONNRESET: 'De verbinding met de mailserver werd verbroken — probeer poort 587 of 465' };
 function smtpSend(cfg, { to, subject, text }) {
   return new Promise((resolve, reject) => {
     const port = Number(cfg.port) || 587;
     const fromAddr = addrOf(cfg.from);
     let sock = port === 465 ? tls.connect({ host: cfg.host, port, servername: cfg.host }) : net.connect({ host: cfg.host, port });
     let buf = '', waiting = null, finished = false;
-    const fail = (e) => { if (finished) return; finished = true; try { sock.destroy(); } catch {} reject(e instanceof Error ? e : new Error(String(e))); };
+    const fail = (e) => { if (finished) return; finished = true; try { sock.destroy(); } catch {} reject(e instanceof Error ? (NET_ERRORS[e.code] ? new Error(NET_ERRORS[e.code]) : e) : new Error(String(e))); };
     const onData = (d) => { buf += d.toString('utf8'); pump(); };
     const attach = (s) => { s.setTimeout(20000, () => fail(new Error('Geen antwoord van de mailserver'))); s.on('error', fail); s.on('data', onData); };
     const pump = () => {
@@ -509,7 +518,7 @@ function smtpSend(cfg, { to, subject, text }) {
       if (line != null) sock.write(line + '\r\n');
       const reply = await new Promise((r) => { waiting = r; pump(); });
       const code = reply.match(/^(\d{3}) /m)[1];
-      if (!code.startsWith(expect)) throw new Error(`Mailserver: ${reply.trim().split('\n').pop().slice(0, 160)}`);
+      if (!code.startsWith(expect)) throw new Error(friendlySmtp(code, reply.trim().split('\n').pop().replace(/^\d{3}[ -]/, '')));
       return reply;
     };
     const b64 = (x) => Buffer.from(x, 'utf8').toString('base64');
@@ -804,6 +813,13 @@ const adminRoutes = {
     if (!['auto', 'portrait', 'landscape'].includes(merged.layout.orientation)) merged.layout.orientation = 'auto';
     if (!['dark', 'light'].includes(merged.theme)) merged.theme = 'dark';
     for (const m of MODES) if (!merged.texts[m].label) merged.texts[m].label = DEFAULT_SETTINGS.texts[m].label;
+    // tidy the mail settings so a small slip does not break sending
+    const mm = merged.mail;
+    for (const k of ['host', 'user', 'from', 'adminTo']) mm[k] = String(mm[k] || '').trim();
+    mm.pass = String(mm.pass || '').trim();
+    if (/^[a-z]{4}( [a-z]{4}){3}$/i.test(mm.pass)) mm.pass = mm.pass.replace(/ /g, ''); // Google shows app passwords with spaces
+    if (mm.pass && !mm.user) mm.user = addrOf(mm.from); // almost every provider logs in with the e-mail address
+    if (mm.notifyAdmin && !mm.adminTo) mm.adminTo = addrOf(mm.from);
     state.settings = merged;
   },
 
