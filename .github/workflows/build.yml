@@ -48,9 +48,39 @@ jobs:
             dist/*.AppImage
             dist/*.deb
 
+  # iPhone / iPad app (Swift). Built without a signature: you sign it yourself when you install it (see INSTALL.md).
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        run: brew install xcodegen && cd ios && xcodegen generate
+      - name: Build (iPhone)
+        working-directory: ios
+        run: >
+          xcodebuild -project DeurBeheer.xcodeproj -scheme DeurBeheer -configuration Release -sdk iphoneos
+          -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+      - name: Check that the simulator version builds too
+        working-directory: ios
+        run: >
+          xcodebuild -project DeurBeheer.xcodeproj -scheme DeurBeheer -configuration Debug -sdk iphonesimulator
+          -derivedDataPath build-sim CODE_SIGNING_ALLOWED=NO build
+      - name: Make the .ipa
+        working-directory: ios
+        run: |
+          rm -rf Payload && mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/DeurBeheer.app Payload/
+          zip -qry ../Saga-Techbox-Beheer-iOS-unsigned.ipa Payload
+          ls -la ../Saga-Techbox-Beheer-iOS-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Saga-Techbox-Beheer-iOS
+          if-no-files-found: error
+          path: Saga-Techbox-Beheer-iOS-unsigned.ipa
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, ios]
     runs-on: ubuntu-latest
     permissions:
       contents: write

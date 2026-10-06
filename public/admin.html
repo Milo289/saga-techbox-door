@@ -147,6 +147,11 @@
   .mode:active, .preset:active { transform: scale(.97); }
   nav button { transition: color .2s, border-color .25s; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+  /* phones with a notch / home bar: keep content out of the unsafe areas */
+  body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); -webkit-text-size-adjust: 100%; }
+  .top { padding-top: env(safe-area-inset-top); }
+  main { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
+  #toast { bottom: calc(78px + env(safe-area-inset-bottom)); } #banner { bottom: calc(18px + env(safe-area-inset-bottom)); }
   .lf { display: grid; gap: 10px; margin: 0; }
   .lf input { padding: 12px 14px; font-size: 16px; }
   .link-btn { background: none; border: 0; color: var(--dim); padding: 8px 0 0; font-size: 13.5px; text-decoration: underline; }
@@ -486,6 +491,7 @@
   function onVisit(r) {
     const bell = r.type === 'bell';
     chime(bell ? 'bell' : 'soft');
+    window.doorApp?.haptic?.(bell ? 'heavy' : 'light');
     const title = bell ? 'Er wordt aangebeld' : `${TYPE[r.type] || 'Verzoek'}${r.name ? ' — ' + r.name : ''}`;
     if (window.doorApp && (document.hidden || !document.hasFocus())) {
       window.doorApp.notify(title, what(r) || 'Er staat iemand aan de deur'); // desktop app: native notification
@@ -807,8 +813,10 @@
         } }, 'Back-up terugzetten uit bestand…') : null));
     window.doorApp.info().then((i) => {
       if (!i) return;
-      const rows = [['Versie', `${i.version} (${i.platform} ${i.arch})`], ['Server', i.serverMode === 'here' ? 'draait in deze app' : 'op een andere computer'], ['Adres voor andere apparaten', i.lan.length ? i.lan.map((u) => `${u}/admin`).join('  ·  ') : '—'],
-        ['Icoon bij de klok', i.tray ? 'aan' : 'uit'], ['Sneltoetsen', i.hotkeys ? 'Ctrl/Cmd+Alt+O · G · B' : 'uit']];
+      const rows = i.platform === 'ios'
+        ? [['Versie', i.version], ['Beveiliging', 'Face ID-vergrendeling en inlog in de Sleutelhanger'], ['Snelle acties', 'houd het app-icoon ingedrukt: Open · Gesloten · Bezet · Noodstop'], ['Siri en Opdrachten', '“Zet de deur op open met Deur Beheer”, Noodstop'], ['Teller', 'aantal open verzoeken op het app-icoon'], ['Trillen', 'bij elke deurbel']]
+        : [['Versie', `${i.version} (${i.platform} ${i.arch})`], ['Server', i.serverMode === 'here' ? 'draait in deze app' : 'op een andere computer'], ['Adres voor andere apparaten', i.lan.length ? i.lan.map((u) => `${u}/admin`).join('  ·  ') : '—'],
+          ['Icoon bij de klok', i.tray ? 'aan' : 'uit'], ['Sneltoetsen', i.hotkeys ? 'Ctrl/Cmd+Alt+O · G · B' : 'uit']];
       box.replaceChildren(...rows.flatMap(([k, v]) => [h('b', {}, k), h('span', {}, v)]));
       if (i.dataDir) card.querySelector('.row').append(h('button', { class: 'ghost', onclick: () => window.doorApp.revealData() }, 'Open de gegevensmap'));
     }).catch(() => {});

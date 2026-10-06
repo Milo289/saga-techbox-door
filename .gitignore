@@ -7,3 +7,7 @@ node_modules/
 .DS_Store
 node_modules/
 dist/
+ios/build/
+ios/DeurBeheer.xcodeproj/
+ios/App/Info.plist
+*.ipa
