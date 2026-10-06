@@ -125,6 +125,28 @@
   .preset span { font-size: 12.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
   @media (max-width: 560px) { .presets { grid-template-columns: repeat(2, 1fr); } }
   .row.appt .label { min-width: 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; padding: 3px 9px; border-radius: 999px; background: var(--s2); color: var(--dim); font-weight: 550; }
+  .tag svg.i { width: 13px; height: 13px; }
+  .tag.ok { color: var(--open); } .tag.bad { color: var(--closed); }
+  table.people input { width: 100%; padding: 6px 8px; }
+  table.people td { padding: 4px; }
+  /* motion — transforms only, so nothing can stay invisible */
+  @property --c { syntax: '<color>'; inherits: true; initial-value: #30d158; }
+  html { transition: --c .8s ease; }
+  #view.swap > * { animation: cardIn .4s cubic-bezier(.2,.8,.2,1); }
+  #view.swap > :nth-child(2) { animation-delay: .03s; } #view.swap > :nth-child(3) { animation-delay: .06s; } #view.swap > :nth-child(n+4) { animation-delay: .09s; }
+  @keyframes cardIn { from { transform: translateY(10px); opacity: .4; } }
+  .req.enter { animation: reqIn .55s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes reqIn { from { transform: translateY(-12px) scale(.98); opacity: .3; } }
+  #alert.open { animation: dimIn .2s ease-out; }
+  @keyframes dimIn { from { background: rgba(0,0,0,0); } }
+  #alert.open .card { animation: popIn .38s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes popIn { from { transform: translateY(14px) scale(.95); } }
+  .mode, .preset, button { transition: background .2s, border-color .2s, color .2s, transform .15s cubic-bezier(.2,.8,.2,1.4), box-shadow .2s; }
+  .mode:active, .preset:active { transform: scale(.97); }
+  nav button { transition: color .2s, border-color .25s; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
   input.bigin { font-size: 18px; padding: 14px 16px; border-radius: 12px; }
   svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   #soundBtn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -215,6 +237,8 @@
     cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   };
   const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.innerHTML = ICONS[n] || ICONS.msg; return s; };
 
@@ -374,7 +398,7 @@
   $('soundBtn').onclick = () => setSound(!prefs.sound);
   $('banner').onclick = () => { unlockAudio(); setTimeout(() => chime('soft'), 50); };
 
-  const what = (r) => [r.reason, r.at && `wil ${fmtWhen(r.at)}`, r.message && `“${r.message}”`].filter(Boolean).join(' · ');
+  const what = (r) => [r.topic, r.reason, r.at && `wil ${fmtWhen(r.at)}`, r.message && `“${r.message}”`].filter(Boolean).join(' · ');
 
   function closeAlert() { $('alert').classList.remove('open'); alertId = null; }
   function onVisit(r) {
@@ -416,7 +440,7 @@
 
   // ---------- frame ----------
   const TABS = [['now', 'Status'], ['inbox', 'Bezoekers'], ['settings', 'Instellingen']];
-  function setTab(t) { tab = t; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); }
+  function setTab(t) { tab = t; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
 
   // never redraw while a finger/mouse button is down, or that click would get lost
   let pressing = false, redrawLater = false;
@@ -441,6 +465,7 @@
     $('view').querySelectorAll('[data-keep]').forEach((i) => { kept[i.dataset.keep] = i.value; });
     const focused = document.activeElement?.dataset?.keep;
     $('view').replaceChildren(...VIEWS[tab]().filter(Boolean));
+    for (const r of S.requests) seenReq.add(r.id);
     $('view').querySelectorAll('[data-keep]').forEach((i) => {
       if (i.dataset.keep in kept && i.value !== kept[i.dataset.keep]) { i.value = kept[i.dataset.keep]; if (i.tagName === 'SELECT') i.dispatchEvent(new Event('change')); }
       if (i.dataset.keep === focused) i.focus();
@@ -471,6 +496,22 @@
     return wrap;
   }
 
+  // small labels under a request: e-mail + whether mails went out, and when the automatic answer comes
+  const seenReq = new Set();
+  function reqTags(r) {
+    const tags = [];
+    if (r.email) tags.push(h('span', { class: 'tag' }, icon('mail'), r.email));
+    const m = r.mail || {};
+    if (m.confirm) tags.push(h('span', { class: 'tag ' + (m.confirm === 'sent' ? 'ok' : 'bad') }, m.confirm === 'sent' ? 'bevestiging gemaild' : 'bevestiging niet verstuurd'));
+    if (m.reply) tags.push(h('span', { class: 'tag ' + (m.reply === 'sent' ? 'ok' : 'bad') }, m.reply === 'sent' ? 'antwoord gemaild' : 'antwoord niet gemaild'));
+    const mins = S.settings.autoReplyMinutes;
+    if (!r.reply && r.state !== 'done' && mins > 0 && S.settings.autoReplyText) {
+      const left = Math.ceil((r.createdAt + mins * 60e3 - Date.now()) / 60e3);
+      if (left > 0) tags.push(h('span', { class: 'tag' }, icon('clock'), `automatisch antwoord over ${left} min`));
+    }
+    return tags.length ? h('div', { class: 'tags' }, ...tags) : null;
+  }
+
   // ---------- today: numbers + timeline ----------
   function todayCard() {
     const start = dayStart(Date.now()), end = start + 864e5, nowTs = Date.now();
@@ -494,6 +535,67 @@
         ? h('div', { class: 'tl' }, ...items.map((i) => h('div', { class: 'tli' + (i.end <= nowTs ? ' past' : i.t <= nowTs ? ' now' : '') },
             h('span', { class: 'tlt' }, i.span ? `${fmt(i.t)}–${fmt(i.end)}` : fmt(i.t)), icon(i.icon), h('span', {}, i.text))))
         : h('p', { class: 'muted', style: 'margin:14px 0 0' }, 'Geen afspraken of bezette tijden vandaag.'));
+  }
+
+  // ---------- settings: e-mail ----------
+  function mailCard(st, save) {
+    const m = st.mail;
+    const field = (key, props = {}) => h('input', { value: m[key] ?? '', ...props, oninput: (e) => { m[key] = props.type === 'number' ? Number(e.target.value) : e.target.value; } });
+    const box = (key, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: m[key], onchange: (e) => { m[key] = e.target.checked; } }), label);
+    const host = field('host', { placeholder: 'bijv. smtp.gmail.com' });
+    const port = h('select', { onchange: (e) => { m.port = Number(e.target.value); } }, ...[[587, '587 — STARTTLS (meest gebruikt)'], [465, '465 — SSL'], [25, '25 — zonder versleuteling']].map(([v, l]) => h('option', { value: v, selected: Number(m.port) === v }, l)));
+    const preset = (label, hst) => h('button', { class: 'sm', onclick: () => { m.host = host.value = hst; m.port = 587; port.value = '587'; } }, label);
+    const testTo = h('input', { class: 'grow', type: 'email', placeholder: 'Stuur een testmail naar…', value: m.adminTo || '' });
+    return h('div', { class: 'card' }, h('h2', {}, 'E-mail', h('span', { class: 'sp' }), h('span', { class: 'tag ' + (S.mailOn ? 'ok' : '') }, S.mailOn ? 'actief' : 'uit')),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Optioneel. Bezoekers die hun e-mail achterlaten (of een nummer met e-mail intikken) krijgen een bevestiging en jouw antwoord per mail. Je kunt ook zelf een mail krijgen bij elk verzoek.'),
+      h('div', { class: 'form' },
+        h('label', {}, 'Aan'), box('enabled', 'E-mail versturen'),
+        h('label', {}, 'Mailserver'), h('div', { class: 'row' }, host, preset('Gmail', 'smtp.gmail.com'), preset('Outlook / Microsoft 365', 'smtp.office365.com')),
+        h('label', {}, 'Poort'), port,
+        h('label', {}, 'Gebruikersnaam'), field('user', { placeholder: 'meestal je e-mailadres', autocomplete: 'off' }),
+        h('label', {}, 'Wachtwoord'), h('div', {}, field('pass', { type: 'password', autocomplete: 'new-password', placeholder: 'wachtwoord of app-wachtwoord' }), h('div', { class: 'muted' }, 'Gmail en Outlook vragen hier een app-wachtwoord (zie je accountbeveiliging). Het wachtwoord wordt nooit meer getoond.')),
+        h('label', {}, 'Afzender'), field('from', { placeholder: 'bijv. Saga Techbox <deur@jouwbedrijf.nl>' }),
+        h('label', {}, 'Bezoekers krijgen'), h('div', { class: 'row' }, box('confirm', 'een bevestiging'), box('reply', 'jouw antwoord')),
+        h('label', {}, 'Jij krijgt'), h('div', { class: 'row' }, box('notifyAdmin', 'een mail bij elk verzoek, op'), field('adminTo', { type: 'email', placeholder: 'jij@jouwbedrijf.nl', class: 'grow' })),
+        h('span', {}), h('div', { class: 'row' }, testTo, h('button', { onclick: async () => { await api('/api/settings', st); await api('/api/mail/test', { to: testTo.value }); toast('Testmail verstuurd — kijk in je inbox'); } }, 'Test versturen'))));
+  }
+
+  // ---------- settings: people (number -> name + e-mail) ----------
+  let peopleDraft = null, peopleFilter = '';
+  function peopleCard() {
+    if (!peopleDraft) peopleDraft = structuredClone(S.people || []);
+    const body = h('tbody');
+    const count = h('span', { class: 'muted' });
+    const draw = () => {
+      const q = peopleFilter.toLowerCase();
+      const rows = peopleDraft.filter((x) => !q || `${x.nr} ${x.name} ${x.email} ${x.note}`.toLowerCase().includes(q));
+      body.replaceChildren(...rows.map((x) => h('tr', {},
+        ...['nr', 'name', 'email', 'note'].map((k) => h('td', {}, h('input', { value: x[k] || '', placeholder: { nr: 'nr', name: 'naam', email: 'e-mail', note: 'notitie' }[k], style: k === 'nr' ? 'width:90px' : '', oninput: (e) => { x[k] = e.target.value; } }))),
+        h('td', {}, h('button', { class: 'sm ghost danger', onclick: () => { peopleDraft.splice(peopleDraft.indexOf(x), 1); draw(); } }, '✕')))));
+      count.textContent = `${peopleDraft.length} ${peopleDraft.length === 1 ? 'persoon' : 'personen'}`;
+    };
+    draw();
+    const paste = h('textarea', { placeholder: 'Plak hier uit Excel of een lijst — per regel: nummer, naam, e-mail, notitie', style: 'min-height:80px' });
+    return h('div', { class: 'card' }, h('h2', {}, 'Personen', h('span', { class: 'sp' }), count),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Bij “Vraagje” en “Tijd booken” tikt een bezoeker zijn nummer in (bijv. personeels-, student- of laptopnummer). Naam en e-mail worden dan vanzelf ingevuld. Op de deur is het e-mailadres half verborgen.'),
+      h('div', { class: 'row', style: 'margin-bottom:10px' },
+        h('input', { class: 'grow', placeholder: 'Zoeken…', value: peopleFilter, oninput: (e) => { peopleFilter = e.target.value; draw(); } }),
+        h('button', { onclick: () => { peopleDraft.unshift({ nr: '', name: '', email: '', note: '' }); peopleFilter = ''; draw(); body.querySelector('input')?.focus(); } }, '+ Persoon')),
+      h('div', { class: 'tablewrap' }, h('table', { class: 'people' }, h('thead', {}, h('tr', {}, h('th', {}, 'Nummer'), h('th', {}, 'Naam'), h('th', {}, 'E-mail'), h('th', {}, 'Notitie'), h('th', {}))), body)),
+      h('details', { style: 'margin-top:12px' }, h('summary', {}, 'Lijst plakken'), paste,
+        h('button', { class: 'sm', style: 'margin-top:8px', onclick: () => {
+          const added = paste.value.split(/\r?\n/).map((l) => l.split(/\t|;|,/).map((x) => x.trim())).filter((c) => c[0] && c[1]).map(([nr, name, email = '', note = '']) => ({ nr, name, email, note }));
+          peopleDraft.push(...added); paste.value = ''; draw(); toast(`${added.length} toegevoegd — vergeet niet op te slaan`);
+        } }, 'Toevoegen aan de lijst')),
+      h('div', { class: 'row', style: 'margin-top:12px;justify-content:flex-end' },
+        h('button', { class: 'white', onclick: async () => {
+          const bad = peopleDraft.filter((x) => (x.nr || x.name || x.email) && (!x.nr || !x.name));
+          if (bad.length) return toast('Elke persoon heeft een nummer én een naam nodig');
+          const badMail = peopleDraft.find((x) => x.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x.email));
+          if (badMail) return toast(`E-mailadres klopt niet: ${badMail.email}`);
+          await api('/api/people', { people: peopleDraft.filter((x) => x.nr && x.name) });
+          S = await api('/api/admin-state'); peopleDraft = null; toast('Personen opgeslagen'); renderAll(true);
+        } }, 'Personen opslaan')));
   }
 
   // ---------- views ----------
@@ -604,10 +706,11 @@
             h('button', { class: 'sm ghost', onclick: () => api('/api/requests/seen') }, 'Alles gezien'),
             h('button', { class: 'sm ghost', onclick: () => api('/api/requests/clear') }, 'Afgehandelde wissen')),
           filters,
-          reqs.length ? h('div', { class: 'list' }, ...reqs.map((r) => h('div', { class: `req ${r.state}` },
-            h('div', { class: 'head' }, h('span', { class: 'type' }, icon(TYPE_ICON[r.type]), TYPE[r.type] || 'Verzoek'), h('span', {}, r.name || 'Anoniem'), h('span', { class: 'muted' }, `${ago(r.createdAt)} · status was ${r.statusAtTime}`),
+          reqs.length ? h('div', { class: 'list' }, ...reqs.map((r) => h('div', { class: `req ${r.state}${seenReq.has(r.id) ? '' : ' enter'}` },
+            h('div', { class: 'head' }, h('span', { class: 'type' }, icon(TYPE_ICON[r.type]), TYPE[r.type] || 'Verzoek'), h('span', {}, r.name || 'Anoniem', r.nr ? h('span', { class: 'muted' }, ` · nr ${r.nr}`) : null), h('span', { class: 'muted' }, `${ago(r.createdAt)} · status was ${r.statusAtTime}`),
               h('span', { style: 'flex:1' }), r.state !== 'done' ? h('button', { class: 'sm ghost', onclick: () => api('/api/requests/done', { id: r.id }) }, 'Afgehandeld') : h('span', { class: 'muted' }, 'Afgehandeld')),
             what(r) ? h('div', { class: 'what' }, what(r)) : null,
+            reqTags(r),
             r.reply ? h('div', { class: 'reply' }, `${r.autoReplied ? 'Automatisch antwoord' : 'Jouw antwoord'}: ${r.reply}`) : null,
             r.state !== 'done' ? replyControls(r) : null)))
             : h('p', { class: 'muted', style: 'margin:0' }, inboxFilter === 'open' ? 'Alles is afgehandeld.' : 'Hier staat nog niets. Als iemand op de deur een knop aantikt, zie je het hier meteen.')),
@@ -624,7 +727,7 @@
       const sel = (obj, key, opts, num) => h('select', { onchange: (e) => { obj[key] = num ? Number(e.target.value) : e.target.value; } }, ...opts.map(([v, l]) => h('option', { value: v, selected: String(obj[key]) === String(v) }, l)));
       const lines = (key) => h('textarea', { oninput: (e) => { st[key] = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); } }, st[key].join('\n'));
       const days = (obj) => { const wrap = h('div', { class: 'days' }); const draw = () => wrap.replaceChildren(...DAYS.map((d, n) => h('button', { type: 'button', class: obj.days.includes(n) ? 'on' : '', onclick: () => { obj.days = obj.days.includes(n) ? obj.days.filter((x) => x !== n) : [...obj.days, n]; draw(); } }, d))); draw(); return wrap; };
-      const save = async () => { await api('/api/settings', st); toast('Opgeslagen'); renderAll(true); };
+      const save = async () => { await api('/api/settings', st); S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true); };
 
       const importFile = h('input', { type: 'file', accept: 'application/json', class: 'hidden', onchange: async (e) => {
         const file = e.target.files[0]; if (!file) return;
@@ -669,10 +772,19 @@
             h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje')),
             h('label', {}, 'Bel'), chk(st.visitors, 'bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'),
             h('label', {}, 'Redenen'), h('div', {}, lines('reasons'), h('div', { class: 'muted' }, 'Eén per regel. Houd het kort: 3 tot 4 werkt het rustigst.')),
+            h('label', {}, 'Vraag-onderwerpen'), h('div', {}, lines('topics'), h('div', { class: 'muted' }, 'Eén per regel. Bezoekers kiezen er één bij “Vraagje”, zodat ze bijna niets hoeven te typen.')),
             h('label', {}, 'Snelle antwoorden'), h('div', {}, lines('quickReplies'), h('div', { class: 'muted' }, 'Eén per regel — één tik en het staat op de deur.')),
-            h('label', {}, 'Bij gesloten'), text(st, 'closedReply', { placeholder: 'Direct antwoord als je gesloten bent (leeg = geen)' }),
-            h('label', {}, 'Geen reactie'), h('div', { class: 'row' }, h('span', { class: 'muted' }, 'na'), text(st, 'autoReplyMinutes', { type: 'number', min: 0, style: 'width:70px' }), h('span', { class: 'muted' }, 'min tonen:'), text(st, 'autoReplyText', { class: 'grow' })),
             h('label', {}, 'Afspraakblokken'), h('div', { class: 'row' }, text(st, 'slotMinutes', { type: 'number', min: 10, step: 5, style: 'width:80px' }), h('span', { class: 'muted' }, 'minuten, binnen de openingstijden (anders werkdagen 09:00–17:00)')))),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Automatisch antwoorden'),
+          h('p', { class: 'muted', style: 'margin-top:0' }, 'Zo staat niemand voor niets te wachten. Het antwoord verschijnt groot op de deur bij de bezoeker.'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Geen reactie van jou'), h('div', { class: 'row' }, h('span', { class: 'muted' }, 'na'), text(st, 'autoReplyMinutes', { type: 'number', min: 0, max: 120, style: 'width:76px' }), h('span', { class: 'muted' }, 'minuten (0 = uit)')),
+            h('label', {}, 'Tekst'), text(st, 'autoReplyText', { placeholder: 'bijv. Nog geen reactie — je verzoek is opgeslagen.' }),
+            h('label', {}, 'Als je gesloten bent'), text(st, 'closedReply', { placeholder: 'Direct antwoord bij Gesloten (leeg = geen)' }))),
+
+        mailCard(st, save),
+        peopleCard(),
 
         h('div', { class: 'card' }, h('h2', {}, 'Scherm'),
           h('div', { class: 'form' },

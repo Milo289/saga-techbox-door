@@ -5,6 +5,9 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
+const tls = require('tls');
+const os = require('os');
 const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -27,6 +30,7 @@ const DEFAULT_SETTINGS = {
   hours: { enabled: false, days: [1, 2, 3, 4, 5], from: '09:00', to: '17:00' },
   visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true },
   reasons: ['Korte vraag', 'Bezorging', 'Ophalen', 'Handtekening nodig'],
+  topics: ['Laptop', 'Wachtwoord / inloggen', 'Printer', 'Wifi / internet', 'Iets anders'],
   quickReplies: ['Kom binnen', 'Momentje', 'Over 5 minuten', 'Ik kom naar je toe', 'Nu even niet — probeer het later', 'Laat een bericht achter'],
   slotMinutes: 30,
   autoReplyMinutes: 5,
@@ -39,8 +43,11 @@ const DEFAULT_SETTINGS = {
   ntfyServer: 'https://ntfy.sh',
   ntfyTopic: '',
   webhookUrl: '',
+  // e-mail (optional): confirmation + answer to visitors who leave an address, and/or a mail to you per request
+  mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false },
 };
-const PRIVATE_SETTINGS = ['ntfyServer', 'ntfyTopic', 'webhookUrl', 'quickReplies', 'autoReplyText', 'closedReply', 'autoReplyMinutes'];
+const PRIVATE_SETTINGS = ['ntfyServer', 'ntfyTopic', 'webhookUrl', 'quickReplies', 'autoReplyText', 'closedReply', 'autoReplyMinutes', 'mail'];
+const PASS_MASK = '••••••••'; // the mail password is never sent back to the browser
 
 const freshState = () => ({
   version: 2,
@@ -49,6 +56,7 @@ const freshState = () => ({
   busy: [], // planned busy blocks { id, from, to, note }
   appointments: [], // { id, at, name, reason }
   requests: [],
+  people: [], // { id, nr, name, email, note } — visitors type their number and everything is filled in
   history: [],
 });
 
@@ -61,6 +69,9 @@ const hm = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.
 const atTime = (day, hhmm) => { const [h, m] = hhmm.split(':').map(Number); return new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m, 0, 0); };
 const flip = (mode) => (mode === 'open' ? 'closed' : 'open');
 const ts = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+const isEmail = (v) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(String(v || ''));
+const addrOf = (v) => { const m = String(v || '').match(/<([^>]+)>/); return (m ? m[1] : String(v || '')).trim(); };
+const maskEmail = (e) => { const [u, d] = String(e).split('@'); return d ? `${u.slice(0, 1)}${'•'.repeat(Math.max(2, Math.min(6, u.length - 1)))}@${d}` : ''; };
 
 function coerce(def, val) {
   if (val === undefined || val === null) return structuredClone(def);
@@ -109,7 +120,7 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, people: Array.isArray(raw.people) ? raw.people : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
@@ -230,13 +241,17 @@ function publicState() {
     view: computeView(now),
     replies: state.requests.filter((r) => r.reply && now - r.repliedAt < 15 * 60e3).map((r) => ({ id: r.id, reply: r.reply })),
     bellReadyAt: lastBellAt + BELL_COOLDOWN,
+    mailOn: mailOn(),
+    hasPeople: state.people.length > 0,
     serverTime: now,
   };
 }
 function adminState() {
   return {
     build: BUILD,
-    settings: state.settings,
+    settings: { ...state.settings, mail: { ...state.settings.mail, pass: state.settings.mail.pass ? PASS_MASK : '' } },
+    people: state.people,
+    mailOn: mailOn(),
     manual: state.manual,
     view: computeView(),
     busy: [...state.busy].sort((a, b) => a.from - b.from),
@@ -263,6 +278,8 @@ setInterval(() => { for (const c of clients) write(c, 'ping', { t: Date.now() })
 const TYPE_LABEL = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraakverzoek', message: 'Vraagje' };
 function describe(r) {
   const parts = [`${TYPE_LABEL[r.type]} — ${r.name || 'Iemand'} bij ${state.settings.name}`];
+  if (r.nr) parts.push(`Nummer: ${r.nr}`);
+  if (r.topic) parts.push(`Onderwerp: ${r.topic}`);
   if (r.reason) parts.push(`Reden: ${r.reason}`);
   if (r.at) parts.push(`Wil: ${new Date(r.at).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`);
   if (r.message) parts.push(`"${r.message}"`);
@@ -286,6 +303,94 @@ async function notifyExternal(r, textOverride) {
   }
   const results = await Promise.allSettled(jobs);
   return results.map((x) => (x.status === 'fulfilled' ? `verstuurd (${x.value.status})` : `mislukt: ${x.reason?.message}`));
+}
+
+// ---------- e-mail: a tiny SMTP client (no dependencies) ----------
+function smtpSend(cfg, { to, subject, text }) {
+  return new Promise((resolve, reject) => {
+    const port = Number(cfg.port) || 587;
+    const fromAddr = addrOf(cfg.from);
+    let sock = port === 465 ? tls.connect({ host: cfg.host, port, servername: cfg.host }) : net.connect({ host: cfg.host, port });
+    let buf = '', waiting = null, finished = false;
+    const fail = (e) => { if (finished) return; finished = true; try { sock.destroy(); } catch {} reject(e instanceof Error ? e : new Error(String(e))); };
+    const onData = (d) => { buf += d.toString('utf8'); pump(); };
+    const attach = (s) => { s.setTimeout(20000, () => fail(new Error('Geen antwoord van de mailserver'))); s.on('error', fail); s.on('data', onData); };
+    const pump = () => {
+      if (!waiting) return;
+      const i = buf.search(/^\d{3} [^\n]*\n/m); // the last line of an SMTP reply has a space after the code
+      if (i < 0) return;
+      const end = buf.indexOf('\n', i) + 1;
+      const reply = buf.slice(0, end); buf = buf.slice(end);
+      const w = waiting; waiting = null; w(reply);
+    };
+    const cmd = async (line, expect) => {
+      if (line != null) sock.write(line + '\r\n');
+      const reply = await new Promise((r) => { waiting = r; pump(); });
+      const code = reply.match(/^(\d{3}) /m)[1];
+      if (!code.startsWith(expect)) throw new Error(`Mailserver: ${reply.trim().split('\n').pop().slice(0, 160)}`);
+      return reply;
+    };
+    const b64 = (x) => Buffer.from(x, 'utf8').toString('base64');
+    const helo = (os.hostname() || 'localhost').replace(/[^a-zA-Z0-9.-]/g, '') || 'localhost';
+    attach(sock);
+    (async () => {
+      await cmd(null, '2');
+      let ehlo = await cmd(`EHLO ${helo}`, '2');
+      if (port !== 465 && /STARTTLS/i.test(ehlo)) {
+        await cmd('STARTTLS', '2');
+        sock.removeListener('data', onData);
+        sock = tls.connect({ socket: sock, servername: cfg.host });
+        attach(sock);
+        await new Promise((r) => sock.once('secureConnect', r));
+        ehlo = await cmd(`EHLO ${helo}`, '2');
+      }
+      if (cfg.user) {
+        await cmd('AUTH LOGIN', '3');
+        await cmd(b64(cfg.user), '3');
+        await cmd(b64(cfg.pass || ''), '2');
+      }
+      await cmd(`MAIL FROM:<${fromAddr}>`, '2');
+      await cmd(`RCPT TO:<${to}>`, '2');
+      await cmd('DATA', '3');
+      const fromName = String(state.settings.name).replace(/["\r\n]/g, '');
+      const msg = [
+        `From: =?UTF-8?B?${b64(fromName)}?= <${fromAddr}>`, `To: <${to}>`, `Subject: =?UTF-8?B?${b64(subject)}?=`,
+        `Date: ${new Date().toUTCString().replace('GMT', '+0000')}`, `Message-ID: <${newId()}.${Date.now()}@${fromAddr.split('@')[1] || 'localhost'}>`,
+        'MIME-Version: 1.0', 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '',
+        b64(text).replace(/.{76}/g, '$&\r\n'),
+      ].join('\r\n');
+      sock.write(msg + '\r\n.\r\n');
+      await cmd(null, '2');
+      finished = true;
+      sock.write('QUIT\r\n'); sock.end();
+      resolve();
+    })().catch(fail);
+  });
+}
+function mailOn() { const m = state.settings.mail; return !!(m.enabled && m.host && isEmail(addrOf(m.from))); }
+const sendMail = (to, subject, text) => smtpSend(state.settings.mail, { to, subject, text });
+const sign = () => `\n\nMet vriendelijke groet,\n${state.settings.name}`;
+function quoteOf(r) { return [r.topic && `Onderwerp: ${r.topic}`, r.message && `"${r.message}"`, r.at && `Gevraagde tijd: ${new Date(r.at).toLocaleString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false })}`].filter(Boolean).join('\n'); }
+// kind: confirm | reply. Never throws: the result is stored on the request and shown in the control panel.
+async function mailVisitor(r, kind) {
+  const m = state.settings.mail;
+  if (!r.email || !mailOn() || !(kind === 'confirm' ? m.confirm : m.reply)) return;
+  const hi = r.name ? `Hoi ${r.name.split(' ')[0]},` : 'Hoi,';
+  const what = r.type === 'appointment' ? 'je afspraakverzoek' : 'je vraag';
+  const subject = kind === 'confirm' ? `We hebben ${what} ontvangen` : `Antwoord op ${what}`;
+  const text = kind === 'confirm'
+    ? `${hi}\n\nWe hebben ${what} ontvangen:\n\n${quoteOf(r)}\n\n${r.reply ? r.reply + '\n\n' : ''}Je krijgt een mail zodra we antwoorden.${sign()}`
+    : `${hi}\n\nEr is geantwoord op ${what}:\n\n    ${r.reply}\n\n${quoteOf(r) ? 'Je vroeg:\n' + quoteOf(r) : ''}${sign()}`;
+  r.mail = r.mail || {};
+  try { await sendMail(r.email, subject, text); r.mail[kind] = 'sent'; }
+  catch (e) { r.mail[kind] = 'failed'; log('mail', `Mail naar ${r.email} mislukt: ${e.message}`); }
+  changed();
+}
+async function mailAdmin(r) {
+  const m = state.settings.mail;
+  if (!mailOn() || !m.notifyAdmin || !isEmail(m.adminTo)) return;
+  try { await sendMail(m.adminTo, `${TYPE_LABEL[r.type]}${r.name ? ' — ' + r.name : ''}`, `${describe(r)}${r.email ? `\nE-mail: ${r.email}` : ''}\n\nBeantwoorden: open het bedieningspaneel.`); }
+  catch (e) { log('mail', `Mail naar ${m.adminTo} mislukt: ${e.message}`); changed(); }
 }
 
 // ---------- timers ----------
@@ -388,6 +493,7 @@ const adminRoutes = {
   },
 
   'POST /api/settings': (b) => {
+    if (b.mail && b.mail.pass === PASS_MASK) b.mail = { ...b.mail, pass: state.settings.mail.pass };
     const merged = { ...state.settings };
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
     if (![0, 90, 180, 270].includes(merged.layout.rotate)) merged.layout.rotate = 0;
@@ -403,6 +509,7 @@ const adminRoutes = {
     if (!reply) throw bad('Typ eerst een antwoord');
     Object.assign(r, { reply, repliedAt: Date.now(), autoReplied: false, state: 'replied' });
     log('reply', `→ ${r.name || 'bezoeker'}: ${reply}`);
+    mailVisitor(r, 'reply');
   },
   'POST /api/requests/accept': (b) => {
     const r = findReq(b.id);
@@ -412,12 +519,28 @@ const adminRoutes = {
     const when = new Date(at).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
     Object.assign(r, { reply: `Bevestigd: ${when}`, repliedAt: Date.now(), autoReplied: false, state: 'replied' });
     log('appointment', `Afspraak met ${r.name || 'bezoeker'} — ${when}`);
+    mailVisitor(r, 'reply');
   },
   'POST /api/requests/done': (b) => { const r = state.requests.find((x) => x.id === b.id); if (r) r.state = 'done'; },
   'POST /api/requests/seen': () => { for (const r of state.requests) if (r.state === 'new') r.state = 'seen'; },
   'POST /api/requests/clear': () => { state.requests = state.requests.filter((r) => r.state !== 'done'); },
   'POST /api/appointments/remove': (b) => { state.appointments = state.appointments.filter((a) => a.id !== b.id); },
 
+  'POST /api/people': (b) => {
+    const seen = new Set();
+    state.people = (Array.isArray(b.people) ? b.people : []).slice(0, 2000).map((x) => ({
+      id: str(x.id, 20) || newId(), nr: str(x.nr, 20), name: str(x.name, 60), email: isEmail(str(x.email, 120)) ? str(x.email, 120) : '', note: str(x.note, 100),
+    })).filter((x) => x.nr && x.name && !seen.has(x.nr.toLowerCase()) && seen.add(x.nr.toLowerCase()));
+    log('system', `Personenlijst opgeslagen (${state.people.length})`);
+  },
+  'POST /api/mail/test': async (b) => {
+    if (!mailOn()) throw bad('Zet e-mail aan en vul de mailserver en het afzenderadres in');
+    const to = str(b.to, 120);
+    if (!isEmail(to)) throw bad('Vul een geldig e-mailadres in');
+    try { await sendMail(to, `Testmail van ${state.settings.name}`, `Het werkt! Mails vanaf het deurscherm komen zo bij je aan.${sign()}`); }
+    catch (e) { throw bad(e.message); }
+    return { ok: true };
+  },
   'POST /api/test-notify': async () => ({ results: await notifyExternal(null, `Testmelding van ${state.settings.name}`) }),
   'GET /api/export': () => state,
   'POST /api/import': (b) => {
@@ -429,6 +552,7 @@ const adminRoutes = {
 };
 
 const lastVisit = new Map();
+const lookups = new Map();
 const BELL_COOLDOWN = 45 * 1000; // the doorbell can ring at most once every 45 seconds (for everyone)
 let lastBellAt = 0;
 function handleVisit(req, b) {
@@ -446,15 +570,22 @@ function handleVisit(req, b) {
     const wait = Math.ceil((lastBellAt + BELL_COOLDOWN - now) / 1000);
     throw Object.assign(new Error(`Er is net aangebeld — over ${wait} s kun je weer bellen`), { code: 429 });
   }
-  if (b.type === 'message' && !str(b.message)) throw bad('Typ eerst je vraag');
-  if (b.type === 'appointment' && !str(b.name)) throw bad('Vul je naam in');
+  if (b.type === 'message' && !str(b.message) && !str(b.topic)) throw bad('Kies een onderwerp of typ je vraag');
   if (b.type === 'appointment' && !(ts(b.at) > now)) throw bad('Kies een tijd');
 
+  // a known number fills in name and e-mail (looked up here, never trusted from the browser)
+  const person = b.nr ? state.people.find((x) => x.nr.toLowerCase() === str(b.nr, 20).toLowerCase()) : null;
+  if (b.nr && !person) throw bad('Dat nummer kennen we niet');
+  const typedEmail = str(b.email, 120);
+  if (typedEmail && !isEmail(typedEmail)) throw bad('Dat e-mailadres klopt niet');
   const r = {
-    id: newId(), type: b.type, name: str(b.name, 60), reason: str(b.reason, 80), message: str(b.message, 500),
+    id: newId(), type: b.type, name: person ? person.name : str(b.name, 60), reason: str(b.reason, 80), message: str(b.message, 500),
+    topic: str(b.topic, 60), nr: person ? person.nr : '',
+    email: b.mail === false ? '' : person ? person.email : typedEmail,
     at: b.type === 'appointment' ? ts(b.at) : null,
     statusAtTime: view.label, createdAt: now, state: 'new', reply: '', repliedAt: 0,
   };
+  if (b.type === 'appointment' && !r.name) throw bad('Vul je naam in');
   if (view.mode === 'closed' && state.settings.closedReply) Object.assign(r, { reply: state.settings.closedReply, repliedAt: now, autoReplied: true });
   lastVisit.set(ip, now);
   if (r.type === 'bell') lastBellAt = now;
@@ -462,11 +593,13 @@ function handleVisit(req, b) {
   state.requests.length = Math.min(state.requests.length, 300);
   log('visit', describe(r).replace(/\n/g, ' · '));
   notifyExternal(r).catch(() => {});
+  mailVisitor(r, 'confirm');
+  mailAdmin(r);
   for (const c of clients) if (c.role === 'admin') write(c, 'visit', r);
   // the doorbell rings on every screen at once: door screens, phones and the control panel
   if (r.type === 'bell') for (const c of clients) write(c, 'ring', { id: r.id, at: now });
   changed();
-  return { id: r.id, reply: r.reply };
+  return { id: r.id, reply: r.reply, mailTo: r.email && mailOn() ? maskEmail(r.email) : '' };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -487,6 +620,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/api/state') return send(res, 200, publicState());
     if (req.method === 'GET' && p === '/api/slots') return send(res, 200, { slots: freeSlots() });
+    if (req.method === 'POST' && p === '/api/lookup') {
+      const ip = req.socket.remoteAddress || '';
+      const hits = (lookups.get(ip) || []).filter((t) => Date.now() - t < 60e3);
+      if (hits.length >= 15) return send(res, 429, { error: 'Even wachten en opnieuw proberen' });
+      lookups.set(ip, [...hits, Date.now()]);
+      const nr = str((await readBody(req)).nr, 20).toLowerCase();
+      const x = state.people.find((y) => y.nr.toLowerCase() === nr);
+      return send(res, 200, x ? { found: true, name: x.name, email: mailOn() && x.email ? maskEmail(x.email) : '' } : { found: false });
+    }
     if (req.method === 'POST' && p === '/api/visit') return send(res, 200, handleVisit(req, await readBody(req)));
 
     const route = adminRoutes[`${req.method} ${p}`];
