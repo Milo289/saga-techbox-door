@@ -113,6 +113,19 @@
   #alert.open { display: flex; }
   #alert .card { max-width: 520px; width: 100%; }
   #login { max-width: 380px; margin: 14vh auto 0; }
+  #lock { position: fixed; inset: 0; z-index: 80; background: var(--bg, #000); display: none; align-items: safe center; justify-content: center; padding: 16px; overflow-y: auto; }
+  #lock.open { display: flex; }
+  #lock .box { width: 100%; max-width: 320px; text-align: center; }
+  #lock h2 { margin: 0 0 4px; }
+  #lockDots { display: flex; gap: 14px; justify-content: center; margin: 22px 0 8px; }
+  #lockDots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--dim); transition: .12s; }
+  #lockDots i.on { background: var(--fg); border-color: var(--fg); }
+  #lockDots.shake { animation: lockshake .35s; }
+  @keyframes lockshake { 25% { transform: translateX(-9px); } 75% { transform: translateX(9px); } }
+  #lockPad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 6px; }
+  #lockPad button { padding: clamp(8px, 2.4vh, 16px) 0; font-size: 22px; font-weight: 600; border-radius: 14px; }
+  @media (max-height: 640px) { #lockDots { margin: 12px 0 4px; } #lockPad { gap: 7px; margin: 8px 0 2px; } }
+  #lockErr { min-height: 20px; color: var(--dim); font-size: 14px; margin: 6px 0; }
   .save { position: sticky; bottom: 14px; display: flex; justify-content: flex-end; }
   .save button { box-shadow: 0 8px 30px rgba(0,0,0,.6); }
   select.tp, select.dp { padding: 8px 8px; font-variant-numeric: tabular-nums; cursor: pointer; }
@@ -217,6 +230,17 @@
   <p class="muted" id="pinErr"></p>
 </div>
 
+<div id="lock" aria-modal="true" role="dialog">
+  <div class="box">
+    <h2>Vergrendeld</h2>
+    <div class="muted">Voer je code van 6 cijfers in</div>
+    <div id="lockDots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div id="lockErr"></div>
+    <div id="lockPad"></div>
+    <button class="link-btn" id="lockOut" type="button">Uitloggen</button>
+  </div>
+</div>
+
 <div id="shell" class="hidden">
   <div class="top">
     <div class="bar">
@@ -224,6 +248,7 @@
       <span class="live"><span class="dot"></span><span id="hStatus"></span></span>
       <button class="sm ghost" id="soundBtn" title="Geluid aan/uit op dit apparaat"></button>
       <span id="conn" title="Live verbinding"></span>
+      <button class="sm ghost hidden" id="lockBtn" title="Scherm vergrendelen">Vergrendel</button>
       <button class="sm ghost hidden" id="userBtn" title="Account"></button>
       <a href="/" target="_blank" rel="noopener"><button class="sm ghost">Deurscherm ↗</button></a>
     </div>
@@ -337,6 +362,7 @@
       res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: body ? JSON.stringify(body) : undefined });
     } catch { toast('Geen verbinding met de deurserver'); throw new Error('offline'); }
     if (res.status === 401) { const had = TOKEN || PIN; TOKEN = ''; store.set('doorToken', ''); showLogin(had ? 'Je bent uitgelogd — log opnieuw in' : ''); throw new Error('auth'); }
+    if (res.status === 423) { showLock(); throw new Error('locked'); }
     const out = await res.json().catch(() => ({}));
     if (!res.ok) { toast(out.error || 'Er ging iets mis'); throw new Error(out.error); }
     return out;
@@ -548,7 +574,7 @@
     $('hStatus').textContent = v.until ? `${v.label} tot ${fmtWhen(v.until)}` : v.label;
     const unread = S.requests.filter((r) => r.state === 'new').length;
     if (!visibleTabs().some(([k]) => k === tab)) tab = 'now';
-    const ub = $('userBtn'); ub.classList.toggle('hidden', S.me.kind === 'open'); ub.textContent = S.me.name;
+    const ub = $('userBtn'); ub.classList.toggle('hidden', S.me.kind === 'open'); ub.textContent = S.me.name; $('lockBtn').classList.toggle('hidden', !S.me.canLock);
     $('tabs').replaceChildren(...visibleTabs().map(([k, l]) => h('button', { class: tab === k ? 'cur' : '', onclick: () => setTab(k) }, l, k === 'inbox' && unread ? h('span', { class: 'badge' }, unread) : null)));
     updateTitle();
     if (window.doorApp) window.doorApp.report({ open: S.requests.filter((r) => r.state === 'new' || r.state === 'seen').length, mode: v.mode, label: v.label });
@@ -766,6 +792,74 @@
     ];
   }
 
+  // ---------- screen lock (6-digit code, enforced by the server) ----------
+  let lockCode = '', lockBusy = false;
+  function lockDraw() { [...$('lockDots').children].forEach((d, i) => d.classList.toggle('on', i < lockCode.length)); }
+  function showLock(msg) {
+    if (es) { es.close(); es = null; }
+    closeAlert?.();
+    lockCode = ''; lockDraw(); $('lockErr').textContent = msg || '';
+    $('lock').classList.add('open');
+  }
+  function lockKey(k) {
+    if (lockBusy) return;
+    if (k === 'del') lockCode = lockCode.slice(0, -1); else if (lockCode.length < 6) lockCode += k;
+    lockDraw(); $('lockErr').textContent = '';
+    if (lockCode.length === 6) submitLock();
+  }
+  async function submitLock() {
+    lockBusy = true;
+    try {
+      const res = await fetch('/api/lock/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ code: lockCode }) });
+      const out = await res.json().catch(() => ({}));
+      if (res.ok) { $('lock').classList.remove('open'); lockCode = ''; lockDraw(); await start(); return; }
+      if (res.status === 401) { $('lock').classList.remove('open'); TOKEN = ''; store.set('doorToken', ''); S = null; autoLoginTried = true; if (window.doorApp?.clearLogin) window.doorApp.clearLogin(); showLogin(out.error || ''); return; }
+      lockCode = ''; lockDraw(); $('lockErr').textContent = out.error || 'Verkeerde code';
+      $('lockDots').classList.remove('shake'); void $('lockDots').offsetWidth; $('lockDots').classList.add('shake');
+    } catch { lockCode = ''; lockDraw(); $('lockErr').textContent = 'Geen verbinding met de deurserver'; }
+    finally { lockBusy = false; }
+  }
+  $('lockPad').replaceChildren(...['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map((k) => k === '' ? h('span') : h('button', { class: 'ghost', type: 'button', onclick: () => lockKey(k), 'aria-label': k === 'del' ? 'Wissen' : k }, k === 'del' ? '⌫' : k)));
+  document.addEventListener('keydown', (e) => {
+    if (!$('lock').classList.contains('open')) return;
+    if (/^\d$/.test(e.key)) lockKey(e.key); else if (e.key === 'Backspace') lockKey('del');
+  });
+  $('lockOut').onclick = () => { $('lock').classList.remove('open'); logout(); };
+  async function lockNow() {
+    if (!S?.me.hasLock) return lockSetupDialog(true);
+    try { await api('/api/lock', {}); showLock(); } catch {}
+  }
+  $('lockBtn').onclick = () => S && lockNow();
+  function lockSetupDialog(thenLock) {
+    const pw = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Je wachtwoord' });
+    const code = h('input', { type: 'password', inputmode: 'numeric', maxlength: '6', pattern: '[0-9]*', autocomplete: 'off', placeholder: 'Nieuwe code (6 cijfers)' });
+    $('alertCard').className = 'card';
+    $('alertCard').replaceChildren(
+      h('div', { class: 'poptitle' }, S.me.hasLock ? 'Schermcode wijzigen' : 'Schermcode instellen'),
+      h('div', { class: 'muted', style: 'margin:6px 0 12px' }, 'Met deze code van 6 cijfers ontgrendel je het bedieningspaneel nadat je het hebt vergrendeld.'),
+      h('div', { class: 'list' }, pw, code),
+      h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'ghost', onclick: closeAlert }, 'Annuleren'), h('span', { style: 'flex:1' }),
+        h('button', { onclick: async () => {
+          try {
+            await api('/api/lock/set', { password: pw.value, code: code.value });
+            S = await api('/api/admin-state'); renderAll(true); closeAlert(); toast('Schermcode opgeslagen');
+            if (thenLock) lockNow();
+          } catch {}
+        } }, thenLock ? 'Opslaan en vergrendelen' : 'Opslaan')));
+    $('alert').classList.add('open');
+    setTimeout(() => pw.focus(), 50);
+  }
+  function lockRemoveDialog() {
+    const pw = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Je wachtwoord' });
+    $('alertCard').className = 'card';
+    $('alertCard').replaceChildren(
+      h('div', { class: 'poptitle' }, 'Schermcode verwijderen'),
+      h('div', { class: 'list', style: 'margin-top:12px' }, pw),
+      h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'ghost', onclick: closeAlert }, 'Annuleren'), h('span', { style: 'flex:1' }),
+        h('button', { class: 'danger', onclick: async () => { try { await api('/api/lock/remove', { password: pw.value }); S = await api('/api/admin-state'); renderAll(true); closeAlert(); toast('Schermcode verwijderd'); } catch {} } }, 'Verwijderen')));
+    $('alert').classList.add('open');
+  }
+
   // ---------- account dialog (name button in the header) ----------
   function accountDialog() {
     const me = S.me;
@@ -777,6 +871,9 @@
       h('div', { class: 'pophead' }, h('span', { class: 'popicon' }, icon('users')), h('div', {}, h('div', { class: 'poptitle' }, me.name), h('div', { class: 'muted' }, `${ROLE_NAMES[me.role] || me.role}${me.kind === 'pin' ? ' (pincode)' : ''}`))),
       h('div', { style: 'margin-top:12px' }, h('div', { class: 'muted' }, 'Jouw rechten'), permChips(me.perms)),
       canPw ? h('div', { class: 'list', style: 'margin-top:16px' }, h('div', { class: 'muted' }, 'Wachtwoord wijzigen'), cur, nxt, h('div', { class: 'row' }, h('button', { class: 'sm', onclick: async () => { await api('/api/password', { current: cur.value, next: nxt.value }); cur.value = nxt.value = ''; toast('Wachtwoord gewijzigd'); } }, 'Wijzigen'))) : null,
+      me.canLock ? h('div', { class: 'list', style: 'margin-top:16px' }, h('div', { class: 'muted' }, 'Schermcode (6 cijfers)'), h('div', { class: 'row' },
+        h('button', { class: 'sm', onclick: () => lockSetupDialog(false) }, me.hasLock ? 'Wijzigen' : 'Instellen'),
+        me.hasLock ? h('button', { class: 'sm ghost', onclick: lockRemoveDialog }, 'Verwijderen') : null)) : null,
       h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten'), h('span', { style: 'flex:1' }), me.kind !== 'open' ? h('button', { class: 'danger', onclick: () => { closeAlert(); logout(); } }, 'Uitloggen') : null));
     $('alert').classList.add('open');
   }

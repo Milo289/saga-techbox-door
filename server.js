@@ -98,6 +98,7 @@ const freshState = () => ({
   people: [], // { id, nr, name, email, note } — visitors type their number and everything is filled in
   system: { ...DEFAULT_SYSTEM },
   lastBackupDay: '',
+  rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
   seededAdmin: false,
   users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
   apiKeys: [], // { id, name, prefix, hash, perms[], createdAt, lastUsed, by }
@@ -398,6 +399,10 @@ function gate(id, ip) {
   return null;
 }
 const publicUser = (u) => ({ factory: !!u.factory, starter: !!u.starter, phase: u.starter ? (inSetup() ? 'setup' : 'emergency') : '', id: u.id, username: u.username, name: u.name, role: u.role, perms: effectivePerms(u), disabled: !!u.disabled, createdAt: u.createdAt, lastLogin: u.lastLogin || 0 });
+// ----- screen lock: a 6-digit code per account; a locked session can do nothing but unlock or log out -----
+const lockHashOf = (id) => (id.root ? state.rootLock : (state.users.find((x) => x.id === id.userId) || {}).lockHash) || '';
+const sessionOf = (id) => state.sessions.find((x) => x.id === id.sessionId);
+const MAX_LOCK_FAILS = 5;
 function kick(match) { for (const c of [...clients]) if (match(c)) { try { c.res.end(); } catch {} clients.delete(c); } }
 function newSession(userId, req, remember) {
   const token = 's_' + crypto.randomBytes(32).toString('hex');
@@ -421,7 +426,7 @@ function adminState(id) {
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
     requests: full('inbox') ? state.requests : [],
     history: full('audit') ? (full('system') ? state.history : state.history.filter((h) => !h.r && h.type !== 'systeem')) : [],
-    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, noPw: !!id.root },
+    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, noPw: !!id.root, canLock: !!id.sessionId, hasLock: !!lockHashOf(id) },
     permLabels: PUBLIC_PERM_LABELS, rolePresets: ASSIGNABLE,
     users: full('users') ? state.users.map(publicUser) : undefined,
     sessions: full('users') ? state.sessions.filter((x) => x.userId !== 'root' || id.root).map((x) => ({ id: x.id, userId: x.userId === 'root' ? '' : x.userId, who: x.userId === 'root' ? ROOT_USER : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
@@ -688,6 +693,45 @@ const adminRoutes = {
     kick((c) => gone.some((g) => g.id === c.sessionId));
     log('gebruikers', `${gone.length} sessie(s) beëindigd`);
   },
+  'POST /api/lock/set': (b, id) => {
+    if (id.kind !== 'user' || !id.sessionId) throw bad('Alleen voor gebruikers met een account');
+    const u = id.root ? null : state.users.find((x) => x.id === id.userId);
+    if (!verifyPassword(b.password, id.root ? ROOT_HASH : (u && u.hash))) throw bad('Je wachtwoord klopt niet');
+    if (!/^\d{6}$/.test(String(b.code || ''))) throw bad('De code moet uit precies 6 cijfers bestaan');
+    const h = hashPassword(b.code);
+    if (id.root) state.rootLock = h; else u.lockHash = h;
+    log('gebruikers', `${id.name} heeft een schermcode ingesteld`);
+  },
+  'POST /api/lock/remove': (b, id) => {
+    if (id.kind !== 'user' || !id.sessionId) throw bad('Alleen voor gebruikers met een account');
+    const u = id.root ? null : state.users.find((x) => x.id === id.userId);
+    if (!verifyPassword(b.password, id.root ? ROOT_HASH : (u && u.hash))) throw bad('Je wachtwoord klopt niet');
+    if (id.root) state.rootLock = ''; else delete u.lockHash;
+    log('gebruikers', `${id.name} heeft de schermcode verwijderd`);
+  },
+  'POST /api/lock': (b, id) => {
+    const ss = id.sessionId && sessionOf(id);
+    if (!ss) throw bad('Alleen voor gebruikers met een account');
+    if (!lockHashOf(id)) throw bad('Stel eerst een code van 6 cijfers in');
+    ss.locked = true; ss.lockFails = 0;
+    kick((c) => c.sessionId === id.sessionId); // the live connection of this session ends; it comes back only after unlocking
+    log('login', `${id.name} heeft het scherm vergrendeld`, id.name, !!id.root);
+  },
+  'POST /api/lock/unlock': async (b, id) => {
+    const ss = id.sessionId && sessionOf(id);
+    if (!ss || !ss.locked) return { ok: true };
+    if (verifyPassword(String(b.code || '').slice(0, 12), lockHashOf(id))) { ss.locked = false; ss.lockFails = 0; log('login', `${id.name} heeft het scherm ontgrendeld`, id.name, !!id.root); return { ok: true }; }
+    await new Promise((r) => setTimeout(r, 500));
+    ss.lockFails = (ss.lockFails || 0) + 1;
+    log('login', `Verkeerde schermcode voor ${id.name} (${ss.lockFails}/${MAX_LOCK_FAILS})`, id.name, !!id.root);
+    if (ss.lockFails >= MAX_LOCK_FAILS) {
+      state.sessions = state.sessions.filter((x) => x.id !== ss.id); kick((c) => c.sessionId === ss.id);
+      save();
+      throw Object.assign(bad('Te vaak een verkeerde code — je bent uitgelogd'), { logout: true });
+    }
+    save();
+    throw bad(`Verkeerde code (${MAX_LOCK_FAILS - ss.lockFails} pogingen over)`);
+  },
   'POST /api/password': (b, id) => {
     if (id.kind !== 'user') throw bad('Alleen voor gebruikers met een account');
     if (id.root) throw bad('Het wachtwoord van dit account kun je niet wijzigen');
@@ -800,11 +844,11 @@ const adminRoutes = {
     return { ok: true };
   },
   'POST /api/test-notify': async () => ({ results: await notifyExternal(null, `Testmelding van ${state.settings.name}`) }),
-  'GET /api/export': () => { const { users, apiKeys, sessions, ...rest } = state; return rest; }, // accounts and keys never leave the server
+  'GET /api/export': () => { const { users, apiKeys, sessions, rootLock, ...rest } = state; return rest; }, // accounts and keys never leave the server
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
-    state = { ...d, ...b, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
+    state = { ...d, ...b, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
   },
 };
@@ -885,7 +929,7 @@ adminRoutes['POST /api/v1/people/upsert'] = (b) => {
 adminRoutes['GET /api/v1/audit'] = () => ({ history: state.history.slice(0, 200) });
 
 const NEED = {
-  'GET /api/admin-state': 'view', 'GET /api/me': 'view', 'POST /api/password': 'view',
+  'GET /api/admin-state': 'view', 'GET /api/me': 'view', 'POST /api/password': 'view', 'POST /api/lock': 'view', 'POST /api/lock/set': 'view', 'POST /api/lock/remove': 'view', 'POST /api/lock/unlock': 'view',
   'POST /api/status': 'status', 'POST /api/status/auto': 'status', 'POST /api/busy/add': 'status', 'POST /api/busy/remove': 'status', 'POST /api/busy/end': 'status',
   'POST /api/settings': (b) => { const ks = Object.keys(b); return ks.every((k) => k === 'note') ? 'status' : ks.every((k) => ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'].includes(k)) ? 'mail' : 'settings'; }, // the door message needs only the status right; mail fields only the mail right
   'POST /api/test-notify': 'mail', 'POST /api/mail/test': 'mail',
@@ -961,6 +1005,7 @@ const server = http.createServer(async (req, res) => {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;
       if (role === 'admin' && !eid) return send(res, 401, { error: 'Inloggen is nodig' });
+      if (eid?.sessionId && sessionOf(eid)?.locked) return send(res, 423, { error: 'Vergrendeld', locked: true });
       const sgate = role === 'admin' ? gate(eid, clientIp(req)) : null;
       if (sgate) return send(res, sgate.code, { error: sgate.error });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
@@ -1016,6 +1061,7 @@ const server = http.createServer(async (req, res) => {
       id.ip = ip;
       const g = gate(id, ip);
       if (g) return send(res, g.code, { error: g.error });
+      if (id.sessionId && routeKey !== 'POST /api/lock/unlock' && sessionOf(id)?.locked) return send(res, 423, { error: 'Het scherm is vergrendeld', locked: true });
       const body = req.method === 'POST' ? await readBody(req) : {};
       let need = NEED[routeKey];
       if (typeof need === 'function') need = need(body);
@@ -1044,7 +1090,7 @@ const server = http.createServer(async (req, res) => {
     }
     send(res, 404, { error: 'not found' });
   } catch (e) {
-    send(res, e.code === 429 ? 429 : 400, { error: e.message });
+    send(res, e.logout ? 401 : e.code === 429 ? 429 : 400, { error: e.message });
   }
 });
 
