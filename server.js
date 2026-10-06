@@ -88,6 +88,7 @@ const freshState = () => ({
   people: [], // { id, nr, name, email, note } — visitors type their number and everything is filled in
   system: { ...DEFAULT_SYSTEM },
   lastBackupDay: '',
+  seededAdmin: false,
   users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
   apiKeys: [], // { id, name, prefix, hash, perms[], createdAt, lastUsed, by }
   sessions: [], // { id, hash, userId, createdAt, lastSeen, ip, ua }
@@ -172,8 +173,9 @@ function save() {
   }, 150);
 }
 let actor = ''; // who is doing the current action (shown in the activity log)
-function log(type, text, by) {
-  state.history.unshift({ at: Date.now(), type, text: str(text, 300), by: by ?? actor });
+let actorRoot = false;
+function log(type, text, by, root) {
+  state.history.unshift({ at: Date.now(), type, text: str(text, 300), by: by ?? actor, r: !!(root ?? actorRoot) });
   state.history.length = Math.min(state.history.length, 500);
 }
 
@@ -320,7 +322,26 @@ function verifyPassword(pw, stored) {
     return crypto.timingSafeEqual(crypto.scryptSync(String(pw), Buffer.from(salt, 'hex'), want.length), want);
   } catch { return false; }
 }
+// The START account: "admin". While the server is being set up (no other account exists yet) it may create accounts.
+// As soon as another account exists it becomes an EMERGENCY account with only the essentials (see and change the status).
+// It is created once. The main account can change or remove it under Beheer (saving it there turns it into an ordinary account).
+// While it still has its start password it only works from your own network.
+const START_PERMS = ['view', 'status', 'inbox', 'users'], EMERGENCY_PERMS = ['view', 'status'];
+const inSetup = () => !state.users.some((x) => !x.starter);
+const effectivePerms = (u) => (u.starter ? (inSetup() ? START_PERMS : EMERGENCY_PERMS) : permsOf(u.perms));
+if (!state.seededAdmin) {
+  if (!state.users.some((u) => u.username === 'admin') && ROOT_USER !== 'admin') {
+    state.users.push({ id: newId(), username: 'admin', name: 'Admin', role: 'medewerker', perms: [...EMERGENCY_PERMS], hash: hashPassword('admin-start-123'), factory: true, starter: true, disabled: false, createdAt: Date.now() });
+  }
+  state.seededAdmin = true;
+  save();
+}
 const DUMMY_HASH = hashPassword(crypto.randomBytes(8).toString('hex')); // so an unknown user takes as long as a wrong password
+function isPrivateIp(ip) {
+  ip = normIp(ip).toLowerCase();
+  if (ip === '127.0.0.1' || ip.startsWith('fe80:') || ip.startsWith('fc') || ip.startsWith('fd')) return true;
+  return ipv4ToInt(ip) !== null && ipInList(ip, ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16']);
+}
 const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
 const authMode = () => 'login'; // there is always a main account, so the control panel always needs a login
 const permsOf = (list) => [...new Set((Array.isArray(list) ? list : []).filter((x) => ALL_PERMS.includes(x) && x !== 'system'))];
@@ -341,11 +362,11 @@ function identifyFrom(tok, pin) {
     if (Date.now() - ss.lastSeen > 60e3) { ss.lastSeen = Date.now(); save(); }
     if (ss.userId === 'root') return { ...rootIdentity(), sessionId: ss.id };
     const u = state.users.find((x) => x.id === ss.userId);
-    return u && !u.disabled ? { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms), sessionId: ss.id } : null;
+    return u && !u.disabled ? { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: effectivePerms(u), sessionId: ss.id } : null;
   }
   if (pin && ADMIN_PIN) {
     const a = Buffer.from(String(pin)), b = Buffer.from(ADMIN_PIN);
-    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return { kind: 'pin', name: 'Pincode', role: 'beheerder', perms: ROLE_PRESETS.beheerder };
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return { kind: 'pin', name: 'Pincode', role: 'medewerker', perms: ROLE_PRESETS.medewerker };
   }
   if (authMode() === 'open') return { kind: 'open', name: 'Open toegang', role: 'beheerder', perms: ROLE_PRESETS.beheerder };
   return null;
@@ -366,7 +387,7 @@ function gate(id, ip) {
   if (state.system.allowedIps.length && !ipInList(ip, state.system.allowedIps)) return { code: 403, error: 'Je kunt vanaf dit netwerk niet inloggen.' };
   return null;
 }
-const publicUser = (u) => ({ id: u.id, username: u.username, name: u.name, role: u.role, perms: permsOf(u.perms), disabled: !!u.disabled, createdAt: u.createdAt, lastLogin: u.lastLogin || 0 });
+const publicUser = (u) => ({ factory: !!u.factory, starter: !!u.starter, phase: u.starter ? (inSetup() ? 'setup' : 'emergency') : '', id: u.id, username: u.username, name: u.name, role: u.role, perms: effectivePerms(u), disabled: !!u.disabled, createdAt: u.createdAt, lastLogin: u.lastLogin || 0 });
 function kick(match) { for (const c of [...clients]) if (match(c)) { try { c.res.end(); } catch {} clients.delete(c); } }
 function newSession(userId, req, remember) {
   const token = 's_' + crypto.randomBytes(32).toString('hex');
@@ -389,11 +410,11 @@ function adminState(id) {
     busy: [...state.busy].sort((a, b) => a.from - b.from),
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
     requests: full('inbox') ? state.requests : [],
-    history: full('audit') ? state.history : [],
+    history: full('audit') ? (full('system') ? state.history : state.history.filter((h) => !h.r && h.type !== 'systeem')) : [],
     me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, noPw: !!id.root },
     permLabels: PUBLIC_PERM_LABELS, rolePresets: ASSIGNABLE,
     users: full('users') ? state.users.map(publicUser) : undefined,
-    sessions: full('users') ? state.sessions.map((x) => ({ id: x.id, userId: x.userId === 'root' ? '' : x.userId, who: x.userId === 'root' ? ROOT_USER : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
+    sessions: full('users') ? state.sessions.filter((x) => x.userId !== 'root' || id.root).map((x) => ({ id: x.id, userId: x.userId === 'root' ? '' : x.userId, who: x.userId === 'root' ? ROOT_USER : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
     apiKeys: full('api') ? state.apiKeys.map(({ id: kid, name, prefix, perms, createdAt, lastUsed, by }) => ({ id: kid, name, prefix, perms, createdAt, lastUsed, by })) : undefined,
     server: full('users') ? { version: APP_VERSION, uptime: Math.round(process.uptime()), node: process.version, platform: `${process.platform} ${process.arch}`, dataDir: DATA_DIR, clients: clients.size, authMode: authMode(), pin: !!ADMIN_PIN } : undefined,
     system: full('system') ? state.system : undefined,
@@ -632,7 +653,8 @@ const adminRoutes = {
     const u = existing || { id: newId(), createdAt: Date.now(), hash: '' };
     if (existing && id.userId === existing.id && (b.disabled || !perms.includes('users'))) throw bad('Je kunt jezelf niet uitschakelen of je beheerrechten afnemen');
     Object.assign(u, { username, name: str(b.name, 60) || username, role, perms, disabled: !!b.disabled });
-    if (password) u.hash = hashPassword(password);
+    if (u.starter) delete u.starter; // edited by the main account: now an ordinary account
+    if (password) { u.hash = hashPassword(password); delete u.factory; }
     if (!existing) state.users.push(u);
     // new password, disabled or changed rights: end that person's sessions (they log in again)
     if (existing && (password || u.disabled)) { state.sessions = state.sessions.filter((x) => x.userId !== u.id); kick((c) => c.userId === u.id); }
@@ -662,7 +684,7 @@ const adminRoutes = {
     const u = state.users.find((x) => x.id === id.userId);
     if (!u || !verifyPassword(b.current, u.hash)) throw bad('Je huidige wachtwoord klopt niet');
     if (String(b.next || '').length < 8) throw bad('Nieuw wachtwoord: minstens 8 tekens');
-    u.hash = hashPassword(b.next);
+    u.hash = hashPassword(b.next); delete u.factory;
     state.sessions = state.sessions.filter((x) => x.userId !== u.id || x.id === id.sessionId);
     log('gebruikers', `${u.username} heeft het wachtwoord gewijzigd`);
   },
@@ -948,18 +970,18 @@ const server = http.createServer(async (req, res) => {
       const username = str(b.username, 40).toLowerCase(), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
       let user = null, ok = false;
       if (username === ROOT_USER) { ok = verifyPassword(password, ROOT_HASH); user = rootIdentity(); }
-      else { const u = state.users.find((x) => x.username === username && !x.disabled); ok = verifyPassword(password, u ? u.hash : DUMMY_HASH) && !!u; if (ok) { u.lastLogin = Date.now(); user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms) }; } }
+      else { const u = state.users.find((x) => x.username === username && !x.disabled); ok = verifyPassword(password, u ? u.hash : DUMMY_HASH) && !!u; if (ok && u.factory && !isPrivateIp(ip)) ok = false; /* the factory password never works from the internet */ if (ok) { u.lastLogin = Date.now(); user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: effectivePerms(u) }; } }
       if (!ok) { authFail(ip); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
       const lg = gate(user, ip);
       if (lg) return send(res, lg.code, { error: lg.error });
       const token = newSession(user.userId, req, !!b.remember);
-      log('login', `${user.name} ingelogd (${ip})`, user.name);
+      log('login', `${user.name} ingelogd (${ip})`, user.name, !!user.root);
       save();
       return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
     }
     if (req.method === 'POST' && p === '/api/logout') {
       const id = identify(req, url);
-      if (id?.sessionId) { state.sessions = state.sessions.filter((x) => x.id !== id.sessionId); kick((c) => c.sessionId === id.sessionId); log('login', `${id.name} uitgelogd`, id.name); save(); }
+      if (id?.sessionId) { state.sessions = state.sessions.filter((x) => x.id !== id.sessionId); kick((c) => c.sessionId === id.sessionId); log('login', `${id.name} uitgelogd`, id.name, !!id.root); save(); }
       return send(res, 200, { ok: true });
     }
     if (req.method === 'GET' && p === '/api/slots') return send(res, 200, { slots: freeSlots() });
@@ -988,10 +1010,11 @@ const server = http.createServer(async (req, res) => {
       let need = NEED[routeKey];
       if (typeof need === 'function') need = need(body);
       if (!need) return send(res, 403, { error: 'Niet toegestaan' }); // a route without a declared right is never reachable
+      if (!can(id, need) && need === 'system') return send(res, 404, { error: 'Niet gevonden' }); // for everybody else these features do not exist
       if (!can(id, need)) { log('toegang', `${id.name}: geen recht (${need}) voor ${routeKey}`); return send(res, 403, { error: `Je hebt hier geen rechten voor (${PERM_LABELS[need]})` }); }
-      actor = id.name;
+      actor = id.name; actorRoot = !!id.root;
       let out;
-      try { out = await route(body, id, url); } finally { actor = ''; }
+      try { out = await route(body, id, url); } finally { actor = ''; actorRoot = false; }
       if (out && out.__file) {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${out.__file.name}"` });
         return res.end(out.__file.text);

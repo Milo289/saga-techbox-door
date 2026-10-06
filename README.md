@@ -55,6 +55,10 @@ The program has one **main account** with every right. Its username and a hash o
 sealed by `seal.js`): the program has **no way to change them**, not from the website, the settings, the API or the desktop app, and
 **it does not start if those files are missing or altered**. There is no "forgot password".
 
+There is also a simple **start account** for setting the server up: username `admin`, start password `admin-start-123` (it only works from
+your own network, and the main account can change or remove it under Beheer). While no other account exists it may create accounts;
+as soon as one exists it becomes an **emergency account** that can only see and change the status.
+
 The main account also has a **Systeem** tab that nobody else has (and that can't be given to anyone): maintenance mode, which networks
 may log in, session lengths, login-attempt limits, automatic deletion of old visitor requests, nightly backups (download / restore),
 an emergency stop (*Noodstop*) and a danger zone.

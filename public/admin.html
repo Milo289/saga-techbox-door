@@ -643,7 +643,7 @@
 
   function usersCard() {
     const rows = S.users.map((u) => h('div', { class: 'urow' },
-      h('div', { class: 'who' }, h('b', {}, u.name, u.disabled ? h('span', { class: 'tag bad', style: 'margin-left:8px' }, 'uitgeschakeld') : null), h('span', { class: 'muted' }, `${u.username} · ${ROLE_NAMES[u.role] || u.role} · laatst ingelogd ${dt(u.lastLogin)}`), permChips(u.perms)),
+      h('div', { class: 'who' }, h('b', {}, u.name, u.disabled ? h('span', { class: 'tag bad', style: 'margin-left:8px' }, 'uitgeschakeld') : null, u.starter ? h('span', { class: 'tag', style: 'margin-left:8px' }, u.phase === 'setup' ? 'startaccount — maakt accounts aan' : 'noodaccount') : null, u.factory ? h('span', { class: 'tag bad', style: 'margin-left:8px' }, 'beginwachtwoord — wijzig het') : null), h('span', { class: 'muted' }, `${u.username} · ${ROLE_NAMES[u.role] || u.role} · laatst ingelogd ${dt(u.lastLogin)}`), permChips(u.perms)),
       h('button', { class: 'sm', onclick: () => { userDraft = { ...structuredClone(u), password: '' }; renderAll(true); } }, 'Wijzigen'),
       h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm(`${u.name} verwijderen?`)) return; await api('/api/users/remove', { id: u.id }); toast('Gebruiker verwijderd'); refresh(); } }, 'Verwijderen')));
     const d = userDraft;
