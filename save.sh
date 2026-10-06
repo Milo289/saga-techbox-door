@@ -9,4 +9,4 @@ if git diff --cached --quiet; then echo "Nothing changed since the last saved ve
 if [ -n "$2" ]; then git tag -f "$2" >/dev/null && echo "Named this version: $2"; fi
 mkdir -p backups
 ZIP="backups/$(date +%Y-%m-%d_%H-%M)${2:+_$2}.zip"
-zip -qr "$ZIP" . -x 'backups/*' -x '.git/*' -x 'node_modules/*' && echo "Zip copy (with data): $ZIP"
+zip -qr "$ZIP" . -x 'backups/*' -x '.git/*' -x 'node_modules/*' -x 'dist/*' && echo "Zip copy (with data): $ZIP"

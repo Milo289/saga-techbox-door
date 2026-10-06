@@ -4,3 +4,8 @@ node_modules
 .env
 backups
 .git
+node_modules
+dist
+app
+build
+.github

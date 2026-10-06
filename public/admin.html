@@ -14,28 +14,34 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <style>
   :root {
-    --bg: #000; --s1: #0e0e10; --s2: #18181b; --s3: #232327; --line: #232327; --fg: #f5f5f7; --dim: #a1a1aa; --mute: #63636b;
+    --bg: #000; --s1: #0e0e10; --s2: #18181b; --s3: #232327; --line: #232327; --fg: #f5f5f7; --dim: #a1a1aa; --mute: #63636b; --on: #000; --topbg: rgba(0,0,0,.82);
     --open: #30d158; --closed: #ff453a; --busy: #ff9f0a; --c: #30d158;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { color-scheme: dark; }
+  html.light { color-scheme: light; --bg: #f3f4f7; --s1: #ffffff; --s2: #eef0f3; --s3: #e3e5ea; --line: #e1e4ea; --fg: #15171b; --dim: #5b616c; --mute: #8a909b; --on: #fff; --topbg: rgba(255,255,255,.86);
+    --open: #1f9d55; --closed: #e0352b; --busy: #e8780c; }
+  html.light .card { box-shadow: 0 1px 2px rgba(20,23,27,.04), 0 6px 20px rgba(20,23,27,.05); }
+  html.light button:hover { border-color: #c9cdd5; }
+  html.light #alert { background: rgba(21,23,27,.4); }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
   button, input, select, textarea { font: inherit; color: inherit; }
+  a { color: inherit; text-decoration: none; }
   button { cursor: pointer; border: 1px solid var(--line); background: var(--s2); border-radius: 10px; padding: 9px 14px; font-weight: 550; transition: background .12s, border-color .12s, transform .1s; }
   button:hover { border-color: #3a3a40; }
   button:active { transform: scale(.98); }
   button.ghost { background: transparent; }
-  button.white { background: var(--fg); color: #000; border-color: transparent; }
+  button.white { background: var(--fg); color: var(--on); border-color: transparent; }
   button.sm { padding: 5px 11px; font-size: 13px; border-radius: 8px; }
   button.danger { color: var(--closed); }
-  button.on { background: var(--fg); color: #000; border-color: transparent; }
+  button.on { background: var(--fg); color: var(--on); border-color: transparent; }
   input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; outline: none; }
   input:focus, select:focus, textarea:focus { border-color: #4a4a52; }
   input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--fg); padding: 0; }
   textarea { width: 100%; min-height: 120px; resize: vertical; }
   .hidden { display: none !important; }
 
-  .top { position: sticky; top: 0; z-index: 10; background: rgba(0,0,0,.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+  .top { position: sticky; top: 0; z-index: 10; background: var(--topbg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
   .bar { max-width: 960px; margin: 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px; }
   .bar h1 { font-size: 17px; margin: 0; font-weight: 650; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .live { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; white-space: nowrap; }
@@ -75,8 +81,8 @@
   .block .d { width: 9px; height: 9px; border-radius: 50%; background: var(--busy); flex: none; }
   .block .t { font-weight: 650; font-variant-numeric: tabular-nums; }
   .block .x { margin-left: auto; }
-  .block.paused .t::after { content: "paused — you changed the status by hand"; margin-left: 8px; font-size: 11px; color: var(--dim); font-weight: 500; }
-  .block.active .t::after { content: "now"; margin-left: 8px; font-size: 11px; background: var(--busy); color: #000; border-radius: 6px; padding: 1px 6px; vertical-align: 2px; }
+  .block.paused .t::after { content: "gepauzeerd — je hebt de status met de hand gewijzigd"; margin-left: 8px; font-size: 11px; color: var(--dim); font-weight: 500; }
+  .block.active .t::after { content: "nu"; margin-left: 8px; font-size: 11px; background: var(--busy); color: #000; border-radius: 6px; padding: 1px 6px; vertical-align: 2px; }
 
   /* inbox */
   .req { border: 1px solid var(--line); background: var(--bg); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
@@ -100,8 +106,8 @@
   td { padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
 
   /* floating, so the page never shifts when it disappears (a shift mid-click would make you miss) */
-  #banner { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 45; background: var(--fg); color: #000; padding: 10px 18px; border-radius: 999px; cursor: pointer; font-weight: 650; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.6); white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
-  #toast { position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--fg); color: #000; padding: 10px 18px; border-radius: 999px; opacity: 0; transition: .25s; pointer-events: none; z-index: 60; font-weight: 650; max-width: calc(100vw - 32px); }
+  #banner { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 45; background: var(--fg); color: var(--on); padding: 10px 18px; border-radius: 999px; cursor: pointer; font-weight: 650; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.6); white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+  #toast { position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--fg); color: var(--on); padding: 10px 18px; border-radius: 999px; opacity: 0; transition: .25s; pointer-events: none; z-index: 60; font-weight: 650; max-width: calc(100vw - 32px); }
   #toast.show { opacity: 1; transform: translateX(-50%); }
   #alert { position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
   #alert.open { display: flex; }
@@ -142,7 +148,7 @@
   .popicon svg { width: 22px; height: 22px; }
   .poptitle { font-size: 22px; font-weight: 750; letter-spacing: -.02em; }
   #alertCard.bellpop { box-shadow: 0 0 0 2px var(--fg), 0 24px 70px rgba(0,0,0,.7); }
-  #alertCard.bellpop .popicon { background: var(--fg); color: #000; animation: shake .45s ease-in-out 4; }
+  #alertCard.bellpop .popicon { background: var(--fg); color: var(--on); animation: shake .45s ease-in-out 4; }
   @keyframes shake { 25% { transform: rotate(-16deg); } 75% { transform: rotate(16deg); } }
 </style>
 </head>
@@ -185,7 +191,21 @@
   let alertId = null;
   let es = null, lastMsg = 0;
 
-  const COLORS = { open: '#30d158', closed: '#ff453a', busy: '#ff9f0a' };
+  const COLORS_DARK = { open: '#30d158', closed: '#ff453a', busy: '#ff9f0a' };
+  const COLORS_LIGHT = { open: '#1f9d55', closed: '#e0352b', busy: '#e8780c' };
+  let COLORS = COLORS_DARK;
+  // appearance of this control panel, per device: dark | light | auto (follows the computer)
+  const sysLight = window.matchMedia('(prefers-color-scheme: light)');
+  function applyTheme() {
+    const pref = store.get('doorTheme', 'dark');
+    const light = pref === 'light' || (pref === 'auto' && sysLight.matches);
+    document.documentElement.classList.toggle('light', light);
+    COLORS = light ? COLORS_LIGHT : COLORS_DARK;
+    document.querySelector('meta[name=theme-color]').content = light ? '#f3f4f7' : '#000000';
+    if (S) renderAll(true);
+  }
+  sysLight.addEventListener?.('change', applyTheme);
+  applyTheme();
   const DAYS = ['Zo', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za'];
   const TYPE = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraak', message: 'Vraagje' };
   const TYPE_ICON = { bell: 'bell', reason: 'msg', appointment: 'cal', message: 'msg' };
@@ -314,6 +334,7 @@
   }
   document.addEventListener('pointerdown', unlockAudio, { passive: true });
   document.addEventListener('keydown', unlockAudio);
+  if (window.doorApp) unlockAudio(); // the desktop app may play sound right away
 
   function tone(f, t, len, vol) {
     const o = actx.createOscillator(), g = actx.createGain();
@@ -360,7 +381,9 @@
     const bell = r.type === 'bell';
     chime(bell ? 'bell' : 'soft');
     const title = bell ? 'Er wordt aangebeld' : `${TYPE[r.type] || 'Verzoek'}${r.name ? ' — ' + r.name : ''}`;
-    if (prefs.desktop && canNotify && Notification.permission === 'granted' && document.hidden) {
+    if (window.doorApp && (document.hidden || !document.hasFocus())) {
+      window.doorApp.notify(title, what(r) || 'Er staat iemand aan de deur'); // desktop app: native notification
+    } else if (prefs.desktop && canNotify && Notification.permission === 'granted' && document.hidden) {
       try { new Notification(title, { body: what(r) || 'Er staat iemand aan de deur', tag: r.id, requireInteraction: bell }); } catch {}
     }
     flashTitle(title);
@@ -619,10 +642,11 @@
       return [
         h('div', { class: 'card' }, h('h2', {}, 'Meldingen op dit apparaat'),
           h('div', { class: 'form' },
+            h('label', {}, 'Weergave'), h('select', { onchange: (e) => { store.set('doorTheme', e.target.value); applyTheme(); toast('Weergave aangepast'); } }, ...[['dark', 'Donker'], ['light', 'Licht'], ['auto', 'Automatisch (zoals je computer)']].map(([v, l]) => h('option', { value: v, selected: store.get('doorTheme', 'dark') === v }, l))),
             h('label', {}, 'Geluid'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: prefs.sound, onchange: (e) => setSound(e.target.checked) }), 'Geluid bij aanbellen en verzoeken'),
             h('label', {}, 'Pop-up'), h('span', { class: 'muted' }, 'Altijd aan — ook als het geluid uit staat, bijvoorbeeld als je in een andere ruimte of in overleg zit. Snel wisselen kan met de knop bovenaan.'),
-            canNotify ? h('label', {}, 'Systeemmelding') : null,
-            canNotify ? h('label', { class: 'check' }, desktopBox, 'Ook een melding van je computer als dit tabblad op de achtergrond staat') : null,
+            window.doorApp ? h('label', {}, 'Systeemmelding') : canNotify ? h('label', {}, 'Systeemmelding') : null,
+            window.doorApp ? h('span', { class: 'muted' }, 'Aan — de app geeft een melding van je computer als het venster niet vooraan staat.') : canNotify ? h('label', { class: 'check' }, desktopBox, 'Ook een melding van je computer als dit tabblad op de achtergrond staat') : null,
             h('span', {}), h('div', { class: 'row' }, h('button', { onclick: testBell }, 'Test de bel'), h('span', { class: 'muted' }, 'Toont de pop-up en speelt het geluid af op dit apparaat.')))),
 
         h('div', { class: 'card' }, h('h2', {}, 'Deur'),
@@ -652,6 +676,7 @@
 
         h('div', { class: 'card' }, h('h2', {}, 'Scherm'),
           h('div', { class: 'form' },
+            h('label', {}, 'Thema'), sel(st, 'theme', [['dark', 'Donker (zwart)'], ['light', 'Licht (met kleur)']]),
             h('label', {}, 'Indeling'), sel(st.layout, 'orientation', [['auto', 'Automatisch'], ['portrait', 'Verticaal'], ['landscape', 'Horizontaal']]),
             h('label', {}, 'Draaien'), sel(st.layout, 'rotate', [[0, 'Niet'], [90, '90° met de klok mee'], [180, '180°'], [270, '90° tegen de klok in']], true),
             h('span', {}), h('span', { class: 'muted' }, 'Gebruik Draaien als de monitor op zijn kant staat maar de computer nog een liggend beeld stuurt.'),

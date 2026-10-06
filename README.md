@@ -1,69 +1,94 @@
-# Door Display
+# Saga Techbox Deur
 
-A sign for your door in black that people can talk to. It shows **Open**, **Closed** or **Busy**,
-optionally *until* a time, and visitors tap a reason instead of knocking on the window.
-You control it from your phone or computer.
+A door sign people can talk to. The door screen shows **Open**, **Gesloten** or **Bezet**, optionally
+*until* a time ("Over 30 minuten gaan we sluiten — om 15:12"), and visitors tap **Deurbel**,
+**Tijd booken** or **Vraagje** instead of knocking. You run everything from the control panel
+(*bedieningspaneel*) on your computer or phone. All text is Dutch, all times are 24-hour.
 
-## Start it
+| Page | Address | For |
+|---|---|---|
+| Door screen | `/` | The monitor by the door (vertical, horizontal or rotated) |
+| Control panel | `/admin` | You — PIN protected |
+| Phone page | `/visit` | Visitors on their own phone |
 
-Install Docker Desktop, then in this folder:
+## Three ways to run it
 
+### 1. The desktop app (macOS, Windows, Linux)
+Download the installer from the **Releases** page of this repository:
+
+| System | File |
+|---|---|
+| Mac with Apple chip (M1 and newer) | `…-mac-arm64.dmg` |
+| Mac with Intel chip | `…-mac-x64.dmg` |
+| Windows | `…-windows-setup.exe` |
+| Linux PC | `…-linux-….AppImage` or `.deb` marked x64 / x86_64 / amd64 |
+| Raspberry Pi (64-bit OS) | `…-linux-arm64.AppImage` or `…-linux-arm64.deb` |
+
+On first start the app asks what this computer does:
+- **Deurscherm** — shows the door screen full screen and keeps it there (survives restarts, keeps the monitor awake).
+- **Bedieningspaneel** — the control panel in its own window, with system notifications.
+
+…and where the server runs: **on this computer** (all-in-one: other devices connect to this computer's
+address, which the settings window shows) or **somewhere else** (enter its address).
+
+Shortcuts: **Ctrl/Cmd + Shift + S** opens the settings, **Ctrl/Cmd + Shift + Q** quits (also on the door screen).
+
+The app isn't signed with a paid certificate, so the first time:
+- **Mac:** right-click the app → *Open* → *Open*.
+- **Windows:** *More info* → *Run anyway*.
+- **Linux AppImage:** make it executable (`chmod +x`), then run it.
+
+### 2. Docker
 ```
 docker compose up -d --build
 ```
+Set your PIN and time zone in `docker-compose.yml` (or `ADMIN_PIN=4821 TZ=Europe/Amsterdam docker compose up -d --build`).
 
-| Page | Address | Use |
-|---|---|---|
-| Door screen | http://localhost:8080/ | Full screen on the door monitor |
-| Control panel | http://localhost:8080/admin | Your phone or computer (PIN **1234**; change it in `docker-compose.yml`) |
-| Phone page | http://localhost:8080/visit | Same buttons, for a visitor's own phone |
-
-From another device, use the computer's network address instead of `localhost` (e.g. `http://192.168.1.50:8080`).
-
-Set your own PIN and time zone:
+### 3. Plain Node.js (18 or newer, nothing to install)
 ```
-ADMIN_PIN=4821 TZ=Europe/Amsterdam docker compose up -d --build
+ADMIN_PIN=1234 node server.js
 ```
 
-### Full screen on the door monitor
+## Look
+- **Donker** — black, calm.
+- **Licht** — light background with the status in a big full-colour card (green / red / orange).
+
+Door screen: control panel → *Instellingen* → *Scherm* → *Thema*.
+Control panel: *Instellingen* → *Meldingen op dit apparaat* → *Weergave* (per device; can follow the computer).
+
+## Publishing a new version of the app
+1. Raise `"version"` in `package.json` (e.g. `1.0.1`) and save a version (see below).
+2. Push a tag:
+   ```
+   git tag v1.0.1 && git push && git push --tags
+   ```
+3. GitHub builds the Mac, Windows and Linux installers (about 10 minutes) and puts them on the **Releases** page.
+
+You can also start a build without a release: *Actions* tab → *Build app* → *Run workflow*.
+Note: on private repositories macOS build minutes count 10×; builds therefore only run when you ask.
+
+## Saving and restoring versions
 ```
-google-chrome --kiosk --noerrdialogs --disable-session-crashed-bubble http://SERVER-IP:8080/
+./save.sh "what you changed" works-v3   # save this version (name optional) + zip in backups/
+./restore.sh                           # list versions
+./restore.sh works-v1                  # put the code back exactly as it was
 ```
-(Raspberry Pi: `chromium-browser --kiosk ...`.) Or double-tap the clock on the door screen.
+Restoring never touches your live data (`data/`: status, settings, visitors) and saves the current
+state first, so nothing is lost.
 
-### Vertical or horizontal
-Control panel → Settings → Screen: Automatic, Vertical or Horizontal, plus **Rotate** for a monitor
-turned on its side. Per screen: `/?orientation=portrait&rotate=90` (`&keyboard=0` hides the touch keyboard).
-
-## How the status works
-
-| You choose | Door shows | Afterwards |
-|---|---|---|
-| Open, until 17:00 | **Open** until 17:00 | switches to Closed |
-| Closed, until 13:00 | **Closed** until 13:00 | switches to Open |
-| Busy, until 15:30 | **Busy** until 15:30 | switches to Open |
-| Busy during 14:00–15:00 (planned) | upcoming time shown under the status; at 14:00 **Busy** until 15:00 | back to what it was |
-| No end | stays until you change it | — |
-
-With **opening hours** turned on, the door opens and closes by itself (e.g. Mon–Fri 09:00–17:00) and
-shows "Closed until tomorrow 09:00". A change by hand always wins until the next opening or closing time.
-
-## Visitors
-- Tap a **reason** (you choose the list): "Delivery", "Quick question", …
-- **Doorbell**: on when Open. While Closed/Busy it shows "Doorbell off" (or keep it on in Settings).
-- **Book a time**: shows only free times (from your opening hours, not during busy times or other appointments).
-- **Message**.
-- Your **reply** ("One minute please") appears in big letters on the door. Instant reply while closed, and an automatic reply if you don't answer within X minutes.
-
-You get a sound and a pop-up in the control panel, and a **phone push** through the free *ntfy* app (Settings → Phone notifications).
-
-## Reliability
-- The door screen loads straight away, reconnects by itself, falls back to checking every few seconds if the live connection drops, and shows "Reconnecting…" only if it's really offline.
-- No internet needed: no emoji, fonts or scripts from the web.
-- It keeps the screen awake where the browser allows it, hides the mouse pointer, and reloads itself after you update the app.
-
-## Without Docker
+## Building the app yourself
 ```
-node server.js
+npm install
+npm run app          # try it
+npm run dist:mac     # or dist:win / dist:linux — installers end up in dist/
 ```
-Node 18+, nothing to install. Data is in the `door-data` volume (or `./data/state.json` without Docker).
+
+## Files
+| | |
+|---|---|
+| `server.js` | The server — no dependencies |
+| `public/display.html` | Door screen + phone page |
+| `public/admin.html` | Control panel |
+| `app/` | Desktop app (Electron) |
+| `kiosk/` | Start-up scripts for a plain browser kiosk (Windows, Mac) |
+| `.github/workflows/build.yml` | Builds the app on GitHub |

@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS = {
   autoReplyText: 'Nog geen reactie — je verzoek is opgeslagen.',
   closedReply: 'We zijn nu gesloten — je verzoek is opgeslagen.',
   note: '',
+  theme: 'dark', // dark | light
   layout: { orientation: 'auto', rotate: 0, hour12: false, keyboard: true },
   dim: { enabled: false, from: '22:00', to: '07:00', level: 0.2 },
   ntfyServer: 'https://ntfy.sh',
@@ -391,6 +392,7 @@ const adminRoutes = {
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
     if (![0, 90, 180, 270].includes(merged.layout.rotate)) merged.layout.rotate = 0;
     if (!['auto', 'portrait', 'landscape'].includes(merged.layout.orientation)) merged.layout.orientation = 'auto';
+    if (!['dark', 'light'].includes(merged.theme)) merged.theme = 'dark';
     for (const m of MODES) if (!merged.texts[m].label) merged.texts[m].label = DEFAULT_SETTINGS.texts[m].label;
     state.settings = merged;
   },
@@ -511,6 +513,17 @@ const server = http.createServer(async (req, res) => {
 });
 
 lastView = JSON.stringify(computeView());
-server.listen(PORT, () => {
-  console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${ADMIN_PIN ? '' : '  — geen ADMIN_PIN ingesteld'}`);
+// `ready` lets the desktop app wait for the server (or show why it couldn't start)
+const ready = new Promise((resolve, reject) => {
+  server.once('error', reject);
+  server.listen(PORT, () => {
+    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${ADMIN_PIN ? '' : '  — geen ADMIN_PIN ingesteld'}`);
+    resolve(PORT);
+  });
 });
+ready.catch((e) => {
+  console.error(e.code === 'EADDRINUSE' ? `Poort ${PORT} is al in gebruik — draait de deurserver misschien al?` : `Server kon niet starten: ${e.message}`);
+  if (require.main === module) process.exit(1);
+});
+
+module.exports = { ready, server };

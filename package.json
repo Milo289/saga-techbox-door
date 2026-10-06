@@ -1,0 +1,46 @@
+{
+  "name": "saga-techbox-door",
+  "productName": "Saga Techbox Deur",
+  "version": "1.0.0",
+  "description": "Deurscherm en bedieningspaneel van Saga Techbox",
+  "main": "app/main.js",
+  "author": "Saga Techbox",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "app": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "nl.sagatechbox.deur",
+    "productName": "Saga Techbox Deur",
+    "copyright": "Saga Techbox",
+    "files": ["app/**", "public/**", "server.js", "package.json"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "category": "public.app-category.productivity",
+      "artifactName": "Saga-Techbox-Deur-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "Saga-Techbox-Deur-${version}-windows-setup.${ext}"
+    },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "shortcutName": "Saga Techbox Deur" },
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64", "arm64"] }, { "target": "deb", "arch": ["x64", "arm64"] }],
+      "category": "Office",
+      "maintainer": "Saga Techbox",
+      "synopsis": "Deurscherm en bedieningspaneel",
+      "artifactName": "Saga-Techbox-Deur-${version}-linux-${arch}.${ext}"
+    }
+  }
+}
