@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Saga Techbox Deur installeren</title>
+<style>
+  :root { --bg: #000; --card: #0e0e10; --line: #232327; --fg: #f5f5f7; --dim: #a1a1aa; --acc: #30d158; --warn: #ff9f0a; }
+  @media (prefers-color-scheme: light) { :root { --bg: #f3f4f7; --card: #fff; --line: #e1e4ea; --fg: #15171b; --dim: #5b616c; --acc: #1f9d55; --warn: #c26a00; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 860px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 34px; letter-spacing: -.03em; margin: 0 0 6px; display: flex; align-items: center; gap: 14px; }
+  h1::before { content: ""; width: 20px; height: 20px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 18px var(--acc); flex: none; }
+  .lead { color: var(--dim); margin: 0 0 28px; font-size: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 16px; }
+  .card { min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+  .card h2 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+  .card h2 small { display: block; font-size: 14px; font-weight: 500; color: var(--dim); letter-spacing: 0; margin-top: 2px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  a.dl { display: inline-flex; align-items: center; gap: 8px; background: var(--acc); color: #000; font-weight: 700; text-decoration: none; padding: 12px 18px; border-radius: 12px; }
+  a.dl.alt { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); font-weight: 600; }
+  a.dl small { font-weight: 500; opacity: .75; }
+  ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+  li::marker { color: var(--acc); font-weight: 700; }
+  code { background: rgba(127,127,127,.18); padding: 2px 7px; border-radius: 6px; font: 13.5px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+  pre { margin: 0; background: rgba(127,127,127,.14); padding: 12px 14px; border-radius: 12px; overflow-x: auto; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; user-select: all; }
+  .note { color: var(--dim); font-size: 14.5px; margin: 0; }
+  .note b { color: var(--warn); }
+  section { margin-top: 34px; }
+  section h2 { font-size: 22px; margin: 0 0 10px; letter-spacing: -.02em; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  td, th { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+  .wide { grid-column: 1 / -1; }
+  .opt { border-left: 3px solid var(--acc); padding-left: 14px; display: grid; gap: 8px; }
+  .opt h3 { margin: 0; font-size: 17px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Saga Techbox Deur installeren</h1>
+  <p class="lead">Kies je apparaat, download het bestand en volg de drie stappen.</p>
+  <p class="note" style="margin-bottom:22px">De downloads staan in een privé-omgeving: je moet <b style="color:var(--fg)">ingelogd zijn bij GitHub</b> met jouw account, anders zie je een foutmelding.</p>
+
+  <div class="grid">
+
+    <div class="card">
+      <h2>Windows <small>pc of laptop — bestand eindigt op .exe</small></h2>
+      <div class="btns"><a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.1.0/Saga-Techbox-Deur-1.1.0-windows-setup.exe">Download voor Windows <small>.exe</small></a></div>
+      <ol>
+        <li>Dubbelklik op het bestand dat je hebt gedownload.</li>
+        <li>Staat er <i>“Windows heeft uw pc beschermd”</i>? Klik op <b>Meer info</b> en dan op <b>Toch uitvoeren</b>.</li>
+        <li>Klik door de installatie. Vraagt de firewall iets? Kies <b>Toestaan</b>.</li>
+      </ol>
+      <p class="note">Open daarna <b style="color:var(--fg)">Saga Techbox Deur</b> in het startmenu.</p>
+    </div>
+
+    <div class="card">
+      <h2>Mac <small>macOS — bestand eindigt op .dmg</small></h2>
+      <div class="btns">
+        <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.1.0/Saga-Techbox-Deur-1.1.0-mac-arm64.dmg">Mac met Apple-chip <small>M1 en nieuwer</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.1.0/Saga-Techbox-Deur-1.1.0-mac-x64.dmg">Mac met Intel</a>
+      </div>
+      <ol>
+        <li>Dubbelklik op het bestand en sleep <b>Saga Techbox Deur</b> naar <b>Programma’s</b>.</li>
+        <li>De eerste keer: <b>rechtsklik</b> op de app → <b>Open</b> → <b>Open</b>.</li>
+        <li>Zegt de Mac dat de app “beschadigd” is? Plak dit één keer in Terminal:</li>
+      </ol>
+      <pre>xattr -cr "/Applications/Saga Techbox Deur.app"</pre>
+      <p class="note">Niet zeker welke chip? Klik op  → <b>Over deze Mac</b>. Staat er “Apple M…”, kies dan de eerste knop.</p>
+    </div>
+
+    <div class="card wide">
+      <h2>iPhone en iPad <small>alleen voor jouw eigen toestel</small></h2>
+
+      <div class="opt">
+        <h3>Optie 1 — met Xcode <span style="color:var(--acc)">(het makkelijkst als je Xcode al hebt)</span></h3>
+        <ol>
+          <li>Haal het project op een vaste plek (niet in een tijdelijke map) en maak het Xcode-project:
+            <pre>cd ~/Documents && git clone https://github.com/Milo289/saga-techbox-door.git && cd saga-techbox-door/ios && brew install xcodegen && xcodegen generate && open DeurBeheer.xcodeproj</pre></li>
+          <li>Voeg in Xcode je Apple-ID toe: <i>Xcode → Instellingen → Accounts → +</i>. Kies bij het project <b>DeurBeheer → Signing &amp; Capabilities → Team</b> jouw naam. Staat er een rode melding over de <i>Bundle Identifier</i>? Verander hem dan naar iets eigens, bijvoorbeeld <code>nl.jouwnaam.deurbeheer</code>.</li>
+          <li>Sluit je iPhone aan, zet <b>Ontwikkelaarsmodus</b> aan (<i>Instellingen → Privacy en beveiliging</i>), kies je iPhone bovenin Xcode en druk op <b>▶︎</b>.</li>
+          <li>Op de iPhone: <i>Instellingen → Algemeen → VPN en apparaatbeheer</i> → tik op je Apple-ID → <b>Vertrouw</b>. Open daarna <b>Deur Beheer</b>.</li>
+        </ol>
+        <p class="note">Werkt Xcode-beta niet met jouw iPhone (“toestel niet ondersteund”)? Een bètaversie ondersteunt soms alleen toestellen met een bijpassende bèta-iOS. Gebruik dan de gewone Xcode uit de App Store, of optie 2.</p>
+      </div>
+
+      <div class="opt">
+        <h3>Optie 2 — zonder Xcode, met Sideloadly</h3>
+        <div class="btns">
+          <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.1.0/Saga-Techbox-Beheer-iOS-unsigned.ipa">Download voor iPhone <small>.ipa</small></a>
+          <a class="dl alt" href="https://sideloadly.io">Sideloadly downloaden</a>
+        </div>
+        <ol>
+          <li>Installeer <b>Sideloadly</b> (gratis), sluit je iPhone aan en kies <i>“Vertrouw deze computer”</i>. Zet <b>Ontwikkelaarsmodus</b> aan.</li>
+          <li>Sleep het <b>.ipa-bestand</b> in Sideloadly, vul je <b>Apple-ID</b> in en klik op <b>Start</b>.</li>
+          <li>Op de iPhone: <i>Instellingen → Algemeen → VPN en apparaatbeheer</i> → <b>Vertrouw</b>.</li>
+        </ol>
+      </div>
+
+      <p class="note">Daarna: open <b style="color:var(--fg)">Deur Beheer</b> en vul het adres van je server, je gebruikersnaam en wachtwoord in.</p>
+      <p class="note"><b>Goed om te weten:</b> Apple laat alleen apps toe die met een eigen account zijn ondertekend. Met een gratis Apple-ID werkt de app <b style="color:var(--fg)">7 dagen</b>; installeer hem daarna opnieuw (met Xcode: gewoon weer ▶︎). Met het betaalde Apple Developer-programma duurt het een jaar.</p>
+    </div>
+
+    <div class="card wide">
+      <h2>Linux en Raspberry Pi <small>bestand eindigt op .AppImage of .deb</small></h2>
+      <div class="btns">
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.1.0/Saga-Techbox-Deur-1.1.0-linux-x86_64.AppImage">Linux-pc <small>AppImage</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.1.0/Saga-Techbox-Deur-1.1.0-linux-amd64.deb">Linux-pc <small>.deb</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.1.0/Saga-Techbox-Deur-1.1.0-linux-arm64.AppImage">Raspberry Pi <small>AppImage</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.1.0/Saga-Techbox-Deur-1.1.0-linux-arm64.deb">Raspberry Pi <small>.deb</small></a>
+      </div>
+      <ol>
+        <li><b>AppImage:</b> maak het uitvoerbaar met <code>chmod +x bestandsnaam</code> en dubbelklik of start het.</li>
+        <li><b>.deb:</b> installeer met <code>sudo apt install ./bestandsnaam</code>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <section>
+    <h2>De eerste keer openen</h2>
+    <ol>
+      <li><b>Windows, Mac, Linux:</b> de app vraagt wat de computer doet. Kies <b>Deurscherm</b> (de monitor bij de deur) of <b>Bedieningspaneel</b> (om te bedienen), en of de server <b>op deze computer</b> draait of op een andere.</li>
+      <li><b>iPhone:</b> vul het adres van de server in, bijvoorbeeld <code>192.168.2.27:8080</code> of je tunneladres, met je gebruikersnaam en wachtwoord.</li>
+      <li>Een andere keuze maken? Op de computer: <b>Ctrl/Cmd + Shift + S</b> opent de instellingen opnieuw.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Welk bestand heb ik nodig?</h2>
+    <table>
+      <tr><th>Apparaat</th><th>Bestand</th></tr>
+      <tr><td>Windows-pc</td><td><code>…windows-setup.exe</code></td></tr>
+      <tr><td>Mac met Apple-chip (M1, M2, M3, M4…)</td><td><code>…mac-arm64.dmg</code></td></tr>
+      <tr><td>Oudere Mac met Intel-chip</td><td><code>…mac-x64.dmg</code></td></tr>
+      <tr><td>iPhone of iPad</td><td><code>Saga-Techbox-Beheer-iOS-unsigned.ipa</code> (plus Sideloadly)</td></tr>
+      <tr><td>Linux-pc</td><td><code>…linux-x86_64.AppImage</code> of <code>…linux-amd64.deb</code></td></tr>
+      <tr><td>Raspberry Pi (64-bit)</td><td><code>…linux-arm64.AppImage</code> of <code>…linux-arm64.deb</code></td></tr>
+    </table>
+  </section>
+
+  <p class="note" style="margin-top:30px">Alle bestanden: <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/tag/v1.1.0">github.com/Milo289/saga-techbox-door/releases</a></p>
+</main>
+</body>
+</html>
