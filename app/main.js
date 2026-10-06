@@ -8,7 +8,7 @@
 // Extras that only the app has (a browser can't do these): tray icon with quick status, global shortcuts,
 // badge with the number of open requests, choose the monitor, always on top, zoom, daily refresh,
 // native save/open dialogs for backups and start at login.
-const { app, BrowserWindow, ipcMain, powerMonitor, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, powerMonitor, clipboard, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -188,11 +188,17 @@ async function launch() {
     return;
   }
   baseOrigin = new URL(base).origin;
-  win = config.role === 'door' ? openDoor(base) : openControl(base);
-  snapshot(win);
-  win.on('closed', () => { if (win && win.isDestroyed()) win = null; });
+  if (config.role === 'server') {
+    // back end only: no window. The server keeps running in the background; the tray icon shows where to find it.
+    if (process.platform === 'darwin') app.dock?.hide();
+    if (displayBlocker === null) displayBlocker = powerSaveBlocker.start('prevent-app-suspension');
+  } else {
+    win = config.role === 'door' ? openDoor(base) : openControl(base);
+    snapshot(win);
+    win.on('closed', () => { if (win && win.isDestroyed()) win = null; });
+  }
   if (old) old.destroy();
-  if (config.role !== 'door' && displayBlocker !== null) { powerSaveBlocker.stop(displayBlocker); displayBlocker = null; }
+  if (config.role === 'control' && displayBlocker !== null) { powerSaveBlocker.stop(displayBlocker); displayBlocker = null; }
   applyAutostart();
   updateTray();
   registerHotkeys();
@@ -222,26 +228,33 @@ function sendStatus(mode) {
   if (!win || win.isDestroyed() || config.role !== 'control' || !MODE_NAMES[mode]) return;
   win.webContents.send('tray-status', mode); // the page does the change itself, with your own login
 }
+function openServerPage(p) { if (localServerUrl) shell.openExternal(localServerUrl + p); }
 function showWindow() { if (win && !win.isDestroyed()) { if (!win.isVisible()) win.show(); if (win.isMinimized()) win.restore(); win.focus(); } }
 function updateTray() {
-  if (!config.tray || !config.role) { if (tray) { tray.destroy(); tray = null; } return; }
+  if ((!config.tray && config.role !== 'server') || !config.role) { if (tray) { tray.destroy(); tray = null; } return; } // a server has no window, so it always has a tray icon
   if (!tray) {
     try {
       const img = nativeImage.createFromPath(ICON).resize({ width: process.platform === 'darwin' ? 18 : 22, height: process.platform === 'darwin' ? 18 : 22 });
       tray = new Tray(img);
-      tray.on('click', showWindow);
+      tray.on('click', () => (config.role === 'server' ? openServerPage('/admin') : showWindow()));
     } catch { tray = null; return; }
   }
-  const control = config.role === 'control';
+  const control = config.role === 'control', serverOnly = config.role === 'server';
   tray.setToolTip(`Saga Techbox Deur${report.label ? ` — ${report.label}` : ''}${report.open ? ` · ${report.open} open` : ''}`);
   tray.setContextMenu(Menu.buildFromTemplate([
+    ...(serverOnly ? [
+      { label: 'Deurserver draait', enabled: false },
+      ...lanAddresses(config.port).map((u) => ({ label: `${u}/admin`, click: () => { clipboard.writeText(`${u}/admin`); } })),
+      { label: 'Bedieningspaneel openen in de browser', click: () => openServerPage('/admin') },
+      { label: 'Deurscherm openen in de browser', click: () => openServerPage('/') },
+    ] : []),
     ...(control ? [
       { label: report.label ? `Nu: ${report.label}` : 'Saga Techbox Deur', enabled: false },
       ...Object.entries(MODE_NAMES).map(([mode, label]) => ({ label: `Zet op ${label}`, type: 'radio', checked: report.mode === mode, click: () => sendStatus(mode) })),
       { type: 'separator' },
       { label: report.open ? `${report.open} open verzoek${report.open === 1 ? '' : 'en'} bekijken` : 'Geen open verzoeken', enabled: !!report.open, click: showWindow },
     ] : []),
-    { label: control ? 'Venster tonen' : 'Deurscherm tonen', click: showWindow },
+    ...(serverOnly ? [] : [{ label: control ? 'Venster tonen' : 'Deurscherm tonen', click: showWindow }]),
     { label: 'Instellingen…', enabled: !hardLocked, click: openSetup },
     { type: 'separator' },
     { label: 'Afsluiten', enabled: !hardLocked, click: () => app.quit() },
@@ -377,8 +390,8 @@ ipcMain.handle('setup:save', async (e, next) => {
   if (!fromSetup(e)) return { ok: false };
   const c = {
     ...config,
-    role: next.role === 'door' ? 'door' : 'control',
-    serverMode: next.serverMode === 'remote' ? 'remote' : 'here',
+    role: ['door', 'server'].includes(next.role) ? next.role : 'control',
+    serverMode: next.role === 'server' || next.serverMode !== 'remote' ? 'here' : 'remote', // a server always runs here
     url: String(next.url || DEFAULTS.url).trim(),
     port: Math.max(1024, Math.min(65535, parseInt(next.port, 10) || 8080)),
     pin: String(next.pin || '').trim().slice(0, 32),
@@ -414,8 +427,8 @@ function buildMenu() {
 app.on('before-quit', (e) => { if (hardLocked && !systemShutdown) { e.preventDefault(); return; } quitting = true; });
 powerMonitor.on('shutdown', () => { systemShutdown = true; }); // never block the computer from shutting down
 app.on('will-quit', () => globalShortcut.unregisterAll());
-app.on('second-instance', () => { const w = setupWin || win; if (w && !w.isDestroyed()) { if (!w.isVisible()) w.show(); if (w.isMinimized()) w.restore(); w.focus(); } });
-app.on('window-all-closed', () => { if (!config.closeToTray || !tray) app.quit(); });
+app.on('second-instance', () => { const w = setupWin || win; if (w && !w.isDestroyed()) { if (!w.isVisible()) w.show(); if (w.isMinimized()) w.restore(); w.focus(); } else if (config.role) openSetup(); });
+app.on('window-all-closed', () => { if (config.role === 'server') return; if (!config.closeToTray || !tray) app.quit(); });
 // Like a protected system file: without a valid access.js the app does not start at all.
 function accessIntact() {
   try { return require('../seal.js').verifyAccess(require('../access.js')); } catch { return false; }

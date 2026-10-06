@@ -24,12 +24,13 @@ Download the installer from the **Releases** page of this repository:
 | Linux PC | `…-linux-….AppImage` or `.deb` marked x64 / x86_64 / amd64 |
 | Raspberry Pi (64-bit OS) | `…-linux-arm64.AppImage` or `…-linux-arm64.deb` |
 
-On first start the app asks what this computer does:
-- **Deurscherm** — shows the door screen full screen and keeps it there (survives restarts, keeps the monitor awake).
-- **Bedieningspaneel** — the control panel in its own window, with system notifications.
+On first start the app asks one question: **what is this computer?**
+- **Alles-in-één** — this computer runs the server and the control panel (easiest; other devices connect to its address).
+- **Deurscherm** — the monitor by the door, full screen (survives restarts, keeps the monitor awake). The server runs here or elsewhere.
+- **Bedieningspaneel** — your workplace: the control panel in its own window, with system notifications. The server runs here or elsewhere.
+- **Alleen de server** — no window; the server runs in the background and a tray icon shows its address.
 
-…and where the server runs: **on this computer** (all-in-one: other devices connect to this computer's
-address, which the settings window shows) or **somewhere else** (enter its address).
+The iPhone/iPad app asks the same: *Bedieningspaneel* (login, Face ID, Siri) or *Deurscherm* (an iPad or iPhone by the door; stays on, five taps top-left open its settings).
 
 Shortcuts: **Ctrl/Cmd + Shift + S** opens the settings, **Ctrl/Cmd + Shift + Q** quits (also on the door screen).
 

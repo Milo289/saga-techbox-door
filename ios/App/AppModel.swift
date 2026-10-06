@@ -20,6 +20,8 @@ final class AppModel: ObservableObject {
     static let shared = AppModel()
 
     @Published var configured: Bool
+    /// "control" = control panel (your own login, Face ID) · "door" = this iPad/iPhone is the door screen
+    @Published var role: String
     @Published var locked: Bool
     @Published var showSettings = false
     @Published var toast: String?
@@ -40,19 +42,21 @@ final class AppModel: ObservableObject {
         }
         if let a = env["DEUR_TEST_ACTION"], let action = QuickAction(rawValue: a) { pendingAction = action }
         #endif
-        let has = DoorApi.configured() != nil && Keychain.load() != nil
+        let savedRole = UserDefaults.standard.string(forKey: "role") ?? "control"
+        role = savedRole
+        let has = DoorApi.configured() != nil && (savedRole == "door" || Keychain.load() != nil)
         configured = has
         faceID = UserDefaults.standard.object(forKey: "faceID") as? Bool ?? true
-        locked = true
+        locked = savedRole != "door" // a door screen has no login and no Face ID
     }
 
     var canLock: Bool { faceID && LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) }
 
     // MARK: Face ID lock
-    func lockNow() { if configured && canLock { locked = true } }
+    func lockNow() { if configured && role == "control" && canLock { locked = true } }
 
     func unlock() async {
-        guard configured else { locked = false; return }
+        guard configured, role == "control" else { locked = false; return }
         guard canLock else { locked = false; await runPending(); return }
         let ctx = LAContext()
         ctx.localizedCancelTitle = "Annuleren"
@@ -116,14 +120,26 @@ final class AppModel: ObservableObject {
     func reload() { webView?.reload() }
 
     func finishSetup() {
+        UserDefaults.standard.set("control", forKey: "role")
+        role = "control"
         configured = true
         locked = false
         requestNotificationPermission()
     }
 
+    /// This device becomes the door screen: only the server address is needed.
+    func finishDoorSetup() {
+        UserDefaults.standard.set("door", forKey: "role")
+        role = "door"
+        configured = true
+        locked = false
+    }
+
     func forgetEverything() {
         Keychain.delete()
         UserDefaults.standard.removeObject(forKey: "serverURL")
+        UserDefaults.standard.removeObject(forKey: "role")
+        role = "control"
         configured = false
         showSettings = false
     }
