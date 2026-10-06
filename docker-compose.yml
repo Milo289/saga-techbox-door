@@ -9,11 +9,6 @@ services:
       - TZ=${TZ:-Europe/Amsterdam}
       # PIN for the control panel at /admin. Leave empty for no PIN (only do that on a trusted network).
       - ADMIN_PIN=${ADMIN_PIN:-1234}
-      # Owner account (full rights: users, permissions, API keys, log). Set both, then log in with a name + password.
-      # Better: OWNER_PASSWORD_HASH instead of OWNER_PASSWORD — make one with: node server.js --hash "your password"
-      - OWNER_USER=${OWNER_USER:-}
-      - OWNER_PASSWORD=${OWNER_PASSWORD:-}
-      - OWNER_PASSWORD_HASH=${OWNER_PASSWORD_HASH:-}
     volumes:
       - door-data:/data
     restart: unless-stopped

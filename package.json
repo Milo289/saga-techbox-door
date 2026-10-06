@@ -14,7 +14,7 @@
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --publish never",
     "dist:linux": "electron-builder --linux --publish never",
-    "owner": "node tools/set-owner.js"
+    "login": "node tools/set-login.js"
   },
   "devDependencies": {
     "electron": "^44.5.1",
@@ -28,7 +28,7 @@
       "app/**",
       "public/**",
       "server.js",
-      "owner.js",
+      "access.js",
       "package.json"
     ],
     "directories": {

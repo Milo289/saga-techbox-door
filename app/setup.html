@@ -100,19 +100,6 @@
     </div>
   </details>
 
-  <details class="adv" id="advOwner">
-    <summary>Eigenaar en beveiliging <span class="tag">alleen in de app</span></summary>
-    <div class="body">
-      <p class="hint" style="margin:0">Het eigenaaraccount heeft altijd alle rechten: gebruikers en rechten beheren, API-sleutels maken, activiteitenlog. Alleen een hash van het wachtwoord wordt bewaard — nooit het wachtwoord zelf.</p>
-      <div class="grid2">
-        <label class="f">Gebruikersnaam<input type="text" id="ownerUser" autocomplete="off" spellcheck="false" placeholder="bijv. milo"></label>
-        <label class="f">Wachtwoord<input type="password" id="ownerPassword" autocomplete="new-password" placeholder="minstens 8 tekens"></label>
-      </div>
-      <p class="hint" id="ownerState" style="margin:0"></p>
-      <label class="check hidden" id="rowOwnerClear"><input type="checkbox" id="ownerClear"> Eigenaaraccount verwijderen (dan geldt weer alleen de pincode)</label>
-    </div>
-  </details>
-
   <div class="card" id="aboutBox">
     <p class="hint" id="about" style="margin:0"></p>
     <div class="row"><button type="button" id="reveal" class="hidden">Open de gegevensmap</button></div>
@@ -145,17 +132,12 @@
   $('alwaysOnTop').checked = !!c.alwaysOnTop; $('tray').checked = c.tray !== false; $('closeToTray').checked = !!c.closeToTray; $('hotkeys').checked = !!c.hotkeys;
   $('windowed').checked = !!c.windowed;
   $('display').replaceChildren(...info.displays.map((d) => new Option(d.label, d.id, false, d.id === c.display)));
-  $('ownerUser').value = c.ownerUser || '';
-  if (c.ownerLocked) { $('advOwner').querySelector('.body').innerHTML = ''; const p = document.createElement('p'); p.className = 'hint'; p.style.margin = '0'; p.textContent = `De eigenaar (${c.fixedOwner}) staat vast in deze app en kan hier niet worden gewijzigd.`; $('advOwner').querySelector('.body').append(p); }
-  else $('ownerState').textContent = c.ownerSet ? `Er is een eigenaaraccount (${c.ownerUser}). Laat het wachtwoord leeg om het te behouden.` : 'Nog geen eigenaaraccount. Zonder account geldt alleen de pincode (of geen beveiliging als die leeg is).';
-  $('rowOwnerClear').classList.toggle('hidden', !c.ownerSet);
   $('about').textContent = `Versie ${info.version} · ${info.platform} · gegevens in ${info.dataDir}`;
   const roleSync = () => {
     const door = val('role') === 'door', here = val('mode') !== 'remote';
     $('rowDoor').classList.toggle('hidden', !door);
     $('rowHotkeys').classList.toggle('hidden', door);
     $('rowCloseTray').classList.toggle('hidden', door);
-    $('advOwner').classList.toggle('hidden', !here);
     $('reveal').classList.toggle('hidden', !here);
   };
   document.querySelectorAll('input[name=role], input[name=mode]').forEach((r) => r.addEventListener('change', roleSync));
@@ -193,7 +175,6 @@
       port: $('port').value, pin: $('pin').value, autostart: $('autostart').checked,
       zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
       closeToTray: $('closeToTray').checked, hotkeys: $('hotkeys').checked, display: $('display').value, windowed: $('windowed').checked,
-      ownerUser: $('ownerUser').value, ownerPassword: $('ownerPassword').value, ownerClear: $('ownerClear').checked,
     });
     if (!res || !res.ok) { $('err').textContent = (res && res.error) || 'Opslaan lukte niet.'; $('save').disabled = false; }
   };

@@ -52,28 +52,14 @@ ADMIN_PIN=1234 node server.js
 ## Accounts, rights and the API
 
 By default the control panel opens with a PIN (`ADMIN_PIN`) — or without protection if you set nothing.
-For real accounts, set up the **owner** — *you*, the one account that is fixed in the code:
+For a real login, run this once on the computer that has the code:
 
 ```
-npm run owner        # asks for a username and password (hidden), writes owner.js
+npm run login        # asks for a username and password (hidden) and writes them, as a hash, to access.js
 ```
-`owner.js` then holds your username and a **hash** of the password (never the password itself). It is part of the code, so
-**no website, setting or environment variable can change or override it** — to change it you run the command again and restart /
-rebuild. There is no "forgot password", so keep the password in a password manager, and choose a long one (12+ characters).
-Remember `owner.js` is committed with the project (private repository) and built into the app.
+Then restart the server (or build the app again). That login always has every right. Keep the password safe — there is no reset.
 
-Alternatively (not fixed in the code) the server can take the owner from start-up settings:
-
-| Setting | Meaning |
-|---|---|
-| `OWNER_USER` | name of the owner (default `owner`) |
-| `OWNER_PASSWORD` | the owner's password |
-| `OWNER_PASSWORD_HASH` | same, but as a hash, so the password itself is never stored: `node server.js --hash "my password"` |
-
-The owner lives in the start-up settings, **not** in the code or the data file: it can't be changed or deleted from the website
-and always has every right. (In the desktop app: *Instellingen → Eigenaar en beveiliging*.)
-
-The owner then gets a **Beheer** tab:
+With it you get a **Beheer** tab:
 - **Gebruikers** — create accounts with a role (*beheerder*, *medewerker*, *kijker*) and tick exactly which rights each person has:
   see status · change status/message/busy times · see and answer visitors · manage people · change settings · set up mail ·
   backups · see the log · manage users · manage API keys. Nobody can give rights they don't have themselves.
@@ -105,7 +91,6 @@ Install the app (see above) and you get, on top of the website:
 - the door screen on a **chosen monitor**, optionally in a window, with a **daily refresh** (e.g. 04:00)
 - **always on top**, **zoom**, start at login (Windows, macOS, Linux)
 - backups **saved to / restored from a file** with the normal save/open dialogs, and *open data folder*
-- the **owner account** for the built-in server
 
 All of these are in *Instellingen → Venster en sneltoetsen* (Ctrl/Cmd+Shift+S) and on the *Deze app* card in the control panel.
 

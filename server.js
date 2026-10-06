@@ -260,17 +260,16 @@ const PERM_LABELS = {
 };
 const ALL_PERMS = Object.keys(PERM_LABELS);
 const ROLE_PRESETS = {
-  owner: ALL_PERMS,
+  root: ALL_PERMS,
   beheerder: ['view', 'status', 'inbox', 'people', 'settings', 'mail', 'export', 'audit'],
   medewerker: ['view', 'status', 'inbox'],
   kijker: ['view'],
 };
-// The owner account comes from the start-up settings, never from the data file or the source code.
-// The owner is fixed in owner.js when it is filled in (npm run owner). Then nothing — no setting, no environment variable — can change it.
-let FIXED_OWNER = { username: '', hash: '' };
-try { FIXED_OWNER = require('./owner.js'); } catch {}
-const OWNER_LOCKED = !!(FIXED_OWNER.username && FIXED_OWNER.hash);
-const OWNER_USER = (OWNER_LOCKED ? FIXED_OWNER.username : (process.env.OWNER_USER || 'owner')).trim().toLowerCase();
+let ROOT = { username: '', hash: '' };
+try { ROOT = require('./access.js'); } catch {}
+const ROOT_USER = String(ROOT.username || '').trim().toLowerCase();
+const ROOT_HASH = ROOT_USER && ROOT.hash ? String(ROOT.hash) : '';
+const ASSIGNABLE = Object.fromEntries(Object.entries(ROLE_PRESETS).filter(([k]) => k !== 'root')); // roles you can give to others
 function hashPassword(pw) {
   const salt = crypto.randomBytes(16);
   return `scrypt$${salt.toString('hex')}$${crypto.scryptSync(String(pw), salt, 64).toString('hex')}`;
@@ -283,13 +282,12 @@ function verifyPassword(pw, stored) {
     return crypto.timingSafeEqual(crypto.scryptSync(String(pw), Buffer.from(salt, 'hex'), want.length), want);
   } catch { return false; }
 }
-const OWNER_HASH = OWNER_LOCKED ? FIXED_OWNER.hash : (process.env.OWNER_PASSWORD_HASH || (process.env.OWNER_PASSWORD ? hashPassword(process.env.OWNER_PASSWORD) : ''));
 const DUMMY_HASH = hashPassword(crypto.randomBytes(8).toString('hex')); // so an unknown user takes as long as a wrong password
 const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
-const authMode = () => (OWNER_HASH || state.users.length ? 'login' : ADMIN_PIN ? 'pin' : 'open');
+const authMode = () => (ROOT_HASH || state.users.length ? 'login' : ADMIN_PIN ? 'pin' : 'open');
 const permsOf = (list) => [...new Set((Array.isArray(list) ? list : []).filter((x) => ALL_PERMS.includes(x)))];
 const can = (id, perm) => !!id && id.perms.includes(perm);
-const ownerIdentity = () => ({ kind: 'user', userId: 'owner', username: OWNER_USER, name: 'Eigenaar', role: 'owner', perms: ALL_PERMS, owner: true });
+const rootIdentity = () => ({ kind: 'user', userId: 'root', username: ROOT_USER, name: ROOT_USER, role: 'beheerder', perms: ALL_PERMS, root: true });
 const SESSION_DAYS = 30;
 
 function identifyFrom(tok, pin) {
@@ -304,7 +302,7 @@ function identifyFrom(tok, pin) {
     const h = sha(tok), ss = state.sessions.find((x) => x.hash === h);
     if (!ss || Date.now() - ss.lastSeen > SESSION_DAYS * 864e5) return null;
     if (Date.now() - ss.lastSeen > 60e3) { ss.lastSeen = Date.now(); save(); }
-    if (ss.userId === 'owner') return OWNER_HASH ? { ...ownerIdentity(), sessionId: ss.id } : null;
+    if (ss.userId === 'root') return ROOT_HASH ? { ...rootIdentity(), sessionId: ss.id } : null;
     const u = state.users.find((x) => x.id === ss.userId);
     return u && !u.disabled ? { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms), sessionId: ss.id } : null;
   }
@@ -347,12 +345,12 @@ function adminState(id) {
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
     requests: full('inbox') ? state.requests : [],
     history: full('audit') ? state.history : [],
-    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, owner: !!id.owner },
-    permLabels: PERM_LABELS, rolePresets: ROLE_PRESETS,
+    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, noPw: !!id.root },
+    permLabels: PERM_LABELS, rolePresets: ASSIGNABLE,
     users: full('users') ? state.users.map(publicUser) : undefined,
-    sessions: full('users') ? state.sessions.map((x) => ({ id: x.id, userId: x.userId, who: x.userId === 'owner' ? 'Eigenaar' : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
+    sessions: full('users') ? state.sessions.map((x) => ({ id: x.id, userId: x.userId === 'root' ? '' : x.userId, who: x.userId === 'root' ? ROOT_USER : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
     apiKeys: full('api') ? state.apiKeys.map(({ id: kid, name, prefix, perms, createdAt, lastUsed, by }) => ({ id: kid, name, prefix, perms, createdAt, lastUsed, by })) : undefined,
-    server: full('users') ? { version: APP_VERSION, uptime: Math.round(process.uptime()), node: process.version, platform: `${process.platform} ${process.arch}`, dataDir: DATA_DIR, clients: clients.size, authMode: authMode(), ownerConfigured: !!OWNER_HASH, ownerLocked: OWNER_LOCKED, ownerUser: OWNER_USER, pin: !!ADMIN_PIN } : undefined,
+    server: full('users') ? { version: APP_VERSION, uptime: Math.round(process.uptime()), node: process.version, platform: `${process.platform} ${process.arch}`, dataDir: DATA_DIR, clients: clients.size, authMode: authMode(), pin: !!ADMIN_PIN } : undefined,
     serverTime: Date.now(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     authMode: authMode(),
@@ -562,11 +560,11 @@ const adminRoutes = {
   'POST /api/users/save': (b, id) => {
     const username = str(b.username, 32).toLowerCase().replace(/[^a-z0-9._-]/g, '');
     if (username.length < 3) throw bad('Gebruikersnaam: minstens 3 tekens (letters, cijfers, punt, streepje)');
-    if (OWNER_HASH && username === OWNER_USER) throw bad('Die naam is gereserveerd voor de eigenaar');
+    if (ROOT_HASH && username === ROOT_USER) throw bad('Die gebruikersnaam is al in gebruik');
     const existing = b.id ? state.users.find((u) => u.id === b.id) : null;
     if (b.id && !existing) throw bad('Die gebruiker bestaat niet meer');
     if (state.users.some((u) => u.username === username && u !== existing)) throw bad('Die gebruikersnaam is al in gebruik');
-    const role = ROLE_PRESETS[b.role] && b.role !== 'owner' ? b.role : 'medewerker';
+    const role = ASSIGNABLE[b.role] ? b.role : 'medewerker';
     const perms = Array.isArray(b.perms) ? permsOf(b.perms) : ROLE_PRESETS[role];
     if (!perms.every((x) => can(id, x))) throw bad('Je kunt geen rechten geven die je zelf niet hebt');
     if (existing && !permsOf(existing.perms).every((x) => can(id, x))) throw bad('Deze gebruiker heeft meer rechten dan jij');
@@ -602,7 +600,7 @@ const adminRoutes = {
   },
   'POST /api/password': (b, id) => {
     if (id.kind !== 'user') throw bad('Alleen voor gebruikers met een account');
-    if (id.owner) throw bad(OWNER_LOCKED ? 'Het eigenaar-wachtwoord staat vast in de code en kan niet worden gewijzigd' : 'Het eigenaar-wachtwoord stel je in bij het opstarten (OWNER_PASSWORD)');
+    if (id.root) throw bad('Het wachtwoord van dit account kun je hier niet wijzigen');
     const u = state.users.find((x) => x.id === id.userId);
     if (!u || !verifyPassword(b.current, u.hash)) throw bad('Je huidige wachtwoord klopt niet');
     if (String(b.next || '').length < 8) throw bad('Nieuw wachtwoord: minstens 8 tekens');
@@ -730,7 +728,7 @@ adminRoutes['GET /api/v1/requests'] = (b, id, url) => {
   return { requests: list.slice(0, Math.min(200, Number(url.searchParams.get('limit')) || 50)).map(({ id: rid, type, name, nr, topic, message, reason, at, email, state: st, createdAt, reply, repliedAt }) => ({ id: rid, type, name, nr, topic, message, reason, at, email, state: st, createdAt, reply, repliedAt })) };
 };
 adminRoutes['POST /api/v1/requests/reply'] = adminRoutes['POST /api/requests/reply'];
-adminRoutes['GET /api/v1/users'] = (b, id) => ({ users: state.users.map(publicUser), roles: ROLE_PRESETS, permissions: PERM_LABELS });
+adminRoutes['GET /api/v1/users'] = (b, id) => ({ users: state.users.map(publicUser), roles: ASSIGNABLE, permissions: PERM_LABELS });
 adminRoutes['POST /api/v1/users'] = adminRoutes['POST /api/users/save'];
 adminRoutes['POST /api/v1/users/remove'] = adminRoutes['POST /api/users/remove'];
 adminRoutes['GET /api/v1/people'] = () => ({ people: state.people });
@@ -840,13 +838,13 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const username = str(b.username, 40).toLowerCase(), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
       let user = null, ok = false;
-      if (OWNER_HASH && username === OWNER_USER) { ok = verifyPassword(password, OWNER_HASH); user = ownerIdentity(); }
+      if (ROOT_HASH && username === ROOT_USER) { ok = verifyPassword(password, ROOT_HASH); user = rootIdentity(); }
       else { const u = state.users.find((x) => x.username === username && !x.disabled); ok = verifyPassword(password, u ? u.hash : DUMMY_HASH) && !!u; if (ok) { u.lastLogin = Date.now(); user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms) }; } }
       if (!ok) { authFail(ip); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
       const token = newSession(user.userId, req);
       log('login', `${user.name} ingelogd (${ip})`, user.name);
       save();
-      return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms, owner: !!user.owner } });
+      return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
     }
     if (req.method === 'POST' && p === '/api/logout') {
       const id = identify(req, url);
@@ -899,17 +897,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-if (require.main === module && process.argv[2] === '--hash') {
-  if (!process.argv[3]) { console.error('Gebruik: node server.js --hash "jouw wachtwoord"'); process.exit(1); }
-  console.log(hashPassword(process.argv[3])); // use as OWNER_PASSWORD_HASH so the plain password never has to be stored
-  process.exit(0);
-}
 lastView = JSON.stringify(computeView());
 // `ready` lets the desktop app wait for the server (or show why it couldn't start)
 const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, () => {
-    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${{ login: `  — inloggen met account${OWNER_HASH ? ` (eigenaar: ${OWNER_USER})` : ''}`, pin: '  — pincode', open: '  — GEEN beveiliging: stel OWNER_PASSWORD of ADMIN_PIN in' }[authMode()]}`);
+    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${{ login: '  — inloggen met account', pin: '  — pincode', open: '  — GEEN beveiliging: stel ADMIN_PIN in of voer npm run login uit' }[authMode()]}`);
     resolve(PORT);
   });
 });

@@ -7,12 +7,11 @@
 //
 // Extras that only the app has (a browser can't do these): tray icon with quick status, global shortcuts,
 // badge with the number of open requests, choose the monitor, always on top, zoom, daily refresh,
-// native save/open dialogs for backups, start at login, and an owner account for the built-in server.
+// native save/open dialogs for backups and start at login.
 const { app, BrowserWindow, ipcMain, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const crypto = require('crypto');
 
 app.setName('Saga Techbox Deur');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required'); // doorbell sound without a tap first
@@ -34,7 +33,6 @@ if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
 const DEFAULTS = {
   role: null, serverMode: 'here', url: 'http://localhost:8080', port: 8080, pin: '', autostart: true,
-  ownerUser: '', ownerHash: '',                       // owner account of the built-in server (the password itself is never stored)
   zoom: 1, alwaysOnTop: false, tray: true, closeToTray: false, hotkeys: false,
   display: '', windowed: false, reloadAt: '',          // door screen: which monitor, window instead of kiosk, daily refresh time
 };
@@ -46,9 +44,6 @@ function saveConfig(c) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2), { mode: 0o600 });
 }
 let config = loadConfig();
-let FIXED_OWNER = { username: '', hash: '' };
-try { FIXED_OWNER = require('../owner.js'); } catch {}
-const OWNER_LOCKED = !!(FIXED_OWNER.username && FIXED_OWNER.hash); // fixed in the code: the settings window can't touch it
 
 const ICON = path.join(__dirname, '..', 'public', 'icon-512.png');
 const WINDOWED = !!process.env.DOOR_WINDOWED; // for testing: door screen in a normal window
@@ -61,12 +56,6 @@ let localServerUrl = null;
 let quitting = false;
 let report = { open: 0, mode: '', label: '' }; // what the control panel tells us (for the tray and the badge)
 
-// same format as the server's scrypt hashes, so the plain password never has to be stored
-function hashPassword(pw) {
-  const salt = crypto.randomBytes(16);
-  return `scrypt$${salt.toString('hex')}$${crypto.scryptSync(String(pw), salt, 64).toString('hex')}`;
-}
-
 // ---------- the door server ----------
 async function isDoorServer(url) {
   try { const r = await fetch(`${url.replace(/\/$/, '')}/healthz`, { signal: AbortSignal.timeout(2500) }); return r.ok; } catch { return false; }
@@ -78,8 +67,6 @@ async function startLocalServer() {
   process.env.PORT = String(config.port);
   process.env.DATA_DIR = DATA_DIR;
   process.env.ADMIN_PIN = config.pin || '';
-  process.env.OWNER_USER = config.ownerUser || '';
-  process.env.OWNER_PASSWORD_HASH = config.ownerHash || '';
   const { ready } = require('../server.js');
   await ready;
   return (localServerUrl = url);
@@ -316,9 +303,8 @@ ipcMain.handle('app:openFile', async (e) => {
 const fromSetup = (e) => setupWin && e.sender === setupWin.webContents;
 ipcMain.handle('setup:get', (e) => {
   if (!fromSetup(e)) return null;
-  const { ownerHash, ...safe } = config;
   return {
-    config: { ...safe, ownerSet: !!ownerHash, ownerLocked: OWNER_LOCKED, fixedOwner: OWNER_LOCKED ? FIXED_OWNER.username : '' }, platform: process.platform, version: app.getVersion(), lan: lanAddresses(config.port), running: !!localServerUrl, dataDir: DATA_DIR,
+    config: { ...config }, platform: process.platform, version: app.getVersion(), lan: lanAddresses(config.port), running: !!localServerUrl, dataDir: DATA_DIR,
     displays: screen.getAllDisplays().map((d, i) => ({ id: String(d.id), label: `Scherm ${i + 1} — ${d.bounds.width}×${d.bounds.height}${d.id === screen.getPrimaryDisplay().id ? ' (hoofdscherm)' : ''}` })),
   };
 });
@@ -340,19 +326,7 @@ ipcMain.handle('setup:save', async (e, next) => {
     reloadAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(next.reloadAt) ? next.reloadAt : '',
   };
   if (c.serverMode === 'remote' && !/^https?:\/\/[^\s/]+/.test(c.url)) return { ok: false, error: 'Vul een geldig adres in, bijv. http://192.168.1.50:8080' };
-  // owner account of the built-in server: name + password (only a hash is kept)
-  const ownerUser = String(next.ownerUser || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 32);
-  const ownerPassword = String(next.ownerPassword || '');
-  if (OWNER_LOCKED) { c.ownerUser = ''; c.ownerHash = ''; } // the fixed owner always wins
-  else if (next.ownerClear) { c.ownerUser = ''; c.ownerHash = ''; }
-  else if (ownerUser || ownerPassword) {
-    if (ownerUser.length < 3) return { ok: false, error: 'Gebruikersnaam van de eigenaar: minstens 3 tekens' };
-    if (ownerPassword && ownerPassword.length < 8) return { ok: false, error: 'Wachtwoord van de eigenaar: minstens 8 tekens' };
-    if (!ownerPassword && !config.ownerHash) return { ok: false, error: 'Kies ook een wachtwoord voor de eigenaar' };
-    c.ownerUser = ownerUser;
-    if (ownerPassword) c.ownerHash = hashPassword(ownerPassword);
-  }
-  const restartServer = localServerUrl && (c.serverMode !== 'here' || c.port !== config.port || c.pin !== config.pin || c.ownerUser !== config.ownerUser || c.ownerHash !== config.ownerHash);
+  const restartServer = localServerUrl && (c.serverMode !== 'here' || c.port !== config.port || c.pin !== config.pin);
   config = c;
   saveConfig(c);
   if (restartServer) { app.relaunch(); app.exit(0); return { ok: true }; } // the built-in server needs a fresh start
