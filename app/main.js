@@ -376,7 +376,16 @@ app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('second-instance', () => { const w = setupWin || win; if (w && !w.isDestroyed()) { if (!w.isVisible()) w.show(); if (w.isMinimized()) w.restore(); w.focus(); } });
 app.on('window-all-closed', () => { if (!config.closeToTray || !tray) app.quit(); });
+// Like a protected system file: without a valid access.js the app does not start at all.
+function accessIntact() {
+  try { return require('../seal.js').verifyAccess(require('../access.js')); } catch { return false; }
+}
 app.whenReady().then(() => {
+  if (!accessIntact()) {
+    dialog.showErrorBox('Saga Techbox Deur kan niet starten', 'Een beveiligd bestand van het programma ontbreekt of is beschadigd. Installeer het programma opnieuw.');
+    app.quit();
+    return;
+  }
   buildMenu();
   launch();
 });

@@ -208,6 +208,13 @@
     <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Pincode">
     <button class="white" id="pinBtn" type="submit">Ontgrendelen</button>
   </form>
+  <form id="forceForm" class="lf hidden" autocomplete="off">
+    <p class="muted" style="margin:0 0 4px">Kies nu een eigen wachtwoord. Tot je dat doet, is alles geblokkeerd.</p>
+    <input id="fcur" type="password" autocomplete="current-password" placeholder="Startwachtwoord" class="hidden">
+    <input id="fnew" type="password" autocomplete="new-password" placeholder="Nieuw wachtwoord (minstens 12 tekens)">
+    <input id="fnew2" type="password" autocomplete="new-password" placeholder="Nog een keer">
+    <button class="white" id="forceBtn" type="submit">Wachtwoord opslaan</button>
+  </form>
   <button class="link-btn hidden" id="swapLogin" type="button"></button>
   <p class="muted" id="pinErr"></p>
 </div>
@@ -241,7 +248,7 @@
   const can = (p) => !!S?.me?.perms.includes(p);
   let S = null;
   let tab = store.get('doorTab', 'now');
-  if (!['now', 'inbox', 'settings', 'admin'].includes(tab)) tab = 'now';
+  if (!['now', 'inbox', 'settings', 'admin', 'system'].includes(tab)) tab = 'now';
   let inboxFilter = 'open';
   let alertId = null;
   let es = null, lastMsg = 0;
@@ -331,6 +338,7 @@
     try {
       res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: body ? JSON.stringify(body) : undefined });
     } catch { toast('Geen verbinding met de deurserver'); throw new Error('offline'); }
+    if (res.status === 403) { const o403 = await res.clone().json().catch(() => ({})); if (o403.mustChange) { showForceChange(); throw new Error('mustChange'); } }
     if (res.status === 401) { const had = TOKEN || PIN; TOKEN = ''; store.set('doorToken', ''); showLogin(had ? 'Je bent uitgelogd — log opnieuw in' : ''); throw new Error('auth'); }
     const out = await res.json().catch(() => ({}));
     if (!res.ok) { toast(out.error || 'Er ging iets mis'); throw new Error(out.error); }
@@ -339,6 +347,32 @@
 
   // ---------- login + live connection ----------
   let authInfo = { mode: 'login', pin: false };
+  let pendingCred = null; // the start password just typed, so the new-password form doesn't ask for it again
+  function showForceChange() {
+    if (es) { es.close(); es = null; }
+    $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
+    $('userForm').classList.add('hidden'); $('pinForm').classList.add('hidden'); $('swapLogin').classList.add('hidden');
+    $('forceForm').classList.remove('hidden');
+    $('fcur').classList.toggle('hidden', !!pendingCred);
+    $('pinErr').textContent = '';
+    setTimeout(() => $(pendingCred ? 'fnew' : 'fcur').focus(), 50);
+  }
+  $('forceForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('forceBtn'); btn.disabled = true; $('pinErr').textContent = '';
+    try {
+      const next = $('fnew').value, again = $('fnew2').value, current = pendingCred ? pendingCred.password : $('fcur').value;
+      if (next !== again) { $('pinErr').textContent = 'De twee wachtwoorden zijn niet hetzelfde'; return; }
+      const res = await fetch('/api/password', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ current, next }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { $('pinErr').textContent = out.error || 'Wachtwoord wijzigen lukte niet'; return; }
+      if (window.doorApp?.saveLogin && pendingCred?.remember) window.doorApp.saveLogin(pendingCred.username, next);
+      pendingCred = null; $('forceForm').classList.add('hidden'); $('fnew').value = $('fnew2').value = $('fcur').value = '';
+      toast('Wachtwoord opgeslagen');
+      start();
+    } catch { $('pinErr').textContent = 'Geen verbinding met de deurserver'; }
+    finally { btn.disabled = false; }
+  };
   let autoLoginTried = false;
   // desktop app: sign in again by itself with the login that is stored encrypted on this computer
   async function autoLogin() {
@@ -351,13 +385,16 @@
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { if (res.status === 401) window.doorApp.clearLogin(); return false; } // password changed: forget it
       TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', '');
+      if (out.mustChange) { pendingCred = { username: saved.username, password: saved.password, remember: true }; showForceChange(); return 'force'; }
       return true;
     } catch { return false; }
   }
   async function showLogin(msg) {
-    if (await autoLogin()) { start(); return; }
+    const al = await autoLogin();
+    if (al === 'force') return;
+    if (al) { start(); return; }
     $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
-    $('rememberText').textContent = window.doorApp?.saveLogin ? 'Onthoud mijn inlog op deze computer (versleuteld)' : 'Onthoud mij op dit apparaat (1 jaar)';
+    $('rememberText').textContent = window.doorApp?.saveLogin ? 'Onthoud mijn inlog op deze computer (versleuteld)' : 'Onthoud mij op dit apparaat';
     $('remember').checked = store.get('doorRemember', window.doorApp?.saveLogin ? '1' : '0') === '1';
     $('pinErr').textContent = msg || '';
     if (es) { es.close(); es = null; }
@@ -368,6 +405,7 @@
     setTimeout(() => $(pinOnly ? 'pin' : 'lu').focus(), 50);
   }
   function setLoginForm(which) {
+    $('forceForm').classList.add('hidden');
     $('userForm').classList.toggle('hidden', which !== 'user');
     $('pinForm').classList.toggle('hidden', which !== 'pin');
     $('swapLogin').textContent = which === 'user' ? 'Liever met een pincode inloggen' : 'Inloggen met gebruikersnaam';
@@ -383,6 +421,7 @@
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { $('pinErr').textContent = out.error || 'Inloggen lukte niet'; $('lp').value = ''; $('lp').focus(); return; }
       TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', ''); $('lp').value = '';
+      if (out.mustChange) { pendingCred = { username: typed.username, password: typed.password, remember }; showForceChange(); return; }
       if (window.doorApp?.saveLogin) { if (remember) window.doorApp.saveLogin(typed.username, typed.password).then((r) => { if (r && !r.ok && r.error) toast(r.error); }); else window.doorApp.clearLogin(); }
       start();
     } catch { $('pinErr').textContent = 'Geen verbinding met de deurserver'; }
@@ -521,9 +560,9 @@
   function updateTitle() { const n = S ? S.requests.filter((r) => r.state === 'new').length : 0; document.title = (n ? `(${n}) ` : '') + 'Deurbediening'; }
 
   // ---------- frame ----------
-  const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer']].filter(Boolean);
+  const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer'], can('system') && ['system', 'Systeem']].filter(Boolean);
   let userDraft = null, keyDraft = null, newKey = null;
-  const editing = () => tab === 'settings' || (tab === 'admin' && (userDraft || keyDraft));
+  const editing = () => tab === 'settings' || tab === 'system' || (tab === 'admin' && (userDraft || keyDraft));
   function setTab(t) { tab = t; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
 
   // never redraw while a finger/mouse button is down, or that click would get lost
@@ -711,12 +750,69 @@
       v.pin && v.authMode === 'login' ? h('p', { class: 'muted', style: 'margin-bottom:0' }, 'Tip: de oude pincode werkt nog als beheerder. Haal ADMIN_PIN weg uit de opstartinstellingen als alleen accounts mogen inloggen.') : null);
   }
 
+  // ---------- Systeem: settings only the main account has ----------
+  let sysData = null, sysDraft = null;
+  async function loadSystem() { sysData = await api('/api/system'); sysDraft = structuredClone(sysData.system); if (tab === 'system') renderAll(true); }
+  const bytes = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
+  const confirmWord = (what) => (prompt(`${what}\n\nDit kan niet ongedaan worden gemaakt. Typ WISSEN om door te gaan.`) || '').trim().toUpperCase() === 'WISSEN';
+
+  function systemView() {
+    if (!sysData) { loadSystem().catch(() => {}); return [h('div', { class: 'card' }, h('p', { class: 'muted', style: 'margin:0' }, 'Laden…'))]; }
+    const d = sysDraft;
+    const num = (key, min, max, w = '84px') => h('input', { type: 'number', min, max, value: d[key], style: `width:${w}`, oninput: (e) => { d[key] = Number(e.target.value); } });
+    const chk = (key, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: d[key], onchange: (e) => { d[key] = e.target.checked; } }), label);
+    const save = async () => { await api('/api/system/settings', d); toast('Systeeminstellingen opgeslagen'); await loadSystem(); };
+    const cur = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Huidig wachtwoord' });
+    const nw = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nieuw wachtwoord (minstens 12 tekens)' });
+    const nw2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nog een keer' });
+    const ips = h('textarea', { placeholder: 'Leeg = overal toegestaan.\nbijv. 192.168.1.0/24\nof 10.0.0.5', style: 'min-height:90px', oninput: (e) => { d.allowedIps = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); } }, d.allowedIps.join('\n'));
+    const when = (t) => (t ? new Date(t).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—');
+    const download = async (name) => {
+      const res = await fetch('/api/system/backups/download?name=' + encodeURIComponent(name), { headers: authHeaders() });
+      if (!res.ok) return toast('Downloaden mislukt');
+      const text = await res.text();
+      if (window.doorApp?.saveFile) { const r = await window.doorApp.saveFile(name, text); if (r.ok) toast('Opgeslagen'); return; }
+      const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: name }); a.click();
+    };
+    return [
+      h('div', { class: 'card' }, h('h2', {}, 'Mijn wachtwoord'),
+        h('p', { class: 'muted', style: 'margin-top:0' }, sysData.accountChangedAt ? `Laatst gewijzigd op ${when(sysData.accountChangedAt)}.` : 'Je gebruikt nog het startwachtwoord.'),
+        h('div', { class: 'list' }, cur, nw, nw2, h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => {
+          if (nw.value !== nw2.value) return toast('De twee wachtwoorden zijn niet hetzelfde');
+          await api('/api/password', { current: cur.value, next: nw.value }); cur.value = nw.value = nw2.value = ''; toast('Wachtwoord gewijzigd'); await loadSystem();
+        } }, 'Wachtwoord wijzigen')))),
+
+      h('div', { class: 'card' }, h('h2', {}, 'Toegang', h('span', { class: 'sp' }), h('button', { class: 'white sm', onclick: save }, 'Opslaan')),
+        h('div', { class: 'form' },
+          h('label', {}, 'Onderhoud'), h('div', {}, chk('maintenance', 'Onderhoudsmodus: alleen jij kunt nog in het paneel'), h('input', { value: d.maintenanceMessage, placeholder: 'Bericht voor de anderen, bijv. “We zijn zo terug”', maxlength: 200, style: 'margin-top:8px;width:100%', oninput: (e) => { d.maintenanceMessage = e.target.value; } })),
+          h('label', {}, 'Toegestane netwerken'), h('div', {}, ips, h('div', { class: 'muted', style: 'margin-top:4px' }, `Alleen deze adressen mogen inloggen (jij niet gebonden). Jouw adres nu: ${sysData.yourIp || '—'}.`)),
+          h('label', {}, 'Ingelogd blijven'), h('div', { class: 'row' }, num('sessionDays', 1, 365), h('span', { class: 'muted' }, 'dagen, of'), num('rememberDays', 1, 730), h('span', { class: 'muted' }, 'dagen met “onthoud mij” (bij niet-gebruik)')),
+          h('label', {}, 'Foute pogingen'), h('div', { class: 'row' }, h('span', { class: 'muted' }, 'blokkeer na'), num('maxAttempts', 3, 200), h('span', { class: 'muted' }, 'pogingen, voor'), num('blockMinutes', 1, 1440), h('span', { class: 'muted' }, 'minuten')))),
+
+      h('div', { class: 'card' }, h('h2', {}, 'Gegevens', h('span', { class: 'sp' }), h('button', { class: 'white sm', onclick: save }, 'Opslaan')),
+        h('div', { class: 'form' },
+          h('label', {}, 'Bezoekersverzoeken'), h('div', { class: 'row' }, h('span', { class: 'muted' }, 'automatisch wissen na'), num('retentionDays', 0, 3650), h('span', { class: 'muted' }, 'dagen (0 = nooit)')),
+          h('label', {}, 'Automatische back-up'), h('div', { class: 'row' }, chk('autoBackup', 'Elke nacht een back-up'), h('span', { class: 'muted' }, 'bewaar de laatste'), num('backupKeep', 1, 90, '70px'))),
+        h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { onclick: async () => { await api('/api/system/backups/create', {}); toast('Back-up gemaakt'); await loadSystem(); } }, 'Nu een back-up maken')),
+        sysData.backups.length ? h('div', { style: 'margin-top:8px' }, ...sysData.backups.map((b) => h('div', { class: 'urow' },
+          h('div', { class: 'who' }, h('b', {}, b.name.replace(/^state-/, '').replace(/\.json$/, '')), h('span', { class: 'muted' }, `${when(b.at)} · ${bytes(b.size)}`)),
+          h('button', { class: 'sm', onclick: () => download(b.name) }, 'Downloaden'),
+          h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm(`De huidige stand wordt vervangen door deze back-up (de huidige stand wordt eerst bewaard). Doorgaan?`)) return; await api('/api/system/backups/restore', { name: b.name }); toast('Back-up teruggezet'); sysData = null; refresh(); } }, 'Terugzetten')))) : h('p', { class: 'muted' }, 'Nog geen back-ups.')),
+
+      h('div', { class: 'card' }, h('h2', {}, 'Gevarenzone'),
+        h('div', { class: 'row' },
+          h('button', { class: 'danger', onclick: async () => { if (!confirm('Iedereen behalve jou wordt uitgelogd.')) return; await api('/api/system/revoke-all', {}); toast('Alle andere sessies beëindigd'); refresh(); } }, 'Iedereen uitloggen'),
+          h('button', { class: 'danger', onclick: async () => { if (!confirmWord('Alle bezoekersverzoeken wissen?')) return; await api('/api/system/wipe-requests', {}); toast('Verzoeken gewist'); refresh(); } }, 'Alle verzoeken wissen'),
+          h('button', { class: 'danger', onclick: async () => { if (!confirmWord('Het activiteitenlog wissen?')) return; await api('/api/system/wipe-history', {}); toast('Log gewist'); refresh(); } }, 'Activiteitenlog wissen'))),
+    ];
+  }
+
   // ---------- account dialog (name button in the header) ----------
   function accountDialog() {
     const me = S.me;
     const cur = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Huidig wachtwoord' });
-    const nxt = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nieuw wachtwoord (minstens 8 tekens)' });
-    const canPw = me.kind === 'user' && !me.noPw;
+    const nxt = h('input', { type: 'password', autocomplete: 'new-password', placeholder: S.system ? 'Nieuw wachtwoord (minstens 12 tekens)' : 'Nieuw wachtwoord (minstens 8 tekens)' });
+    const canPw = me.kind === 'user';
     $('alertCard').className = 'card';
     $('alertCard').replaceChildren(
       h('div', { class: 'pophead' }, h('span', { class: 'popicon' }, icon('users')), h('div', {}, h('div', { class: 'poptitle' }, me.name), h('div', { class: 'muted' }, `${ROLE_NAMES[me.role] || me.role}${me.kind === 'pin' ? ' (pincode)' : ''}`))),
@@ -969,6 +1065,8 @@
         can('users') ? serverCard() : null,
       ].filter(Boolean);
     },
+
+    system() { return systemView(); },
 
     settings() {
       const st = structuredClone(S.settings);

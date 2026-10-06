@@ -51,19 +51,23 @@ ADMIN_PIN=1234 node server.js
 
 ## Accounts, rights and the API
 
-By default the control panel opens with a PIN (`ADMIN_PIN`) — or without protection if you set nothing.
-For a real login, run this once on the computer that has the code:
+The program always has a **main account**. It lives in `access.js` (sealed, together with `seal.js`) and **the program does not start
+without it** — delete or edit those files and the server and the app refuse to run, like a protected system file.
 
-```
-npm run login        # asks for a username and password (hidden) and writes them, as a hash, to access.js
-```
-Then restart the server (or build the app again). That login always has every right. Keep the password safe — there is no reset.
+**First time after installing:** log in with username `admin` and the start password `Saga-Techbox-Start-2026`. You then **must** choose a
+password of your own (12+ characters) before anything else works; it is stored encrypted (scrypt hash) in the data folder.
+The start password only works from your own computer or home/office network — never from the internet.
+(You can ship a different start login with `npm run login`, or `npm run login -- --default` to restore this one.)
 
-On the login screen, **Onthoud mij** keeps you logged in for a year. In the desktop app your login is stored **encrypted by your
-computer's own secure storage** (Keychain on macOS, Credential Vault on Windows, the keyring on Linux), so the app signs in by itself;
-logging out forgets it. The password itself is never written anywhere in plain text.
+The main account has every right, plus a **Systeem** tab that nobody else has (and that can't be given to anyone): maintenance mode,
+which networks may log in, session lengths, login-attempt limits, automatic deletion of old visitor requests, nightly backups
+(download / restore) and a danger zone.
 
-With it you get a **Beheer** tab:
+On the login screen **Onthoud mij** keeps you logged in longer (set under Systeem). In the desktop app your login can be stored **encrypted
+by your computer's own secure storage** (Keychain on macOS, Credential Vault on Windows, the keyring on Linux), so the app signs in by itself;
+logging out forgets it. A password is never written anywhere in plain text.
+
+The **Beheer** tab (also for people you give the rights):
 - **Gebruikers** — create accounts with a role (*beheerder*, *medewerker*, *kijker*) and tick exactly which rights each person has:
   see status · change status/message/busy times · see and answer visitors · manage people · change settings · set up mail ·
   backups · see the log · manage users · manage API keys. Nobody can give rights they don't have themselves.

@@ -28,6 +28,7 @@
       "app/**",
       "public/**",
       "server.js",
+      "seal.js",
       "access.js",
       "package.json"
     ],

@@ -48,6 +48,40 @@ const DEFAULT_SETTINGS = {
   // e-mail (optional): confirmation + answer to visitors who leave an address, and/or a mail to you per request
   mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false },
 };
+// System settings: only the main account can change these (see the Systeem tab).
+const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 20, blockMinutes: 10, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
+function normIp(ip) { ip = String(ip || '').replace(/^::ffff:/, ''); return ip === '::1' ? '127.0.0.1' : ip; } // "this computer" is one address, in IPv4 or IPv6
+function ipv4ToInt(ip) { const m = String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/); return m && m.slice(1).every((x) => Number(x) <= 255) ? ((Number(m[1]) << 24) | (Number(m[2]) << 16) | (Number(m[3]) << 8) | Number(m[4])) >>> 0 : null; }
+function validIpRule(r) { const [ip, bits] = String(r).split('/'); return (ipv4ToInt(ip) !== null && (bits === undefined || (/^\d{1,2}$/.test(bits) && Number(bits) <= 32))) || (/^[0-9a-f:]+$/i.test(ip) && ip.includes(':') && bits === undefined); }
+function ipInList(ip, list) {
+  ip = normIp(ip);
+  const n = ipv4ToInt(ip);
+  return list.some((rule) => {
+    const [base, bits] = String(rule).split('/');
+    if (n === null) return ip.toLowerCase() === base.toLowerCase();
+    const b = ipv4ToInt(base); if (b === null) return false;
+    const mask = bits === undefined ? 0xffffffff : Number(bits) === 0 ? 0 : (0xffffffff << (32 - Number(bits))) >>> 0;
+    return ((n & mask) >>> 0) === ((b & mask) >>> 0);
+  });
+}
+function isPrivateIp(ip) {
+  ip = normIp(ip).toLowerCase();
+  if (ip === '::1' || ip.startsWith('fe80:') || ip.startsWith('fc') || ip.startsWith('fd')) return true;
+  const n = ipv4ToInt(ip);
+  if (n === null) return false;
+  return ipInList(ip, ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16']);
+}
+function cleanSystem(b = {}) {
+  const num = (v, min, max, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : d; };
+  return {
+    maintenance: !!b.maintenance, maintenanceMessage: str(b.maintenanceMessage, 200),
+    sessionDays: num(b.sessionDays, 1, 365, DEFAULT_SYSTEM.sessionDays), rememberDays: num(b.rememberDays, 1, 730, DEFAULT_SYSTEM.rememberDays),
+    maxAttempts: num(b.maxAttempts, 3, 200, DEFAULT_SYSTEM.maxAttempts), blockMinutes: num(b.blockMinutes, 1, 1440, DEFAULT_SYSTEM.blockMinutes),
+    allowedIps: (Array.isArray(b.allowedIps) ? b.allowedIps : []).map((x) => str(x, 50)).filter(validIpRule).slice(0, 40),
+    retentionDays: num(b.retentionDays, 0, 3650, 0), autoBackup: b.autoBackup === undefined ? true : !!b.autoBackup, backupKeep: num(b.backupKeep, 1, 90, DEFAULT_SYSTEM.backupKeep),
+  };
+}
+
 const PRIVATE_SETTINGS = ['ntfyServer', 'ntfyTopic', 'webhookUrl', 'quickReplies', 'autoReplyText', 'closedReply', 'autoReplyMinutes', 'mail'];
 const PASS_MASK = '••••••••'; // the mail password is never sent back to the browser
 
@@ -59,6 +93,8 @@ const freshState = () => ({
   appointments: [], // { id, at, name, reason }
   requests: [],
   people: [], // { id, nr, name, email, note } — visitors type their number and everything is filled in
+  system: { ...DEFAULT_SYSTEM },
+  lastBackupDay: '',
   users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
   apiKeys: [], // { id, name, prefix, hash, perms[], createdAt, lastUsed, by }
   sessions: [], // { id, hash, userId, createdAt, lastSeen, ip, ua }
@@ -125,7 +161,7 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
@@ -256,8 +292,9 @@ function publicState() {
 const PERM_LABELS = {
   view: 'Status zien', status: 'Status, bericht en bezet-tijden wijzigen', inbox: 'Bezoekers zien en beantwoorden', people: 'Personenlijst beheren',
   settings: 'Instellingen wijzigen', mail: 'E-mail en meldingen instellen', export: 'Back-up maken en terugzetten', audit: 'Activiteitenlog zien',
-  users: 'Gebruikers en rechten beheren', api: 'API-sleutels beheren',
+  users: 'Gebruikers en rechten beheren', api: 'API-sleutels beheren', system: 'Systeeminstellingen',
 };
+const PUBLIC_PERM_LABELS = Object.fromEntries(Object.entries(PERM_LABELS).filter(([k]) => k !== 'system')); // 'system' belongs to the main account only
 const ALL_PERMS = Object.keys(PERM_LABELS);
 const ROLE_PRESETS = {
   root: ALL_PERMS,
@@ -265,10 +302,25 @@ const ROLE_PRESETS = {
   medewerker: ['view', 'status', 'inbox'],
   kijker: ['view'],
 };
-let ROOT = { username: '', hash: '' };
-try { ROOT = require('./access.js'); } catch {}
-const ROOT_USER = String(ROOT.username || '').trim().toLowerCase();
-const ROOT_HASH = ROOT_USER && ROOT.hash ? String(ROOT.hash) : '';
+// The main account lives in access.js, sealed. Without a valid file the program does not start (like a protected system file).
+let ACCESS;
+try {
+  ACCESS = require('./access.js');
+  if (!require('./seal.js').verifyAccess(ACCESS)) throw new Error('het zegel klopt niet');
+} catch (e) {
+  const msg = `Het beveiligingsbestand (access.js) ontbreekt of is beschadigd (${e.code === 'MODULE_NOT_FOUND' ? 'niet gevonden' : e.message}) — het programma start niet.`;
+  if (require.main === module) { console.error(msg); process.exit(1); }
+  throw new Error(msg);
+}
+const ROOT_USER = String(ACCESS.username).trim().toLowerCase();
+const DEFAULT_HASH = String(ACCESS.hash); // hash of the START password that ships with the program
+// The password the main account chose itself after installing is kept in the data folder.
+const ROOT_FILE = path.join(DATA_DIR, 'account.json');
+let rootFile = {};
+try { rootFile = JSON.parse(fs.readFileSync(ROOT_FILE, 'utf8')); } catch {}
+const rootMustChange = () => !(rootFile.hash && String(rootFile.hash).startsWith('scrypt$')); // still on the start password
+const rootHash = () => (rootMustChange() ? DEFAULT_HASH : rootFile.hash);
+function saveRootFile() { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(ROOT_FILE + '.tmp', JSON.stringify(rootFile), { mode: 0o600 }); fs.renameSync(ROOT_FILE + '.tmp', ROOT_FILE); }
 const ASSIGNABLE = Object.fromEntries(Object.entries(ROLE_PRESETS).filter(([k]) => k !== 'root')); // roles you can give to others
 function hashPassword(pw) {
   const salt = crypto.randomBytes(16);
@@ -284,11 +336,10 @@ function verifyPassword(pw, stored) {
 }
 const DUMMY_HASH = hashPassword(crypto.randomBytes(8).toString('hex')); // so an unknown user takes as long as a wrong password
 const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
-const authMode = () => (ROOT_HASH || state.users.length ? 'login' : ADMIN_PIN ? 'pin' : 'open');
-const permsOf = (list) => [...new Set((Array.isArray(list) ? list : []).filter((x) => ALL_PERMS.includes(x)))];
+const authMode = () => 'login'; // there is always a main account, so the control panel always needs a login
+const permsOf = (list) => [...new Set((Array.isArray(list) ? list : []).filter((x) => ALL_PERMS.includes(x) && x !== 'system'))];
 const can = (id, perm) => !!id && id.perms.includes(perm);
-const rootIdentity = () => ({ kind: 'user', userId: 'root', username: ROOT_USER, name: ROOT_USER, role: 'beheerder', perms: ALL_PERMS, root: true });
-const SESSION_DAYS = 30;
+const rootIdentity = () => ({ kind: 'user', userId: 'root', username: ROOT_USER, name: ROOT_USER, role: 'beheerder', perms: ALL_PERMS, root: true }); // ALL_PERMS includes 'system'
 
 function identifyFrom(tok, pin) {
   tok = String(tok || '');
@@ -300,9 +351,9 @@ function identifyFrom(tok, pin) {
   }
   if (tok) {
     const h = sha(tok), ss = state.sessions.find((x) => x.hash === h);
-    if (!ss || Date.now() - ss.lastSeen > (ss.ttl || SESSION_DAYS) * 864e5) return null;
+    if (!ss || Date.now() - ss.lastSeen > (ss.ttl || state.system.sessionDays) * 864e5) return null;
     if (Date.now() - ss.lastSeen > 60e3) { ss.lastSeen = Date.now(); save(); }
-    if (ss.userId === 'root') return ROOT_HASH ? { ...rootIdentity(), sessionId: ss.id } : null;
+    if (ss.userId === 'root') return { ...rootIdentity(), mustChange: rootMustChange(), sessionId: ss.id };
     const u = state.users.find((x) => x.id === ss.userId);
     return u && !u.disabled ? { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms), sessionId: ss.id } : null;
   }
@@ -319,14 +370,22 @@ function identify(req, url) {
   return identifyFrom(tok, req.headers['x-pin'] || url.searchParams.get('pin'));
 }
 const failures = new Map();
-const authFail = (ip) => failures.set(ip, [...(failures.get(ip) || []).filter((t) => Date.now() - t < 10 * 60e3), Date.now()]);
-const authBlocked = (ip) => (failures.get(ip) || []).filter((t) => Date.now() - t < 10 * 60e3).length >= 20;
+const recentFails = (ip) => (failures.get(ip) || []).filter((t) => Date.now() - t < state.system.blockMinutes * 60e3);
+const authFail = (ip) => failures.set(ip, [...recentFails(ip), Date.now()]);
+const authBlocked = (ip) => recentFails(ip).length >= state.system.maxAttempts;
+// maintenance mode and the allowed-networks list apply to everybody except the main account
+function gate(id, ip) {
+  if (!id || id.root) return null;
+  if (state.system.maintenance) return { code: 503, error: state.system.maintenanceMessage || 'Het bedieningspaneel staat tijdelijk in onderhoud.' };
+  if (state.system.allowedIps.length && !ipInList(ip, state.system.allowedIps)) return { code: 403, error: 'Je kunt vanaf dit netwerk niet inloggen.' };
+  return null;
+}
 const publicUser = (u) => ({ id: u.id, username: u.username, name: u.name, role: u.role, perms: permsOf(u.perms), disabled: !!u.disabled, createdAt: u.createdAt, lastLogin: u.lastLogin || 0 });
 function kick(match) { for (const c of [...clients]) if (match(c)) { try { c.res.end(); } catch {} clients.delete(c); } }
 function newSession(userId, req, remember) {
   const token = 's_' + crypto.randomBytes(32).toString('hex');
-  state.sessions.push({ id: newId(), hash: sha(token), userId, ttl: remember ? 365 : SESSION_DAYS, createdAt: Date.now(), lastSeen: Date.now(), ip: (req.socket.remoteAddress || '').replace('::ffff:', ''), ua: str(req.headers['user-agent'], 120) });
-  state.sessions = state.sessions.filter((x) => Date.now() - x.lastSeen < (x.ttl || SESSION_DAYS) * 864e5).slice(-200);
+  state.sessions.push({ id: newId(), hash: sha(token), userId, ttl: remember ? state.system.rememberDays : state.system.sessionDays, createdAt: Date.now(), lastSeen: Date.now(), ip: (req.socket.remoteAddress || '').replace('::ffff:', ''), ua: str(req.headers['user-agent'], 120) });
+  state.sessions = state.sessions.filter((x) => Date.now() - x.lastSeen < (x.ttl || state.system.sessionDays) * 864e5).slice(-200);
   return token;
 }
 
@@ -345,12 +404,13 @@ function adminState(id) {
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
     requests: full('inbox') ? state.requests : [],
     history: full('audit') ? state.history : [],
-    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, noPw: !!id.root },
-    permLabels: PERM_LABELS, rolePresets: ASSIGNABLE,
+    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, mustChange: !!id.mustChange },
+    permLabels: PUBLIC_PERM_LABELS, rolePresets: ASSIGNABLE,
     users: full('users') ? state.users.map(publicUser) : undefined,
     sessions: full('users') ? state.sessions.map((x) => ({ id: x.id, userId: x.userId === 'root' ? '' : x.userId, who: x.userId === 'root' ? ROOT_USER : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
     apiKeys: full('api') ? state.apiKeys.map(({ id: kid, name, prefix, perms, createdAt, lastUsed, by }) => ({ id: kid, name, prefix, perms, createdAt, lastUsed, by })) : undefined,
     server: full('users') ? { version: APP_VERSION, uptime: Math.round(process.uptime()), node: process.version, platform: `${process.platform} ${process.arch}`, dataDir: DATA_DIR, clients: clients.size, authMode: authMode(), pin: !!ADMIN_PIN } : undefined,
+    system: full('system') ? state.system : undefined,
     serverTime: Date.now(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     authMode: authMode(),
@@ -363,8 +423,8 @@ function broadcast() {
   const pub = publicState();
   for (const c of [...clients]) {
     if (c.role !== 'admin') { write(c, 'state', pub); continue; }
-    const id = identifyFrom(c.tok, c.pin); // still allowed? (session ended, user disabled, rights changed)
-    if (!id) { try { c.res.end(); } catch {} clients.delete(c); continue; }
+    const id = identifyFrom(c.tok, c.pin); // still allowed? (session ended, rights changed, maintenance, network) (session ended, user disabled, rights changed)
+    if (!id || id.mustChange || gate(id, c.ip)) { try { c.res.end(); } catch {} clients.delete(c); continue; }
     write(c, 'state', adminState(id));
   }
 }
@@ -507,6 +567,18 @@ function tick() {
     }
     dirty = true;
   }
+  if (state.system.retentionDays > 0) { // privacy: forget old visitor requests
+    const n = state.requests.length;
+    state.requests = state.requests.filter((r) => r.createdAt > now - state.system.retentionDays * 864e5);
+    if (state.requests.length !== n) dirty = true;
+  }
+  if (state.system.autoBackup) {
+    const d = new Date(), day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    if (state.lastBackupDay !== day && d.getHours() >= 3) {
+      state.lastBackupDay = day; dirty = true;
+      try { writeBackup(''); } catch (e) { log('systeem', `Automatische back-up mislukt: ${e.message}`, 'systeem'); }
+    }
+  }
   const before = state.busy.length + state.appointments.length;
   state.busy = state.busy.filter((b) => b.to > now - 3600e3);
   state.appointments = state.appointments.filter((a) => a.at > now - 24 * 3600e3);
@@ -560,7 +632,7 @@ const adminRoutes = {
   'POST /api/users/save': (b, id) => {
     const username = str(b.username, 32).toLowerCase().replace(/[^a-z0-9._-]/g, '');
     if (username.length < 3) throw bad('Gebruikersnaam: minstens 3 tekens (letters, cijfers, punt, streepje)');
-    if (ROOT_HASH && username === ROOT_USER) throw bad('Die gebruikersnaam is al in gebruik');
+    if (username === ROOT_USER) throw bad('Die gebruikersnaam is al in gebruik');
     const existing = b.id ? state.users.find((u) => u.id === b.id) : null;
     if (b.id && !existing) throw bad('Die gebruiker bestaat niet meer');
     if (state.users.some((u) => u.username === username && u !== existing)) throw bad('Die gebruikersnaam is al in gebruik');
@@ -600,7 +672,19 @@ const adminRoutes = {
   },
   'POST /api/password': (b, id) => {
     if (id.kind !== 'user') throw bad('Alleen voor gebruikers met een account');
-    if (id.root) throw bad('Het wachtwoord van dit account kun je hier niet wijzigen');
+    if (id.root) {
+      if (!verifyPassword(b.current, rootHash())) throw bad('Je huidige wachtwoord klopt niet');
+      const next = String(b.next || '');
+      if (next.length < 12) throw bad('Nieuw wachtwoord: minstens 12 tekens');
+      if (verifyPassword(next, DEFAULT_HASH)) throw bad('Kies een ander wachtwoord dan het startwachtwoord');
+      if (next.toLowerCase().includes(ROOT_USER)) throw bad('Je wachtwoord mag je gebruikersnaam niet bevatten');
+      rootFile = { hash: hashPassword(next), changedAt: Date.now() };
+      saveRootFile();
+      state.sessions = state.sessions.filter((x) => x.userId !== 'root' || x.id === id.sessionId); // other devices log in again
+      kick((c) => c.userId === 'root' && c.sessionId !== id.sessionId);
+      log('gebruikers', `${ROOT_USER} heeft het wachtwoord gewijzigd`);
+      return;
+    }
     const u = state.users.find((x) => x.id === id.userId);
     if (!u || !verifyPassword(b.current, u.hash)) throw bad('Je huidige wachtwoord klopt niet');
     if (String(b.next || '').length < 8) throw bad('Nieuw wachtwoord: minstens 8 tekens');
@@ -719,6 +803,44 @@ const adminRoutes = {
   },
 };
 
+// ----- system (only the main account) -----
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const BACKUP_RE = /^state-\d{4}-\d{2}-\d{2}(_[a-z0-9-]{1,20})?\.json$/;
+function listBackups() {
+  try { return fs.readdirSync(BACKUP_DIR).filter((n) => BACKUP_RE.test(n)).map((n) => { const st = fs.statSync(path.join(BACKUP_DIR, n)); return { name: n, size: st.size, at: st.mtimeMs }; }).sort((a, b) => b.at - a.at); } catch { return []; }
+}
+function writeBackup(label) {
+  fs.mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
+  const d = new Date();
+  const name = `state-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}${label ? '_' + label : ''}.json`;
+  const { sessions, ...rest } = state; // sessions are never written to a backup
+  fs.writeFileSync(path.join(BACKUP_DIR, name), JSON.stringify(rest), { mode: 0o600 });
+  for (const old of listBackups().slice(state.system.backupKeep)) { try { fs.unlinkSync(path.join(BACKUP_DIR, old.name)); } catch {} }
+  return name;
+}
+Object.assign(adminRoutes, {
+  'GET /api/system': (b, id) => ({ system: state.system, backups: listBackups(), accountChangedAt: rootFile.changedAt || 0, yourIp: id.ip || '', serverTime: Date.now() }),
+  'POST /api/system/settings': (b) => { state.system = cleanSystem(b); log('systeem', `Systeeminstellingen gewijzigd${state.system.maintenance ? ' (onderhoudsmodus aan)' : ''}`); },
+  'POST /api/system/backups/create': () => { const name = writeBackup('handmatig'); log('systeem', `Back-up gemaakt: ${name}`); return { ok: true, name }; },
+  'GET /api/system/backups/download': (b, id, url) => {
+    const name = str(url.searchParams.get('name'), 80);
+    if (!BACKUP_RE.test(name)) throw bad('Onbekende back-up');
+    return { __file: { name, text: fs.readFileSync(path.join(BACKUP_DIR, name), 'utf8') } };
+  },
+  'POST /api/system/backups/restore': (b) => {
+    const name = str(b.name, 80);
+    if (!BACKUP_RE.test(name)) throw bad('Onbekende back-up');
+    let data; try { data = JSON.parse(fs.readFileSync(path.join(BACKUP_DIR, name), 'utf8')); } catch { throw bad('Die back-up kan niet gelezen worden'); }
+    if (!data || data.version !== 2 || !data.settings) throw bad('Dit is geen geldige back-up');
+    writeBackup('vor-herstel'); // so a restore can be undone
+    state = { ...freshState(), ...data, settings: coerce(DEFAULT_SETTINGS, data.settings), system: state.system, sessions: state.sessions, lastBackupDay: state.lastBackupDay };
+    log('systeem', `Back-up teruggezet: ${name}`);
+  },
+  'POST /api/system/revoke-all': (b, id) => { state.sessions = state.sessions.filter((x) => x.id === id.sessionId); kick((c) => c.sessionId !== id.sessionId); log('systeem', 'Alle andere sessies beëindigd'); },
+  'POST /api/system/wipe-requests': () => { const n = state.requests.length; state.requests = []; log('systeem', `${n} bezoekersverzoeken gewist`); },
+  'POST /api/system/wipe-history': () => { state.history = []; log('systeem', 'Activiteitenlog gewist'); },
+});
+
 // Public API for scripts and other programs (use an API key: Authorization: Bearer door_…)
 adminRoutes['GET /api/v1/status'] = () => { const v = computeView(); return { mode: v.mode, label: v.label, message: v.message, until: v.until, then: v.then, source: v.source }; };
 adminRoutes['POST /api/v1/status'] = adminRoutes['POST /api/status'];
@@ -728,7 +850,7 @@ adminRoutes['GET /api/v1/requests'] = (b, id, url) => {
   return { requests: list.slice(0, Math.min(200, Number(url.searchParams.get('limit')) || 50)).map(({ id: rid, type, name, nr, topic, message, reason, at, email, state: st, createdAt, reply, repliedAt }) => ({ id: rid, type, name, nr, topic, message, reason, at, email, state: st, createdAt, reply, repliedAt })) };
 };
 adminRoutes['POST /api/v1/requests/reply'] = adminRoutes['POST /api/requests/reply'];
-adminRoutes['GET /api/v1/users'] = (b, id) => ({ users: state.users.map(publicUser), roles: ASSIGNABLE, permissions: PERM_LABELS });
+adminRoutes['GET /api/v1/users'] = (b, id) => ({ users: state.users.map(publicUser), roles: ASSIGNABLE, permissions: PUBLIC_PERM_LABELS });
 adminRoutes['POST /api/v1/users'] = adminRoutes['POST /api/users/save'];
 adminRoutes['POST /api/v1/users/remove'] = adminRoutes['POST /api/users/remove'];
 adminRoutes['GET /api/v1/people'] = () => ({ people: state.people });
@@ -757,6 +879,8 @@ const NEED = {
   'GET /api/export': 'export', 'POST /api/import': 'export',
   'POST /api/users/save': 'users', 'POST /api/users/remove': 'users', 'POST /api/sessions/revoke': 'users',
   'POST /api/keys/create': 'api', 'POST /api/keys/remove': 'api',
+  'GET /api/system': 'system', 'POST /api/system/settings': 'system', 'POST /api/system/backups/create': 'system', 'GET /api/system/backups/download': 'system', 'POST /api/system/backups/restore': 'system',
+  'POST /api/system/revoke-all': 'system', 'POST /api/system/wipe-requests': 'system', 'POST /api/system/wipe-history': 'system',
   'GET /api/v1/status': 'view', 'POST /api/v1/status': 'status', 'GET /api/v1/requests': 'inbox', 'POST /api/v1/requests/reply': 'inbox',
   'GET /api/v1/users': 'users', 'POST /api/v1/users': 'users', 'POST /api/v1/users/remove': 'users',
   'GET /api/v1/people': 'people', 'POST /api/v1/people': 'people', 'POST /api/v1/people/upsert': 'people', 'GET /api/v1/audit': 'audit',
@@ -822,9 +946,12 @@ const server = http.createServer(async (req, res) => {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;
       if (role === 'admin' && !eid) return send(res, 401, { error: 'Inloggen is nodig' });
+      if (role === 'admin' && eid.mustChange) return send(res, 403, { error: 'Kies eerst een eigen wachtwoord', mustChange: true });
+      const sgate = role === 'admin' ? gate(eid, normIp(req.socket.remoteAddress)) : null;
+      if (sgate) return send(res, sgate.code, { error: sgate.error });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 2000\n\n');
-      const c = { res, role, tok: String(url.searchParams.get('token') || ''), pin: String(url.searchParams.get('pin') || ''), userId: eid?.userId, sessionId: eid?.sessionId };
+      const c = { res, role, ip: normIp(req.socket.remoteAddress), tok: String(url.searchParams.get('token') || ''), pin: String(url.searchParams.get('pin') || ''), userId: eid?.userId, sessionId: eid?.sessionId };
       clients.add(c);
       write(c, 'state', role === 'admin' ? adminState(eid) : publicState());
       req.on('close', () => clients.delete(c));
@@ -838,13 +965,15 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const username = str(b.username, 40).toLowerCase(), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
       let user = null, ok = false;
-      if (ROOT_HASH && username === ROOT_USER) { ok = verifyPassword(password, ROOT_HASH); user = rootIdentity(); }
+      if (username === ROOT_USER) { ok = verifyPassword(password, rootHash()); user = rootIdentity(); if (ok && rootMustChange() && !isPrivateIp(ip)) ok = false; /* the start password never works from the internet */ }
       else { const u = state.users.find((x) => x.username === username && !x.disabled); ok = verifyPassword(password, u ? u.hash : DUMMY_HASH) && !!u; if (ok) { u.lastLogin = Date.now(); user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms) }; } }
       if (!ok) { authFail(ip); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
-      const token = newSession(user.userId, req, !!b.remember); // "remember me": stays valid for a year of non-use instead of 30 days
+      const lg = gate(user, ip);
+      if (lg) return send(res, lg.code, { error: lg.error });
+      const token = newSession(user.userId, req, !!b.remember);
       log('login', `${user.name} ingelogd (${ip})`, user.name);
       save();
-      return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
+      return send(res, 200, { token, mustChange: !!(user.root && rootMustChange()), user: { name: user.name, role: user.role, perms: user.perms } });
     }
     if (req.method === 'POST' && p === '/api/logout') {
       const id = identify(req, url);
@@ -870,6 +999,10 @@ const server = http.createServer(async (req, res) => {
       if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
       const id = identify(req, url);
       if (!id) { authFail(ip); return send(res, 401, { error: 'Inloggen is nodig' }); }
+      id.ip = ip;
+      const g = gate(id, ip);
+      if (g) return send(res, g.code, { error: g.error });
+      if (id.mustChange && routeKey !== 'GET /api/me' && routeKey !== 'POST /api/password') return send(res, 403, { error: 'Kies eerst een eigen wachtwoord', mustChange: true });
       const body = req.method === 'POST' ? await readBody(req) : {};
       let need = NEED[routeKey];
       if (typeof need === 'function') need = need(body);
@@ -878,6 +1011,10 @@ const server = http.createServer(async (req, res) => {
       actor = id.name;
       let out;
       try { out = await route(body, id, url); } finally { actor = ''; }
+      if (out && out.__file) {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${out.__file.name}"` });
+        return res.end(out.__file.text);
+      }
       if (p === '/api/export') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': 'attachment; filename="door-backup.json"' });
         return res.end(JSON.stringify(out, null, 2));
@@ -902,7 +1039,8 @@ lastView = JSON.stringify(computeView());
 const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, () => {
-    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${{ login: '  — inloggen met account', pin: '  — pincode', open: '  — GEEN beveiliging: stel ADMIN_PIN in of voer npm run login uit' }[authMode()]}`);
+    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${rootMustChange() ? `
+  Eerste keer inloggen: gebruikersnaam "${ROOT_USER}" met het startwachtwoord uit de handleiding (README). Je kiest daarna meteen een eigen wachtwoord.` : '  — inloggen met account'}`);
     resolve(PORT);
   });
 });
