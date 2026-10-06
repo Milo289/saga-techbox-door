@@ -64,13 +64,6 @@ function ipInList(ip, list) {
     return ((n & mask) >>> 0) === ((b & mask) >>> 0);
   });
 }
-function isPrivateIp(ip) {
-  ip = normIp(ip).toLowerCase();
-  if (ip === '::1' || ip.startsWith('fe80:') || ip.startsWith('fc') || ip.startsWith('fd')) return true;
-  const n = ipv4ToInt(ip);
-  if (n === null) return false;
-  return ipInList(ip, ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16']);
-}
 function cleanSystem(b = {}) {
   const num = (v, min, max, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : d; };
   return {
@@ -313,14 +306,7 @@ try {
   throw new Error(msg);
 }
 const ROOT_USER = String(ACCESS.username).trim().toLowerCase();
-const DEFAULT_HASH = String(ACCESS.hash); // hash of the START password that ships with the program
-// The password the main account chose itself after installing is kept in the data folder.
-const ROOT_FILE = path.join(DATA_DIR, 'account.json');
-let rootFile = {};
-try { rootFile = JSON.parse(fs.readFileSync(ROOT_FILE, 'utf8')); } catch {}
-const rootMustChange = () => !(rootFile.hash && String(rootFile.hash).startsWith('scrypt$')); // still on the start password
-const rootHash = () => (rootMustChange() ? DEFAULT_HASH : rootFile.hash);
-function saveRootFile() { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(ROOT_FILE + '.tmp', JSON.stringify(rootFile), { mode: 0o600 }); fs.renameSync(ROOT_FILE + '.tmp', ROOT_FILE); }
+const ROOT_HASH = String(ACCESS.hash); // fixed in the code: there is no way to change it from the program
 const ASSIGNABLE = Object.fromEntries(Object.entries(ROLE_PRESETS).filter(([k]) => k !== 'root')); // roles you can give to others
 function hashPassword(pw) {
   const salt = crypto.randomBytes(16);
@@ -353,7 +339,7 @@ function identifyFrom(tok, pin) {
     const h = sha(tok), ss = state.sessions.find((x) => x.hash === h);
     if (!ss || Date.now() - ss.lastSeen > (ss.ttl || state.system.sessionDays) * 864e5) return null;
     if (Date.now() - ss.lastSeen > 60e3) { ss.lastSeen = Date.now(); save(); }
-    if (ss.userId === 'root') return { ...rootIdentity(), mustChange: rootMustChange(), sessionId: ss.id };
+    if (ss.userId === 'root') return { ...rootIdentity(), sessionId: ss.id };
     const u = state.users.find((x) => x.id === ss.userId);
     return u && !u.disabled ? { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms), sessionId: ss.id } : null;
   }
@@ -404,7 +390,7 @@ function adminState(id) {
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
     requests: full('inbox') ? state.requests : [],
     history: full('audit') ? state.history : [],
-    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, mustChange: !!id.mustChange },
+    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, noPw: !!id.root },
     permLabels: PUBLIC_PERM_LABELS, rolePresets: ASSIGNABLE,
     users: full('users') ? state.users.map(publicUser) : undefined,
     sessions: full('users') ? state.sessions.map((x) => ({ id: x.id, userId: x.userId === 'root' ? '' : x.userId, who: x.userId === 'root' ? ROOT_USER : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
@@ -424,7 +410,7 @@ function broadcast() {
   for (const c of [...clients]) {
     if (c.role !== 'admin') { write(c, 'state', pub); continue; }
     const id = identifyFrom(c.tok, c.pin); // still allowed? (session ended, rights changed, maintenance, network) (session ended, user disabled, rights changed)
-    if (!id || id.mustChange || gate(id, c.ip)) { try { c.res.end(); } catch {} clients.delete(c); continue; }
+    if (!id || gate(id, c.ip)) { try { c.res.end(); } catch {} clients.delete(c); continue; }
     write(c, 'state', adminState(id));
   }
 }
@@ -672,19 +658,7 @@ const adminRoutes = {
   },
   'POST /api/password': (b, id) => {
     if (id.kind !== 'user') throw bad('Alleen voor gebruikers met een account');
-    if (id.root) {
-      if (!verifyPassword(b.current, rootHash())) throw bad('Je huidige wachtwoord klopt niet');
-      const next = String(b.next || '');
-      if (next.length < 12) throw bad('Nieuw wachtwoord: minstens 12 tekens');
-      if (verifyPassword(next, DEFAULT_HASH)) throw bad('Kies een ander wachtwoord dan het startwachtwoord');
-      if (next.toLowerCase().includes(ROOT_USER)) throw bad('Je wachtwoord mag je gebruikersnaam niet bevatten');
-      rootFile = { hash: hashPassword(next), changedAt: Date.now() };
-      saveRootFile();
-      state.sessions = state.sessions.filter((x) => x.userId !== 'root' || x.id === id.sessionId); // other devices log in again
-      kick((c) => c.userId === 'root' && c.sessionId !== id.sessionId);
-      log('gebruikers', `${ROOT_USER} heeft het wachtwoord gewijzigd`);
-      return;
-    }
+    if (id.root) throw bad('Het wachtwoord van dit account kun je niet wijzigen');
     const u = state.users.find((x) => x.id === id.userId);
     if (!u || !verifyPassword(b.current, u.hash)) throw bad('Je huidige wachtwoord klopt niet');
     if (String(b.next || '').length < 8) throw bad('Nieuw wachtwoord: minstens 8 tekens');
@@ -819,7 +793,7 @@ function writeBackup(label) {
   return name;
 }
 Object.assign(adminRoutes, {
-  'GET /api/system': (b, id) => ({ system: state.system, backups: listBackups(), accountChangedAt: rootFile.changedAt || 0, yourIp: id.ip || '', serverTime: Date.now() }),
+  'GET /api/system': (b, id) => ({ system: state.system, backups: listBackups(), yourIp: id.ip || '', serverTime: Date.now() }),
   'POST /api/system/settings': (b) => { state.system = cleanSystem(b); log('systeem', `Systeeminstellingen gewijzigd${state.system.maintenance ? ' (onderhoudsmodus aan)' : ''}`); },
   'POST /api/system/backups/create': () => { const name = writeBackup('handmatig'); log('systeem', `Back-up gemaakt: ${name}`); return { ok: true, name }; },
   'GET /api/system/backups/download': (b, id, url) => {
@@ -836,6 +810,15 @@ Object.assign(adminRoutes, {
     state = { ...freshState(), ...data, settings: coerce(DEFAULT_SETTINGS, data.settings), system: state.system, sessions: state.sessions, lastBackupDay: state.lastBackupDay };
     log('systeem', `Back-up teruggezet: ${name}`);
   },
+  'POST /api/system/lockdown': (b, id) => {
+    const now = Date.now();
+    state.manual = { mode: 'closed', until: null, message: 'Tijdelijk gesloten', setAt: now, expiresAt: null };
+    state.system = { ...state.system, maintenance: true, maintenanceMessage: state.system.maintenanceMessage || 'Het bedieningspaneel is tijdelijk vergrendeld.' };
+    state.sessions = state.sessions.filter((x) => x.id === id.sessionId);
+    kick((c) => c.sessionId !== id.sessionId);
+    log('systeem', 'NOODSTOP: deur gesloten, paneel vergrendeld, alle andere sessies beëindigd');
+  },
+  'POST /api/system/unlock': () => { state.system = { ...state.system, maintenance: false }; log('systeem', 'Paneel weer ontgrendeld'); },
   'POST /api/system/revoke-all': (b, id) => { state.sessions = state.sessions.filter((x) => x.id === id.sessionId); kick((c) => c.sessionId !== id.sessionId); log('systeem', 'Alle andere sessies beëindigd'); },
   'POST /api/system/wipe-requests': () => { const n = state.requests.length; state.requests = []; log('systeem', `${n} bezoekersverzoeken gewist`); },
   'POST /api/system/wipe-history': () => { state.history = []; log('systeem', 'Activiteitenlog gewist'); },
@@ -880,7 +863,7 @@ const NEED = {
   'POST /api/users/save': 'users', 'POST /api/users/remove': 'users', 'POST /api/sessions/revoke': 'users',
   'POST /api/keys/create': 'api', 'POST /api/keys/remove': 'api',
   'GET /api/system': 'system', 'POST /api/system/settings': 'system', 'POST /api/system/backups/create': 'system', 'GET /api/system/backups/download': 'system', 'POST /api/system/backups/restore': 'system',
-  'POST /api/system/revoke-all': 'system', 'POST /api/system/wipe-requests': 'system', 'POST /api/system/wipe-history': 'system',
+  'POST /api/system/revoke-all': 'system', 'POST /api/system/lockdown': 'system', 'POST /api/system/unlock': 'system', 'POST /api/system/wipe-requests': 'system', 'POST /api/system/wipe-history': 'system',
   'GET /api/v1/status': 'view', 'POST /api/v1/status': 'status', 'GET /api/v1/requests': 'inbox', 'POST /api/v1/requests/reply': 'inbox',
   'GET /api/v1/users': 'users', 'POST /api/v1/users': 'users', 'POST /api/v1/users/remove': 'users',
   'GET /api/v1/people': 'people', 'POST /api/v1/people': 'people', 'POST /api/v1/people/upsert': 'people', 'GET /api/v1/audit': 'audit',
@@ -946,7 +929,6 @@ const server = http.createServer(async (req, res) => {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;
       if (role === 'admin' && !eid) return send(res, 401, { error: 'Inloggen is nodig' });
-      if (role === 'admin' && eid.mustChange) return send(res, 403, { error: 'Kies eerst een eigen wachtwoord', mustChange: true });
       const sgate = role === 'admin' ? gate(eid, normIp(req.socket.remoteAddress)) : null;
       if (sgate) return send(res, sgate.code, { error: sgate.error });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
@@ -965,7 +947,7 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const username = str(b.username, 40).toLowerCase(), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
       let user = null, ok = false;
-      if (username === ROOT_USER) { ok = verifyPassword(password, rootHash()); user = rootIdentity(); if (ok && rootMustChange() && !isPrivateIp(ip)) ok = false; /* the start password never works from the internet */ }
+      if (username === ROOT_USER) { ok = verifyPassword(password, ROOT_HASH); user = rootIdentity(); }
       else { const u = state.users.find((x) => x.username === username && !x.disabled); ok = verifyPassword(password, u ? u.hash : DUMMY_HASH) && !!u; if (ok) { u.lastLogin = Date.now(); user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms) }; } }
       if (!ok) { authFail(ip); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
       const lg = gate(user, ip);
@@ -973,7 +955,7 @@ const server = http.createServer(async (req, res) => {
       const token = newSession(user.userId, req, !!b.remember);
       log('login', `${user.name} ingelogd (${ip})`, user.name);
       save();
-      return send(res, 200, { token, mustChange: !!(user.root && rootMustChange()), user: { name: user.name, role: user.role, perms: user.perms } });
+      return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
     }
     if (req.method === 'POST' && p === '/api/logout') {
       const id = identify(req, url);
@@ -1002,7 +984,6 @@ const server = http.createServer(async (req, res) => {
       id.ip = ip;
       const g = gate(id, ip);
       if (g) return send(res, g.code, { error: g.error });
-      if (id.mustChange && routeKey !== 'GET /api/me' && routeKey !== 'POST /api/password') return send(res, 403, { error: 'Kies eerst een eigen wachtwoord', mustChange: true });
       const body = req.method === 'POST' ? await readBody(req) : {};
       let need = NEED[routeKey];
       if (typeof need === 'function') need = need(body);
@@ -1039,8 +1020,7 @@ lastView = JSON.stringify(computeView());
 const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, () => {
-    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)${rootMustChange() ? `
-  Eerste keer inloggen: gebruikersnaam "${ROOT_USER}" met het startwachtwoord uit de handleiding (README). Je kiest daarna meteen een eigen wachtwoord.` : '  — inloggen met account'}`);
+    console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)  — inloggen met account`);
     resolve(PORT);
   });
 });

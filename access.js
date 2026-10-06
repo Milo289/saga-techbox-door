@@ -1,10 +1,8 @@
 'use strict';
-// The main account of this program: a username and a hash of the START password, sealed against changes.
-// The program does not start without this file. Anyone who installs it logs in once with the start password
-// and is then required to choose a password of their own (stored separately, in the data folder).
-// Written by:  npm run login
+// The login of the main account: a username and a hash of its password, sealed (see seal.js).
+// It is fixed in the code. The program has no way to change it, and does not start if this file is missing or altered.
 module.exports = {
   "username": "admin",
-  "hash": "scrypt$6d8cf79c831fc6403a484153ca5c55be$03893259fb567a9e2f615b818aa4f4c94210d7b726a8e853ad646e9a9976dfcf10b4a7af1d8672bcd70c06bd9283f6aba3be03108d3a657a204efda14c5c11e3",
-  "check": "497c4df41209971dd750d13a511f84e37a15c96a002738fef5858e004c7fff4f"
+  "hash": "scrypt$73aa6c750b5b7d076d08b6f6f96135ee$78c1030b69743a65472c5a7a968d1715fb8d65559780a07187530d7ad46cf966ee0b408038dc321e1c3b9c7896fd0eae788494926466d8903f92dee72aa7b7fe",
+  "check": "61b1c7ccaf6e0a0d972f5889dea7e8d02204b498832fc56ac283d5ac980bcd48"
 };

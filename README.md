@@ -51,17 +51,13 @@ ADMIN_PIN=1234 node server.js
 
 ## Accounts, rights and the API
 
-The program always has a **main account**. It lives in `access.js` (sealed, together with `seal.js`) and **the program does not start
-without it** — delete or edit those files and the server and the app refuse to run, like a protected system file.
+The program has one **main account** with every right. Its username and a hash of its password are fixed in the code (`access.js`,
+sealed by `seal.js`): the program has **no way to change them**, not from the website, the settings, the API or the desktop app, and
+**it does not start if those files are missing or altered**. There is no "forgot password".
 
-**First time after installing:** log in with username `admin` and the start password `Saga-Techbox-Start-2026`. You then **must** choose a
-password of your own (12+ characters) before anything else works; it is stored encrypted (scrypt hash) in the data folder.
-The start password only works from your own computer or home/office network — never from the internet.
-(You can ship a different start login with `npm run login`, or `npm run login -- --default` to restore this one.)
-
-The main account has every right, plus a **Systeem** tab that nobody else has (and that can't be given to anyone): maintenance mode,
-which networks may log in, session lengths, login-attempt limits, automatic deletion of old visitor requests, nightly backups
-(download / restore) and a danger zone.
+The main account also has a **Systeem** tab that nobody else has (and that can't be given to anyone): maintenance mode, which networks
+may log in, session lengths, login-attempt limits, automatic deletion of old visitor requests, nightly backups (download / restore),
+an emergency stop (*Noodstop*) and a danger zone.
 
 On the login screen **Onthoud mij** keeps you logged in longer (set under Systeem). In the desktop app your login can be stored **encrypted
 by your computer's own secure storage** (Keychain on macOS, Credential Vault on Windows, the keyring on Linux), so the app signs in by itself;
