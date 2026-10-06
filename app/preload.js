@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('doorApp', {
   saveLogin: (username, password) => ipcRenderer.invoke('app:saveLogin', { username: String(username), password: String(password) }),
   loadLogin: () => ipcRenderer.invoke('app:loadLogin'),
   clearLogin: () => ipcRenderer.invoke('app:clearLogin'),
+  // screen lock: take over the whole screen (kiosk, on every desktop, other monitors black) until unlocked
+  setHardLock: (on) => ipcRenderer.send('app:hardLock', !!on),
   // the tray menu and the global shortcuts ask the page to change the status (with the person's own login)
   onTrayStatus: (cb) => { if (typeof cb === 'function') ipcRenderer.on('tray-status', (_e, mode) => cb(String(mode))); },
 });

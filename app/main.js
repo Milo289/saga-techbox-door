@@ -8,7 +8,7 @@
 // Extras that only the app has (a browser can't do these): tray icon with quick status, global shortcuts,
 // badge with the number of open requests, choose the monitor, always on top, zoom, daily refresh,
 // native save/open dialogs for backups and start at login.
-const { app, BrowserWindow, ipcMain, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, powerMonitor, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -113,6 +113,7 @@ function webPrefs() {
 // Ctrl/Cmd+Shift+S = settings, Ctrl/Cmd+Shift+Q = quit (handy on the door screen, which has no menu)
 function shortcuts(w) {
   w.webContents.on('before-input-event', (e, input) => {
+    if (hardLocked) return; // locked: no settings, no quit
     if (input.type !== 'keyDown' || !(input.control || input.meta) || !input.shift) return;
     const k = input.key.toLowerCase();
     if (k === 's') { e.preventDefault(); openSetup(); }
@@ -149,7 +150,7 @@ function openControl(base) {
   keepOnOrigin(w, base);
   shortcuts(w);
   // closing the window keeps the app running in the tray, so you never miss a visitor
-  w.on('close', (e) => { if (!quitting && config.closeToTray && tray) { e.preventDefault(); w.hide(); } });
+  w.on('close', (e) => { if (hardLocked) { e.preventDefault(); return; } if (!quitting && config.closeToTray && tray) { e.preventDefault(); w.hide(); } });
   loadWithRetry(w, `${base}/admin`);
   return w;
 }
@@ -241,9 +242,9 @@ function updateTray() {
       { label: report.open ? `${report.open} open verzoek${report.open === 1 ? '' : 'en'} bekijken` : 'Geen open verzoeken', enabled: !!report.open, click: showWindow },
     ] : []),
     { label: control ? 'Venster tonen' : 'Deurscherm tonen', click: showWindow },
-    { label: 'Instellingen…', click: openSetup },
+    { label: 'Instellingen…', enabled: !hardLocked, click: openSetup },
     { type: 'separator' },
-    { label: 'Afsluiten', click: () => app.quit() },
+    { label: 'Afsluiten', enabled: !hardLocked, click: () => app.quit() },
   ]));
 }
 
@@ -264,6 +265,42 @@ setInterval(() => {
   const key = `${d.toDateString()} ${hm}`;
   if (hm === config.reloadAt && key !== lastRefresh) { lastRefresh = key; win.webContents.reloadIgnoringCache(); }
 }, 20000);
+
+// ---------- hard lock: the screen lock of the control panel also takes over the whole computer screen ----------
+// While locked the window is full screen (kiosk), on top of everything, shown on every desktop/Space (so a
+// three-finger swipe to another desktop still shows it), and every other monitor is covered with black.
+// The web page asks for this each time its lock screen is shown, so a restart of the app keeps it locked.
+let hardLocked = false, systemShutdown = false, coverWins = [];
+function applyHardLock(on) {
+  if (on === hardLocked || !win || win.isDestroyed() || config.role !== 'control') return;
+  hardLocked = on;
+  if (on) {
+    if (!win.isVisible()) win.show();
+    win.setClosable(false); win.setMinimizable(false);
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setKiosk(true);
+    win.focus();
+    const mine = screen.getDisplayMatching(win.getBounds()).id;
+    coverWins = screen.getAllDisplays().filter((d) => d.id !== mine).map((d) => {
+      const c = new BrowserWindow({ x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height, frame: false, show: false, focusable: false, skipTaskbar: true, resizable: false, movable: false, backgroundColor: '#000000', webPreferences: { sandbox: true } });
+      c.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+      c.setAlwaysOnTop(true, 'screen-saver');
+      c.setBounds(d.bounds);
+      c.showInactive();
+      return c;
+    });
+  } else {
+    for (const c of coverWins) { try { c.destroy(); } catch {} }
+    coverWins = [];
+    win.setKiosk(false);
+    win.setVisibleOnAllWorkspaces(false, { skipTransformProcessType: true });
+    win.setAlwaysOnTop(!!config.alwaysOnTop);
+    win.setClosable(true); win.setMinimizable(true);
+  }
+  updateTray();
+}
+ipcMain.on('app:hardLock', (e, on) => { if (fromServerPage(e)) applyHardLock(!!on); });
 
 // ---------- messages from the pages ----------
 const fromWin = (e) => win && !win.isDestroyed() && e.sender === win.webContents;
@@ -374,7 +411,8 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.on('before-quit', () => { quitting = true; });
+app.on('before-quit', (e) => { if (hardLocked && !systemShutdown) { e.preventDefault(); return; } quitting = true; });
+powerMonitor.on('shutdown', () => { systemShutdown = true; }); // never block the computer from shutting down
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('second-instance', () => { const w = setupWin || win; if (w && !w.isDestroyed()) { if (!w.isVisible()) w.show(); if (w.isMinimized()) w.restore(); w.focus(); } });
 app.on('window-all-closed', () => { if (!config.closeToTray || !tray) app.quit(); });

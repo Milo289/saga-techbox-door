@@ -428,7 +428,9 @@
   }
 
   function apply(data) {
-    lastMsg = Date.now(); S = data; renderAll(false);
+    lastMsg = Date.now();
+    if (S && data.peopleRev !== S.peopleRev) peopleDraft = null; // a visitor made a profile: show the fresh list
+    S = data; renderAll(false);
     if (alertId && alertId !== 'test') {
       const r = S.requests.find((x) => x.id === alertId);
       if (!r || r.state === 'done' || (r.state === 'replied' && !r.autoReplied)) closeAlert();
@@ -800,6 +802,7 @@
     closeAlert?.();
     lockCode = ''; lockDraw(); $('lockErr').textContent = msg || '';
     $('lock').classList.add('open');
+    window.doorApp?.setHardLock?.(true);
   }
   function lockKey(k) {
     if (lockBusy) return;
@@ -812,8 +815,8 @@
     try {
       const res = await fetch('/api/lock/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ code: lockCode }) });
       const out = await res.json().catch(() => ({}));
-      if (res.ok) { $('lock').classList.remove('open'); lockCode = ''; lockDraw(); await start(); return; }
-      if (res.status === 401) { $('lock').classList.remove('open'); TOKEN = ''; store.set('doorToken', ''); S = null; autoLoginTried = true; if (window.doorApp?.clearLogin) window.doorApp.clearLogin(); showLogin(out.error || ''); return; }
+      if (res.ok) { window.doorApp?.setHardLock?.(false); $('lock').classList.remove('open'); lockCode = ''; lockDraw(); await start(); return; }
+      if (res.status === 401) { window.doorApp?.setHardLock?.(false); $('lock').classList.remove('open'); TOKEN = ''; store.set('doorToken', ''); S = null; autoLoginTried = true; if (window.doorApp?.clearLogin) window.doorApp.clearLogin(); showLogin(out.error || ''); return; }
       lockCode = ''; lockDraw(); $('lockErr').textContent = out.error || 'Verkeerde code';
       $('lockDots').classList.remove('shake'); void $('lockDots').offsetWidth; $('lockDots').classList.add('shake');
     } catch { lockCode = ''; lockDraw(); $('lockErr').textContent = 'Geen verbinding met de deurserver'; }
@@ -824,7 +827,7 @@
     if (!$('lock').classList.contains('open')) return;
     if (/^\d$/.test(e.key)) lockKey(e.key); else if (e.key === 'Backspace') lockKey('del');
   });
-  $('lockOut').onclick = () => { $('lock').classList.remove('open'); logout(); };
+  $('lockOut').onclick = () => { window.doorApp?.setHardLock?.(false); $('lock').classList.remove('open'); logout(); };
   async function lockNow() {
     if (!S?.me.hasLock) return lockSetupDialog(true);
     try { await api('/api/lock', {}); showLock(); } catch {}
@@ -981,7 +984,7 @@
           if (bad.length) return toast('Elke persoon heeft een nummer én een naam nodig');
           const badMail = peopleDraft.find((x) => x.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x.email));
           if (badMail) return toast(`E-mailadres klopt niet: ${badMail.email}`);
-          await api('/api/people', { people: peopleDraft.filter((x) => x.nr && x.name) });
+          await api('/api/people', { people: peopleDraft.filter((x) => x.nr && x.name), rev: S.peopleRev });
           S = await api('/api/admin-state'); peopleDraft = null; toast('Personen opgeslagen'); renderAll(true);
         } }, 'Personen opslaan')));
   }

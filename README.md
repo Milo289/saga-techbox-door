@@ -63,7 +63,9 @@ The main account also has a **Systeem** tab that nobody else has (and that can't
 may log in, session lengths, login-attempt limits, automatic deletion of old visitor requests, nightly backups (download / restore),
 an emergency stop (*Noodstop*) and a danger zone.
 
-**Screen lock:** the *Vergrendel* button in the header locks the control panel at once. Set your own 6-digit code under your name (*Schermcode*; it asks for your password). While locked the server refuses everything for that login (also on other devices using it, and the API) until the code is entered; 5 wrong codes log you out. Locked panels don't show visitor pop-ups.
+**Screen lock:** the *Vergrendel* button in the header locks the control panel at once. Set your own 6-digit code under your name (*Schermcode*; it asks for your password). While locked the server refuses everything for that login (also on other devices using it, and the API) until the code is entered; 5 wrong codes log you out. Locked panels don't show visitor pop-ups. In the desktop app the lock also takes over the whole computer screen (full screen, on top of everything, visible on every desktop/Space, other monitors black) and quitting is disabled until you unlock.
+
+**Profiles for visitors:** under *Wie ben je?* a visitor can make a profile (username, name, e-mail). After that one tap is enough for every question, and the answer can also be mailed. On a visitor's own phone (`/visit`) the profile is remembered; the door screen never remembers anyone. Profiles show up in *Instellingen → Personen* marked "Zelf aangemaakt"; you can edit or delete them there. Limit: 5 new profiles per hour per device.
 
 On the login screen **Onthoud mij** keeps you logged in longer (set under Systeem). In the desktop app your login can be stored **encrypted
 by your computer's own secure storage** (Keychain on macOS, Credential Vault on Windows, the keyring on Linux), so the app signs in by itself;

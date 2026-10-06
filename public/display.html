@@ -89,6 +89,7 @@
   .daytab.sel { background: var(--fg); color: var(--on); }
   .sheet.book .slots { min-height: calc(var(--u)*12); }
   .picked { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--u)*1.5); background: var(--bg); border-radius: calc(var(--u)*1.5); padding: calc(var(--u)*1.6) calc(var(--u)*2); font-size: calc(var(--u)*2.6); font-weight: 650; }
+  .row-links { display: flex; gap: calc(var(--u)*3); flex-wrap: wrap; justify-content: center; }
   .link { color: var(--c); font-size: calc(var(--u)*2.2); font-weight: 600; }
   .muted { color: var(--dim); font-size: calc(var(--u)*2.2); margin: 0; }
   .done { align-items: center; text-align: center; padding: calc(var(--u)*5) calc(var(--u)*3.5); gap: calc(var(--u)*1.4); }
@@ -548,9 +549,68 @@
   }
 
   // "Wie ben je?": a number fills in everything; otherwise name (+ e-mail when mail is on)
-  function whoAreYou(opt) {
+  // a profile (username + name + e-mail) is remembered on the visitor's own phone only, never on the door screen
+  const savedProfile = () => { try { return VISIT ? localStorage.getItem('doorProfile') || '' : ''; } catch { return ''; } };
+  const rememberProfile = (nr) => { try { if (VISIT) localStorage.setItem('doorProfile', nr); } catch {} };
+  const forgetProfile = () => { try { localStorage.removeItem('doorProfile'); } catch {} };
+  async function lookupPerson(nr) {
+    const res = await fetch('/api/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nr }) }).then((r) => r.json());
+    if (res.error) throw new Error(res.error);
+    return res;
+  }
+  async function whoAreYou(opt) {
+    const saved = savedProfile();
+    if (saved) {
+      try { const res = await lookupPerson(saved); if (res.found) return hello(opt, saved, res); forgetProfile(); } catch {}
+    }
     if (S.hasPeople) return numberPad(opt);
     nameForm(opt);
+  }
+  // shared by the number pad and the username form
+  async function greet(opt, nr, err, shown) {
+    try {
+      const res = await lookupPerson(nr);
+      if (!res.found) { err.textContent = 'Die gebruikersnaam of dat nummer kennen we niet'; if (shown) { shown.classList.remove('shake'); void shown.offsetWidth; shown.classList.add('shake'); } return false; }
+      rememberProfile(nr);
+      hello(opt, nr, res);
+      return true;
+    } catch (e) { err.textContent = e instanceof TypeError ? 'Geen verbinding — probeer opnieuw' : e.message; return false; }
+  }
+  function userForm(opt) {
+    const nr = field('input', { placeholder: 'Je gebruikersnaam of nummer', maxlength: 20, autocapitalize: 'none' });
+    const err = h('div', { class: 'err' });
+    const go = h('button', { class: 'btn go' }, 'Verder');
+    go.onclick = async () => {
+      const v = nr.value.trim().toLowerCase();
+      if (!v) { err.textContent = 'Vul je gebruikersnaam in'; return; }
+      go.disabled = true; await greet(opt, v, err, nr); go.disabled = false;
+    };
+    openSheet('', h('h3', {}, 'Wie ben je?'), nr, keyboard(), err,
+      h('button', { class: 'link', onclick: () => profileForm(opt) }, 'Nog geen profiel? Maak er een'),
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => (S.hasPeople ? numberPad(opt) : nameForm(opt)) }, 'Terug'), go));
+  }
+  function profileForm(opt) {
+    const nr = field('input', { placeholder: 'Kies een gebruikersnaam (bijv. anna)', maxlength: 20, autocapitalize: 'none' });
+    const name = field('input', { placeholder: 'Je naam', maxlength: 60 });
+    const email = field('input', { type: 'email', placeholder: S.mailOn ? 'E-mail — dan krijg je antwoorden ook per mail' : 'E-mail (optioneel)', maxlength: 120 });
+    const err = h('div', { class: 'err' });
+    const go = h('button', { class: 'btn go' }, 'Profiel maken');
+    go.onclick = async () => {
+      const u = nr.value.trim().toLowerCase(), em = email.value.trim();
+      if (!/^[a-z0-9._-]{3,20}$/.test(u)) { err.textContent = 'Gebruikersnaam: 3 tot 20 tekens (letters, cijfers, punt, streepje)'; return; }
+      if (!name.value.trim()) { err.textContent = 'Vul je naam in'; return; }
+      if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { err.textContent = 'Dat e-mailadres klopt niet'; return; }
+      go.disabled = true; err.textContent = '';
+      try {
+        const res = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nr: u, name: name.value, email: em }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || 'Profiel maken mislukt');
+        await greet(opt, u, err);
+      } catch (e) { err.textContent = e instanceof TypeError ? 'Geen verbinding — probeer opnieuw' : e.message; }
+      go.disabled = false;
+    };
+    openSheet('', h('h3', {}, 'Profiel maken'), h('p', { class: 'muted' }, 'Daarna vul je bij elke vraag alleen je gebruikersnaam in.'), nr, name, email, keyboard(), err,
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => whoAreYou(opt) }, 'Terug'), go));
   }
 
   function numberPad(opt) {
@@ -565,14 +625,10 @@
       key('⌫', () => { nr = nr.slice(0, -1); draw(); }, 'soft'), key('0', () => { if (nr.length < 12) { nr += '0'; draw(); } }), okBtn);
     okBtn.onclick = async () => {
       okBtn.disabled = true;
-      try {
-        const res = await fetch('/api/lookup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nr }) }).then((r) => r.json());
-        if (res.error) throw new Error(res.error);
-        if (!res.found) { err.textContent = 'Dat nummer kennen we niet'; shown.classList.remove('shake'); void shown.offsetWidth; shown.classList.add('shake'); nr = ''; draw(); return; }
-        hello(opt, nr, res);
-      } catch (e) { err.textContent = e instanceof TypeError ? 'Geen verbinding — probeer opnieuw' : e.message; draw(); }
+      if (!(await greet(opt, nr, err, shown))) { nr = ''; draw(); }
     };
     openSheet('pad', h('h3', {}, 'Wie ben je?'), h('p', { class: 'muted' }, 'Tik je nummer in — dan vullen we de rest voor je in.'), shown, pad, err,
+      h('div', { class: 'row-links' }, h('button', { class: 'link', onclick: () => userForm(opt) }, 'Typ een gebruikersnaam'), h('button', { class: 'link', onclick: () => profileForm(opt) }, 'Profiel maken')),
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => opt.back() }, 'Terug'), h('button', { class: 'btn', onclick: () => nameForm(opt) }, 'Geen nummer')));
   }
 
@@ -584,7 +640,7 @@
     const toggle = person.email ? h('button', { class: 'switch on', role: 'switch', 'aria-checked': 'true', onclick: (e) => { mail = !mail; e.currentTarget.classList.toggle('on', mail); e.currentTarget.setAttribute('aria-checked', String(mail)); } },
       h('span', { class: 'knob' }), h('span', {}, `Antwoord ook mailen naar ${person.email}`)) : null;
     openSheet('', h('div', { class: 'hello' }, h('div', { class: 'avatar pop' }, person.name.trim()[0].toUpperCase()), h('h3', {}, `Hoi ${person.name.split(' ')[0]}!`)), opt.summary ? h('div', { class: 'picked' }, h('span', {}, opt.summary)) : null, toggle, err,
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => numberPad(opt) }, 'Niet jij?'), go));
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { forgetProfile(); S.hasPeople ? numberPad(opt) : userForm(opt); } }, 'Niet jij?'), go));
   }
 
   function nameForm(opt) {
@@ -599,6 +655,7 @@
       sendVisit({ ...opt.payload, name: name.value, email: em }, err, go);
     };
     openSheet('', h('h3', {}, opt.title), opt.summary ? h('div', { class: 'picked' }, h('span', {}, opt.summary)) : null, name, email, keyboard(), err,
+      h('button', { class: 'link', onclick: () => profileForm(opt) }, 'Profiel maken — dan hoef je dit niet steeds in te vullen'),
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => (S.hasPeople ? numberPad(opt) : opt.back()) }, 'Terug'), go));
   }
 

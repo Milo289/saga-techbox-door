@@ -95,7 +95,8 @@ const freshState = () => ({
   busy: [], // planned busy blocks { id, from, to, note }
   appointments: [], // { id, at, name, reason }
   requests: [],
-  people: [], // { id, nr, name, email, note } — visitors type their number and everything is filled in
+  people: [], // { id, nr, name, email, note, self } — visitors type their number or username and everything is filled in (self = made by the visitor)
+  peopleRev: 0,
   system: { ...DEFAULT_SYSTEM },
   lastBackupDay: '',
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
@@ -419,6 +420,7 @@ function adminState(id) {
     build: BUILD,
     settings,
     people: full('people') ? state.people : [],
+    peopleRev: state.peopleRev || 0,
     mailOn: mailOn(),
     manual: state.manual,
     view: computeView(),
@@ -829,9 +831,10 @@ const adminRoutes = {
   'POST /api/appointments/remove': (b) => { state.appointments = state.appointments.filter((a) => a.id !== b.id); },
 
   'POST /api/people': (b) => {
+    if (b.rev !== undefined && Number(b.rev) !== (state.peopleRev || 0)) throw bad('Er is net een nieuw profiel bijgekomen — de lijst is bijgewerkt, probeer het nog eens');
     const seen = new Set();
     state.people = (Array.isArray(b.people) ? b.people : []).slice(0, 2000).map((x) => ({
-      id: str(x.id, 20) || newId(), nr: str(x.nr, 20), name: str(x.name, 60), email: isEmail(str(x.email, 120)) ? str(x.email, 120) : '', note: str(x.note, 100),
+      id: str(x.id, 20) || newId(), nr: str(x.nr, 20), name: str(x.name, 60), email: isEmail(str(x.email, 120)) ? str(x.email, 120) : '', note: str(x.note, 100), ...(x.self ? { self: true } : {}),
     })).filter((x) => x.nr && x.name && !seen.has(x.nr.toLowerCase()) && seen.add(x.nr.toLowerCase()));
     log('system', `Personenlijst opgeslagen (${state.people.length})`);
   },
@@ -947,6 +950,7 @@ const NEED = {
 
 const lastVisit = new Map();
 const lookups = new Map();
+const profileHits = new Map();
 const BELL_COOLDOWN = 45 * 1000; // the doorbell can ring at most once every 45 seconds (for everyone)
 let lastBellAt = 0;
 function handleVisit(req, b) {
@@ -1048,6 +1052,25 @@ const server = http.createServer(async (req, res) => {
       const nr = str((await readBody(req)).nr, 20).toLowerCase();
       const x = state.people.find((y) => y.nr.toLowerCase() === nr);
       return send(res, 200, x ? { found: true, name: x.name, email: mailOn() && x.email ? maskEmail(x.email) : '' } : { found: false });
+    }
+    if (req.method === 'POST' && p === '/api/profile') {
+      // visitors make their own profile: username + name + e-mail, so every question can be filled in with one tap
+      const ip = clientIp(req);
+      const hits = (profileHits.get(ip) || []).filter((t) => Date.now() - t < 3600e3);
+      if (hits.length >= 5) return send(res, 429, { error: 'Je hebt net al een paar profielen gemaakt — probeer het later nog eens' });
+      const b = await readBody(req);
+      const nr = str(b.nr, 20).toLowerCase(), name = str(b.name, 60), email = str(b.email, 120);
+      if (!/^[a-z0-9._-]{3,20}$/.test(nr)) throw bad('Gebruikersnaam: 3 tot 20 tekens (letters, cijfers, punt, streepje)');
+      if (!name) throw bad('Vul je naam in');
+      if (email && !isEmail(email)) throw bad('Dat e-mailadres klopt niet');
+      if (state.people.some((x) => x.nr.toLowerCase() === nr)) throw bad('Die gebruikersnaam is al bezet — kies een andere');
+      if (state.people.length >= 2000) throw bad('De lijst met profielen is vol');
+      state.people.push({ id: newId(), nr, name, email, note: 'Zelf aangemaakt', self: true });
+      state.peopleRev = (state.peopleRev || 0) + 1;
+      profileHits.set(ip, [...hits, Date.now()]);
+      log('visit', `Nieuw profiel: ${name} (${nr})`);
+      changed();
+      return send(res, 200, { ok: true, nr });
     }
     if (req.method === 'POST' && p === '/api/visit') return send(res, 200, handleVisit(req, await readBody(req)));
 
