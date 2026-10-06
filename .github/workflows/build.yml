@@ -28,6 +28,16 @@ jobs:
         run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false' # no paid code-signing certificate
+      # Start the real built app and check that it works (server inside the app, login, screen, closes again).
+      - name: Test the built app (macOS)
+        if: runner.os == 'macOS'
+        run: node scripts/smoke.js "dist/mac-arm64/Saga Techbox Deur.app/Contents/MacOS/Saga Techbox Deur"
+      - name: Test the built app (Windows)
+        if: runner.os == 'Windows'
+        run: node scripts/smoke.js "dist/win-unpacked/Saga Techbox Deur.exe"
+      - name: Test the built app (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke.js "dist/linux-unpacked/saga-techbox-door" --no-sandbox
       - uses: actions/upload-artifact@v4
         with:
           name: Saga-Techbox-Deur-${{ runner.os }}

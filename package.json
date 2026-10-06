@@ -13,7 +13,8 @@
     "dist": "electron-builder --publish never",
     "dist:mac": "electron-builder --mac --publish never",
     "dist:win": "electron-builder --win --publish never",
-    "dist:linux": "electron-builder --linux --publish never"
+    "dist:linux": "electron-builder --linux --publish never",
+    "smoke": "node scripts/smoke.js"
   },
   "devDependencies": {
     "electron": "^44.5.1",
@@ -46,7 +47,9 @@
         }
       ],
       "category": "public.app-category.productivity",
-      "artifactName": "Saga-Techbox-Deur-${version}-mac-${arch}.${ext}"
+      "artifactName": "Saga-Techbox-Deur-${version}-mac-${arch}.${ext}",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "target": [
@@ -85,6 +88,10 @@
       "maintainer": "Saga Techbox",
       "synopsis": "Deurscherm en bedieningspaneel",
       "artifactName": "Saga-Techbox-Deur-${version}-linux-${arch}.${ext}"
-    }
+    },
+    "asarUnpack": [
+      "public/icon-512.png"
+    ],
+    "afterPack": "build/adhoc-sign.js"
   }
 }

@@ -15,6 +15,7 @@ const os = require('os');
 
 app.setName('Saga Techbox Deur');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required'); // doorbell sound without a tap first
+if (process.env.DOOR_SNAPSHOT) app.disableHardwareAcceleration(); // automatic tests run on machines without a graphics card
 
 // testing aids: DOOR_USER_DATA = separate settings folder, DOOR_SNAPSHOT = save a picture of the window and quit
 if (process.env.DOOR_USER_DATA) app.setPath('userData', process.env.DOOR_USER_DATA);
@@ -24,7 +25,7 @@ function snapshot(w) {
     fs.writeFileSync(process.env.DOOR_SNAPSHOT, (await w.webContents.capturePage()).toPNG());
     console.log(`[snapshot] ${w.webContents.getURL()} — ${w.getTitle()}`);
     app.quit();
-  }, 2500));
+  }, Number(process.env.DOOR_SNAPSHOT_DELAY) || 2500));
 }
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
@@ -45,7 +46,8 @@ function saveConfig(c) {
 }
 let config = loadConfig();
 
-const ICON = path.join(__dirname, '..', 'public', 'icon-512.png');
+// the icon is unpacked from the app archive (asarUnpack), because the operating system itself has to read it
+const ICON = path.join(__dirname, '..', 'public', 'icon-512.png').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
 const WINDOWED = !!process.env.DOOR_WINDOWED; // for testing: door screen in a normal window
 const DATA_DIR = path.join(app.getPath('userData'), 'data');
 let win = null;       // the door screen or control panel window
