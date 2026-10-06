@@ -11,7 +11,7 @@
     "start": "node server.js",
     "app": "electron .",
     "dist": "electron-builder --publish never",
-    "dist:mac": "electron-builder --mac --publish never",
+    "dist:mac": "electron-builder --mac --arm64 --publish never && electron-builder --mac --x64 --publish never",
     "dist:win": "electron-builder --win --publish never",
     "dist:linux": "electron-builder --linux --publish never",
     "smoke": "node scripts/smoke.js"
