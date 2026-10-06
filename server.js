@@ -64,6 +64,16 @@ function ipInList(ip, list) {
     return ((n & mask) >>> 0) === ((b & mask) >>> 0);
   });
 }
+// Where does a request really come from? Behind a tunnel or proxy the connection itself always looks local, so a visitor from the
+// internet would pass for "this computer". Therefore: if a proxy header is present it is only believed when TRUST_PROXY=1 is set
+// (do that only when the server can be reached through the tunnel alone, see HOST); otherwise such a request counts as "from outside".
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+function clientIp(req) {
+  const remote = normIp(req.socket.remoteAddress);
+  const fwd = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || '').split(',')[0].trim();
+  if (!fwd) return remote;
+  return TRUST_PROXY ? normIp(fwd) : 'proxied';
+}
 function cleanSystem(b = {}) {
   const num = (v, min, max, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : d; };
   return {
@@ -391,7 +401,7 @@ const publicUser = (u) => ({ factory: !!u.factory, starter: !!u.starter, phase: 
 function kick(match) { for (const c of [...clients]) if (match(c)) { try { c.res.end(); } catch {} clients.delete(c); } }
 function newSession(userId, req, remember) {
   const token = 's_' + crypto.randomBytes(32).toString('hex');
-  state.sessions.push({ id: newId(), hash: sha(token), userId, ttl: remember ? state.system.rememberDays : state.system.sessionDays, createdAt: Date.now(), lastSeen: Date.now(), ip: (req.socket.remoteAddress || '').replace('::ffff:', ''), ua: str(req.headers['user-agent'], 120) });
+  state.sessions.push({ id: newId(), hash: sha(token), userId, ttl: remember ? state.system.rememberDays : state.system.sessionDays, createdAt: Date.now(), lastSeen: Date.now(), ip: clientIp(req), ua: str(req.headers['user-agent'], 120) });
   state.sessions = state.sessions.filter((x) => Date.now() - x.lastSeen < (x.ttl || state.system.sessionDays) * 864e5).slice(-200);
   return token;
 }
@@ -896,7 +906,7 @@ const lookups = new Map();
 const BELL_COOLDOWN = 45 * 1000; // the doorbell can ring at most once every 45 seconds (for everyone)
 let lastBellAt = 0;
 function handleVisit(req, b) {
-  const ip = req.socket.remoteAddress || '';
+  const ip = clientIp(req);
   const now = Date.now();
   // light flood protection (the door screen is one device, so keep this short)
   if (now - (lastVisit.get(ip) || 0) < 1200) throw Object.assign(new Error('Een moment…'), { code: 429 });
@@ -951,11 +961,11 @@ const server = http.createServer(async (req, res) => {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;
       if (role === 'admin' && !eid) return send(res, 401, { error: 'Inloggen is nodig' });
-      const sgate = role === 'admin' ? gate(eid, normIp(req.socket.remoteAddress)) : null;
+      const sgate = role === 'admin' ? gate(eid, clientIp(req)) : null;
       if (sgate) return send(res, sgate.code, { error: sgate.error });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 2000\n\n');
-      const c = { res, role, ip: normIp(req.socket.remoteAddress), tok: String(url.searchParams.get('token') || ''), pin: String(url.searchParams.get('pin') || ''), userId: eid?.userId, sessionId: eid?.sessionId };
+      const c = { res, role, ip: clientIp(req), tok: String(url.searchParams.get('token') || ''), pin: String(url.searchParams.get('pin') || ''), userId: eid?.userId, sessionId: eid?.sessionId };
       clients.add(c);
       write(c, 'state', role === 'admin' ? adminState(eid) : publicState());
       req.on('close', () => clients.delete(c));
@@ -964,7 +974,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/state') return send(res, 200, publicState());
     if (req.method === 'GET' && p === '/api/auth-info') return send(res, 200, { mode: authMode(), pin: !!ADMIN_PIN, version: APP_VERSION });
     if (req.method === 'POST' && p === '/api/login') {
-      const ip = (req.socket.remoteAddress || '').replace('::ffff:', '');
+      const ip = clientIp(req);
       if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
       const b = await readBody(req);
       const username = str(b.username, 40).toLowerCase(), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
@@ -986,7 +996,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/api/slots') return send(res, 200, { slots: freeSlots() });
     if (req.method === 'POST' && p === '/api/lookup') {
-      const ip = req.socket.remoteAddress || '';
+      const ip = clientIp(req);
       const hits = (lookups.get(ip) || []).filter((t) => Date.now() - t < 60e3);
       if (hits.length >= 15) return send(res, 429, { error: 'Even wachten en opnieuw proberen' });
       lookups.set(ip, [...hits, Date.now()]);
@@ -999,7 +1009,7 @@ const server = http.createServer(async (req, res) => {
     const routeKey = `${req.method} ${p}`;
     const route = adminRoutes[routeKey];
     if (route) {
-      const ip = (req.socket.remoteAddress || '').replace('::ffff:', '');
+      const ip = clientIp(req);
       if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
       const id = identify(req, url);
       if (!id) { authFail(ip); return send(res, 401, { error: 'Inloggen is nodig' }); }
@@ -1042,7 +1052,7 @@ lastView = JSON.stringify(computeView());
 // `ready` lets the desktop app wait for the server (or show why it couldn't start)
 const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
-  server.listen(PORT, () => {
+  server.listen(PORT, process.env.HOST || undefined, () => {
     console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)  — inloggen met account`);
     resolve(PORT);
   });
