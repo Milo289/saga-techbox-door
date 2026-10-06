@@ -300,7 +300,7 @@ function identifyFrom(tok, pin) {
   }
   if (tok) {
     const h = sha(tok), ss = state.sessions.find((x) => x.hash === h);
-    if (!ss || Date.now() - ss.lastSeen > SESSION_DAYS * 864e5) return null;
+    if (!ss || Date.now() - ss.lastSeen > (ss.ttl || SESSION_DAYS) * 864e5) return null;
     if (Date.now() - ss.lastSeen > 60e3) { ss.lastSeen = Date.now(); save(); }
     if (ss.userId === 'root') return ROOT_HASH ? { ...rootIdentity(), sessionId: ss.id } : null;
     const u = state.users.find((x) => x.id === ss.userId);
@@ -323,10 +323,10 @@ const authFail = (ip) => failures.set(ip, [...(failures.get(ip) || []).filter((t
 const authBlocked = (ip) => (failures.get(ip) || []).filter((t) => Date.now() - t < 10 * 60e3).length >= 20;
 const publicUser = (u) => ({ id: u.id, username: u.username, name: u.name, role: u.role, perms: permsOf(u.perms), disabled: !!u.disabled, createdAt: u.createdAt, lastLogin: u.lastLogin || 0 });
 function kick(match) { for (const c of [...clients]) if (match(c)) { try { c.res.end(); } catch {} clients.delete(c); } }
-function newSession(userId, req) {
+function newSession(userId, req, remember) {
   const token = 's_' + crypto.randomBytes(32).toString('hex');
-  state.sessions.push({ id: newId(), hash: sha(token), userId, createdAt: Date.now(), lastSeen: Date.now(), ip: (req.socket.remoteAddress || '').replace('::ffff:', ''), ua: str(req.headers['user-agent'], 120) });
-  state.sessions = state.sessions.filter((x) => Date.now() - x.lastSeen < SESSION_DAYS * 864e5).slice(-200);
+  state.sessions.push({ id: newId(), hash: sha(token), userId, ttl: remember ? 365 : SESSION_DAYS, createdAt: Date.now(), lastSeen: Date.now(), ip: (req.socket.remoteAddress || '').replace('::ffff:', ''), ua: str(req.headers['user-agent'], 120) });
+  state.sessions = state.sessions.filter((x) => Date.now() - x.lastSeen < (x.ttl || SESSION_DAYS) * 864e5).slice(-200);
   return token;
 }
 
@@ -841,7 +841,7 @@ const server = http.createServer(async (req, res) => {
       if (ROOT_HASH && username === ROOT_USER) { ok = verifyPassword(password, ROOT_HASH); user = rootIdentity(); }
       else { const u = state.users.find((x) => x.username === username && !x.disabled); ok = verifyPassword(password, u ? u.hash : DUMMY_HASH) && !!u; if (ok) { u.lastLogin = Date.now(); user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: permsOf(u.perms) }; } }
       if (!ok) { authFail(ip); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
-      const token = newSession(user.userId, req);
+      const token = newSession(user.userId, req, !!b.remember); // "remember me": stays valid for a year of non-use instead of 30 days
       log('login', `${user.name} ingelogd (${ip})`, user.name);
       save();
       return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });

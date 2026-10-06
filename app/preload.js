@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('doorApp', {
   revealData: () => ipcRenderer.send('app:revealData'),
   saveFile: (name, text) => ipcRenderer.invoke('app:saveFile', { name: String(name), text: String(text) }),
   openFile: () => ipcRenderer.invoke('app:openFile'),
+  // login stored encrypted with the computer's own secure storage (keychain / credential vault / keyring)
+  saveLogin: (username, password) => ipcRenderer.invoke('app:saveLogin', { username: String(username), password: String(password) }),
+  loadLogin: () => ipcRenderer.invoke('app:loadLogin'),
+  clearLogin: () => ipcRenderer.invoke('app:clearLogin'),
   // the tray menu and the global shortcuts ask the page to change the status (with the person's own login)
   onTrayStatus: (cb) => { if (typeof cb === 'function') ipcRenderer.on('tray-status', (_e, mode) => cb(String(mode))); },
 });

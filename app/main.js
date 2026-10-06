@@ -8,7 +8,7 @@
 // Extras that only the app has (a browser can't do these): tray icon with quick status, global shortcuts,
 // badge with the number of open requests, choose the monitor, always on top, zoom, daily refresh,
 // native save/open dialogs for backups and start at login.
-const { app, BrowserWindow, ipcMain, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -54,6 +54,7 @@ let tray = null;
 let displayBlocker = null;
 let localServerUrl = null;
 let quitting = false;
+let baseOrigin = ''; // the server this window shows; only pages from there may ask for the stored login
 let report = { open: 0, mode: '', label: '' }; // what the control panel tells us (for the tray and the badge)
 
 // ---------- the door server ----------
@@ -183,6 +184,7 @@ async function launch() {
     if (old) old.destroy();
     return;
   }
+  baseOrigin = new URL(base).origin;
   win = config.role === 'door' ? openDoor(base) : openControl(base);
   snapshot(win);
   win.on('closed', () => { if (win && win.isDestroyed()) win = null; });
@@ -298,6 +300,28 @@ ipcMain.handle('app:openFile', async (e) => {
   if (st.size > 8 * 1024 * 1024) return { ok: false, error: 'Dat bestand is te groot voor een back-up' };
   return { ok: true, text: fs.readFileSync(r.filePaths[0], 'utf8') };
 });
+
+// Stored login: encrypted by the operating system's secure storage, readable only by this app, only by the control panel of the server in use.
+const LOGIN_FILE = path.join(app.getPath('userData'), 'login.bin');
+const fromServerPage = (e) => fromWin(e) && !!e.senderFrame && (() => { try { return new URL(e.senderFrame.url).origin === baseOrigin; } catch { return false; } })();
+function secureStorageOk() {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    if (process.platform === 'linux' && safeStorage.getSelectedStorageBackend?.() === 'basic_text') return false; // no keyring: that would not really be encrypted
+    return true;
+  } catch { return false; }
+}
+ipcMain.handle('app:saveLogin', (e, { username, password }) => {
+  if (!fromServerPage(e)) return { ok: false };
+  if (!secureStorageOk()) return { ok: false, error: 'Dit systeem heeft geen veilige opslag (sleutelhanger) — je inlog is niet bewaard' };
+  fs.writeFileSync(LOGIN_FILE, safeStorage.encryptString(JSON.stringify({ username: String(username).slice(0, 80), password: String(password).slice(0, 200), origin: baseOrigin })), { mode: 0o600 });
+  return { ok: true };
+});
+ipcMain.handle('app:loadLogin', (e) => {
+  if (!fromServerPage(e) || !fs.existsSync(LOGIN_FILE) || !secureStorageOk()) return null;
+  try { const d = JSON.parse(safeStorage.decryptString(fs.readFileSync(LOGIN_FILE))); return d.origin === baseOrigin ? { username: d.username, password: d.password } : null; } catch { return null; }
+});
+ipcMain.handle('app:clearLogin', (e) => { if (fromServerPage(e)) { try { fs.unlinkSync(LOGIN_FILE); } catch {} } return { ok: true }; });
 
 // settings API: only for the settings window, never for pages from the server
 const fromSetup = (e) => setupWin && e.sender === setupWin.webContents;

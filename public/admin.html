@@ -201,6 +201,7 @@
   <form id="userForm" class="lf">
     <input id="lu" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Gebruikersnaam">
     <input id="lp" type="password" autocomplete="current-password" placeholder="Wachtwoord">
+    <label class="check" style="font-size:14px"><input type="checkbox" id="remember"><span id="rememberText">Onthoud mij op dit apparaat</span></label>
     <button class="white" id="loginBtn" type="submit">Inloggen</button>
   </form>
   <form id="pinForm" class="lf hidden">
@@ -338,8 +339,26 @@
 
   // ---------- login + live connection ----------
   let authInfo = { mode: 'login', pin: false };
+  let autoLoginTried = false;
+  // desktop app: sign in again by itself with the login that is stored encrypted on this computer
+  async function autoLogin() {
+    if (autoLoginTried || !window.doorApp?.loadLogin) return false;
+    autoLoginTried = true;
+    try {
+      const saved = await window.doorApp.loadLogin();
+      if (!saved) return false;
+      const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: saved.username, password: saved.password, remember: true }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { if (res.status === 401) window.doorApp.clearLogin(); return false; } // password changed: forget it
+      TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', '');
+      return true;
+    } catch { return false; }
+  }
   async function showLogin(msg) {
+    if (await autoLogin()) { start(); return; }
     $('shell').classList.add('hidden'); $('login').classList.remove('hidden');
+    $('rememberText').textContent = window.doorApp?.saveLogin ? 'Onthoud mijn inlog op deze computer (versleuteld)' : 'Onthoud mij op dit apparaat (1 jaar)';
+    $('remember').checked = store.get('doorRemember', window.doorApp?.saveLogin ? '1' : '0') === '1';
     $('pinErr').textContent = msg || '';
     if (es) { es.close(); es = null; }
     try { authInfo = await fetch('/api/auth-info', { cache: 'no-store' }).then((r) => r.json()); } catch {}
@@ -358,10 +377,13 @@
     e.preventDefault();
     const btn = $('loginBtn'); btn.disabled = true; $('pinErr').textContent = '';
     try {
-      const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: $('lu').value, password: $('lp').value }) });
+      const typed = { username: $('lu').value, password: $('lp').value }, remember = $('remember').checked;
+      store.set('doorRemember', remember ? '1' : '0');
+      const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...typed, remember }) });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { $('pinErr').textContent = out.error || 'Inloggen lukte niet'; $('lp').value = ''; $('lp').focus(); return; }
       TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', ''); $('lp').value = '';
+      if (window.doorApp?.saveLogin) { if (remember) window.doorApp.saveLogin(typed.username, typed.password).then((r) => { if (r && !r.ok && r.error) toast(r.error); }); else window.doorApp.clearLogin(); }
       start();
     } catch { $('pinErr').textContent = 'Geen verbinding met de deurserver'; }
     finally { btn.disabled = false; }
@@ -370,6 +392,7 @@
   async function logout() {
     try { await fetch('/api/logout', { method: 'POST', headers: authHeaders() }); } catch {}
     TOKEN = ''; PIN = ''; store.set('doorToken', ''); store.set('doorPin', ''); S = null; closeAlert?.();
+    autoLoginTried = true; if (window.doorApp?.clearLogin) window.doorApp.clearLogin();
     showLogin('');
   }
 

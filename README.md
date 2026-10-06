@@ -59,6 +59,10 @@ npm run login        # asks for a username and password (hidden) and writes them
 ```
 Then restart the server (or build the app again). That login always has every right. Keep the password safe — there is no reset.
 
+On the login screen, **Onthoud mij** keeps you logged in for a year. In the desktop app your login is stored **encrypted by your
+computer's own secure storage** (Keychain on macOS, Credential Vault on Windows, the keyring on Linux), so the app signs in by itself;
+logging out forgets it. The password itself is never written anywhere in plain text.
+
 With it you get a **Beheer** tab:
 - **Gebruikers** — create accounts with a role (*beheerder*, *medewerker*, *kijker*) and tick exactly which rights each person has:
   see status · change status/message/busy times · see and answer visitors · manage people · change settings · set up mail ·
