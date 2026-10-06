@@ -52,7 +52,17 @@ ADMIN_PIN=1234 node server.js
 ## Accounts, rights and the API
 
 By default the control panel opens with a PIN (`ADMIN_PIN`) — or without protection if you set nothing.
-For real accounts, give the server an **owner**:
+For real accounts, set up the **owner** — *you*, the one account that is fixed in the code:
+
+```
+npm run owner        # asks for a username and password (hidden), writes owner.js
+```
+`owner.js` then holds your username and a **hash** of the password (never the password itself). It is part of the code, so
+**no website, setting or environment variable can change or override it** — to change it you run the command again and restart /
+rebuild. There is no "forgot password", so keep the password in a password manager, and choose a long one (12+ characters).
+Remember `owner.js` is committed with the project (private repository) and built into the app.
+
+Alternatively (not fixed in the code) the server can take the owner from start-up settings:
 
 | Setting | Meaning |
 |---|---|

@@ -146,7 +146,8 @@
   $('windowed').checked = !!c.windowed;
   $('display').replaceChildren(...info.displays.map((d) => new Option(d.label, d.id, false, d.id === c.display)));
   $('ownerUser').value = c.ownerUser || '';
-  $('ownerState').textContent = c.ownerSet ? `Er is een eigenaaraccount (${c.ownerUser}). Laat het wachtwoord leeg om het te behouden.` : 'Nog geen eigenaaraccount. Zonder account geldt alleen de pincode (of geen beveiliging als die leeg is).';
+  if (c.ownerLocked) { $('advOwner').querySelector('.body').innerHTML = ''; const p = document.createElement('p'); p.className = 'hint'; p.style.margin = '0'; p.textContent = `De eigenaar (${c.fixedOwner}) staat vast in deze app en kan hier niet worden gewijzigd.`; $('advOwner').querySelector('.body').append(p); }
+  else $('ownerState').textContent = c.ownerSet ? `Er is een eigenaaraccount (${c.ownerUser}). Laat het wachtwoord leeg om het te behouden.` : 'Nog geen eigenaaraccount. Zonder account geldt alleen de pincode (of geen beveiliging als die leeg is).';
   $('rowOwnerClear').classList.toggle('hidden', !c.ownerSet);
   $('about').textContent = `Versie ${info.version} · ${info.platform} · gegevens in ${info.dataDir}`;
   const roleSync = () => {

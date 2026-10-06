@@ -638,7 +638,7 @@
         } }, 'Opslaan'), h('button', { class: 'ghost', onclick: () => { userDraft = null; renderAll(true); } }, 'Annuleren')));
     }
     return h('div', { class: 'card' }, h('h2', {}, 'Gebruikers', h('span', { class: 'sp' }), h('button', { class: 'sm', onclick: () => { userDraft = { username: '', name: '', role: 'medewerker', perms: S.rolePresets.medewerker.filter(can), password: '', disabled: false }; renderAll(true); } }, '+ Gebruiker')),
-      h('p', { class: 'muted', style: 'margin-top:0' }, S.server.ownerConfigured ? `Jij bent de eigenaar (${S.server.ownerUser}): dat account staat in de opstartinstellingen, heeft altijd alle rechten en kan hier niet worden gewijzigd.` : 'Er is nog geen eigenaaraccount. Stel OWNER_USER en OWNER_PASSWORD in bij het opstarten van de server, dan kun je alleen met een account inloggen.'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, S.server.ownerConfigured ? (S.server.ownerLocked ? `Jij bent de eigenaar (${S.server.ownerUser}): dit account staat vast in de code, heeft altijd alle rechten en kan op geen enkele manier worden gewijzigd.` : `Jij bent de eigenaar (${S.server.ownerUser}): dat account staat in de opstartinstellingen, heeft altijd alle rechten en kan hier niet worden gewijzigd.`) : 'Er is nog geen eigenaaraccount. Voer op de computer waar de server staat `npm run owner` uit: dan staat jouw gebruikersnaam en wachtwoord vast in de code.'),
       S.users.length ? h('div', {}, ...rows) : h('p', { class: 'muted' }, 'Nog geen andere gebruikers. Voeg bijvoorbeeld een collega toe die alleen de status mag wijzigen.'),
       editor);
   }
@@ -683,7 +683,7 @@
   function serverCard() {
     const v = S.server, up = v.uptime;
     const uptime = up >= 86400 ? `${Math.floor(up / 86400)} d ${Math.floor((up % 86400) / 3600)} u` : up >= 3600 ? `${Math.floor(up / 3600)} u ${Math.floor((up % 3600) / 60)} min` : `${Math.floor(up / 60)} min`;
-    const rows = [['Versie', v.version], ['Draait al', uptime], ['Verbonden schermen', String(v.clients)], ['Inloggen', { login: 'Met account', pin: 'Met pincode', open: 'Geen (open)' }[v.authMode] + (v.pin && v.authMode === 'login' ? ' + pincode als reserve' : '')], ['Eigenaar', v.ownerConfigured ? v.ownerUser : 'niet ingesteld'], ['Systeem', `${v.platform} · Node ${v.node}`], ['Gegevens in', v.dataDir], ['Tijdzone', S.timeZone]];
+    const rows = [['Versie', v.version], ['Draait al', uptime], ['Verbonden schermen', String(v.clients)], ['Inloggen', { login: 'Met account', pin: 'Met pincode', open: 'Geen (open)' }[v.authMode] + (v.pin && v.authMode === 'login' ? ' + pincode als reserve' : '')], ['Eigenaar', v.ownerConfigured ? `${v.ownerUser}${v.ownerLocked ? ' (vast in de code)' : ''}` : 'niet ingesteld'], ['Systeem', `${v.platform} · Node ${v.node}`], ['Gegevens in', v.dataDir], ['Tijdzone', S.timeZone]];
     return h('div', { class: 'card' }, h('h2', {}, 'Server'), h('div', { class: 'kv' }, ...rows.flatMap(([k, val]) => [h('b', {}, k), h('span', {}, val)])),
       v.pin && v.authMode === 'login' ? h('p', { class: 'muted', style: 'margin-bottom:0' }, 'Tip: de oude pincode werkt nog als beheerder. Haal ADMIN_PIN weg uit de opstartinstellingen als alleen accounts mogen inloggen.') : null);
   }
@@ -698,7 +698,7 @@
     $('alertCard').replaceChildren(
       h('div', { class: 'pophead' }, h('span', { class: 'popicon' }, icon('users')), h('div', {}, h('div', { class: 'poptitle' }, me.name), h('div', { class: 'muted' }, `${ROLE_NAMES[me.role] || me.role}${me.kind === 'pin' ? ' (pincode)' : ''}`))),
       h('div', { style: 'margin-top:12px' }, h('div', { class: 'muted' }, 'Jouw rechten'), permChips(me.perms)),
-      canPw ? h('div', { class: 'list', style: 'margin-top:16px' }, h('div', { class: 'muted' }, 'Wachtwoord wijzigen'), cur, nxt, h('div', { class: 'row' }, h('button', { class: 'sm', onclick: async () => { await api('/api/password', { current: cur.value, next: nxt.value }); cur.value = nxt.value = ''; toast('Wachtwoord gewijzigd'); } }, 'Wijzigen'))) : me.owner ? h('p', { class: 'muted', style: 'margin-top:14px' }, 'Het eigenaar-wachtwoord stel je in bij het opstarten van de server (OWNER_PASSWORD).') : null,
+      canPw ? h('div', { class: 'list', style: 'margin-top:16px' }, h('div', { class: 'muted' }, 'Wachtwoord wijzigen'), cur, nxt, h('div', { class: 'row' }, h('button', { class: 'sm', onclick: async () => { await api('/api/password', { current: cur.value, next: nxt.value }); cur.value = nxt.value = ''; toast('Wachtwoord gewijzigd'); } }, 'Wijzigen'))) : me.owner ? h('p', { class: 'muted', style: 'margin-top:14px' }, S.server?.ownerLocked ? 'Het eigenaaraccount staat vast in de code en kan niet worden gewijzigd.' : 'Het eigenaar-wachtwoord stel je in bij het opstarten van de server (OWNER_PASSWORD).') : null,
       h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten'), h('span', { style: 'flex:1' }), me.kind !== 'open' ? h('button', { class: 'danger', onclick: () => { closeAlert(); logout(); } }, 'Uitloggen') : null));
     $('alert').classList.add('open');
   }

@@ -46,6 +46,9 @@ function saveConfig(c) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2), { mode: 0o600 });
 }
 let config = loadConfig();
+let FIXED_OWNER = { username: '', hash: '' };
+try { FIXED_OWNER = require('../owner.js'); } catch {}
+const OWNER_LOCKED = !!(FIXED_OWNER.username && FIXED_OWNER.hash); // fixed in the code: the settings window can't touch it
 
 const ICON = path.join(__dirname, '..', 'public', 'icon-512.png');
 const WINDOWED = !!process.env.DOOR_WINDOWED; // for testing: door screen in a normal window
@@ -315,7 +318,7 @@ ipcMain.handle('setup:get', (e) => {
   if (!fromSetup(e)) return null;
   const { ownerHash, ...safe } = config;
   return {
-    config: { ...safe, ownerSet: !!ownerHash }, platform: process.platform, version: app.getVersion(), lan: lanAddresses(config.port), running: !!localServerUrl, dataDir: DATA_DIR,
+    config: { ...safe, ownerSet: !!ownerHash, ownerLocked: OWNER_LOCKED, fixedOwner: OWNER_LOCKED ? FIXED_OWNER.username : '' }, platform: process.platform, version: app.getVersion(), lan: lanAddresses(config.port), running: !!localServerUrl, dataDir: DATA_DIR,
     displays: screen.getAllDisplays().map((d, i) => ({ id: String(d.id), label: `Scherm ${i + 1} — ${d.bounds.width}×${d.bounds.height}${d.id === screen.getPrimaryDisplay().id ? ' (hoofdscherm)' : ''}` })),
   };
 });
@@ -340,7 +343,8 @@ ipcMain.handle('setup:save', async (e, next) => {
   // owner account of the built-in server: name + password (only a hash is kept)
   const ownerUser = String(next.ownerUser || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 32);
   const ownerPassword = String(next.ownerPassword || '');
-  if (next.ownerClear) { c.ownerUser = ''; c.ownerHash = ''; }
+  if (OWNER_LOCKED) { c.ownerUser = ''; c.ownerHash = ''; } // the fixed owner always wins
+  else if (next.ownerClear) { c.ownerUser = ''; c.ownerHash = ''; }
   else if (ownerUser || ownerPassword) {
     if (ownerUser.length < 3) return { ok: false, error: 'Gebruikersnaam van de eigenaar: minstens 3 tekens' };
     if (ownerPassword && ownerPassword.length < 8) return { ok: false, error: 'Wachtwoord van de eigenaar: minstens 8 tekens' };

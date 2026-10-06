@@ -266,7 +266,11 @@ const ROLE_PRESETS = {
   kijker: ['view'],
 };
 // The owner account comes from the start-up settings, never from the data file or the source code.
-const OWNER_USER = (process.env.OWNER_USER || 'owner').trim().toLowerCase();
+// The owner is fixed in owner.js when it is filled in (npm run owner). Then nothing — no setting, no environment variable — can change it.
+let FIXED_OWNER = { username: '', hash: '' };
+try { FIXED_OWNER = require('./owner.js'); } catch {}
+const OWNER_LOCKED = !!(FIXED_OWNER.username && FIXED_OWNER.hash);
+const OWNER_USER = (OWNER_LOCKED ? FIXED_OWNER.username : (process.env.OWNER_USER || 'owner')).trim().toLowerCase();
 function hashPassword(pw) {
   const salt = crypto.randomBytes(16);
   return `scrypt$${salt.toString('hex')}$${crypto.scryptSync(String(pw), salt, 64).toString('hex')}`;
@@ -279,7 +283,7 @@ function verifyPassword(pw, stored) {
     return crypto.timingSafeEqual(crypto.scryptSync(String(pw), Buffer.from(salt, 'hex'), want.length), want);
   } catch { return false; }
 }
-const OWNER_HASH = process.env.OWNER_PASSWORD_HASH || (process.env.OWNER_PASSWORD ? hashPassword(process.env.OWNER_PASSWORD) : '');
+const OWNER_HASH = OWNER_LOCKED ? FIXED_OWNER.hash : (process.env.OWNER_PASSWORD_HASH || (process.env.OWNER_PASSWORD ? hashPassword(process.env.OWNER_PASSWORD) : ''));
 const DUMMY_HASH = hashPassword(crypto.randomBytes(8).toString('hex')); // so an unknown user takes as long as a wrong password
 const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
 const authMode = () => (OWNER_HASH || state.users.length ? 'login' : ADMIN_PIN ? 'pin' : 'open');
@@ -348,7 +352,7 @@ function adminState(id) {
     users: full('users') ? state.users.map(publicUser) : undefined,
     sessions: full('users') ? state.sessions.map((x) => ({ id: x.id, userId: x.userId, who: x.userId === 'owner' ? 'Eigenaar' : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
     apiKeys: full('api') ? state.apiKeys.map(({ id: kid, name, prefix, perms, createdAt, lastUsed, by }) => ({ id: kid, name, prefix, perms, createdAt, lastUsed, by })) : undefined,
-    server: full('users') ? { version: APP_VERSION, uptime: Math.round(process.uptime()), node: process.version, platform: `${process.platform} ${process.arch}`, dataDir: DATA_DIR, clients: clients.size, authMode: authMode(), ownerConfigured: !!OWNER_HASH, ownerUser: OWNER_USER, pin: !!ADMIN_PIN } : undefined,
+    server: full('users') ? { version: APP_VERSION, uptime: Math.round(process.uptime()), node: process.version, platform: `${process.platform} ${process.arch}`, dataDir: DATA_DIR, clients: clients.size, authMode: authMode(), ownerConfigured: !!OWNER_HASH, ownerLocked: OWNER_LOCKED, ownerUser: OWNER_USER, pin: !!ADMIN_PIN } : undefined,
     serverTime: Date.now(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     authMode: authMode(),
@@ -598,7 +602,7 @@ const adminRoutes = {
   },
   'POST /api/password': (b, id) => {
     if (id.kind !== 'user') throw bad('Alleen voor gebruikers met een account');
-    if (id.owner) throw bad('Het eigenaar-wachtwoord stel je in bij het opstarten (OWNER_PASSWORD)');
+    if (id.owner) throw bad(OWNER_LOCKED ? 'Het eigenaar-wachtwoord staat vast in de code en kan niet worden gewijzigd' : 'Het eigenaar-wachtwoord stel je in bij het opstarten (OWNER_PASSWORD)');
     const u = state.users.find((x) => x.id === id.userId);
     if (!u || !verifyPassword(b.current, u.hash)) throw bad('Je huidige wachtwoord klopt niet');
     if (String(b.next || '').length < 8) throw bad('Nieuw wachtwoord: minstens 8 tekens');
