@@ -1,0 +1,914 @@
+[
+  {
+    "typeName": "DeurBeheerDev.DoorMode",
+    "mangledTypeName": "13DeurBeheerDev8DoorModeO",
+    "kind": "enum",
+    "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+    "line": 4,
+    "conformances": [
+      "Swift.Equatable",
+      "Swift.Hashable",
+      "Swift.RawRepresentable",
+      "AppIntents.AppEnum",
+      "AppIntents.AppValue",
+      "AppIntents.StaticDisplayRepresentable",
+      "AppIntents.PersistentlyIdentifiable",
+      "AppIntents.TypeDisplayRepresentable",
+      "AppIntents._IntentValue",
+      "Swift.Sendable",
+      "AppIntents.CaseDisplayRepresentable",
+      "Swift.SendableMetatype",
+      "Foundation.CustomLocalizedStringResourceConvertible",
+      "Swift.CaseIterable",
+      "Swift.BitwiseCopyable"
+    ],
+    "allConformances": [
+      {
+        "protocolName": "Swift.Equatable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.Hashable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.RawRepresentable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents.AppEnum",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents.AppValue",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents.StaticDisplayRepresentable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents.PersistentlyIdentifiable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents.TypeDisplayRepresentable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents._IntentValue",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.Sendable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents.CaseDisplayRepresentable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.SendableMetatype",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Foundation.CustomLocalizedStringResourceConvertible",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.CaseIterable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.BitwiseCopyable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      }
+    ],
+    "associatedTypeAliases": [
+      {
+        "typeAliasName": "RawValue",
+        "substitutedTypeName": "Swift.String",
+        "substitutedMangledTypeName": "SS"
+      },
+      {
+        "typeAliasName": "ValueType",
+        "substitutedTypeName": "DeurBeheerDev.DoorMode",
+        "substitutedMangledTypeName": "13DeurBeheerDev8DoorModeO"
+      },
+      {
+        "typeAliasName": "UnwrappedType",
+        "substitutedTypeName": "DeurBeheerDev.DoorMode",
+        "substitutedMangledTypeName": "13DeurBeheerDev8DoorModeO"
+      },
+      {
+        "typeAliasName": "Specification",
+        "substitutedTypeName": "some AppIntents.ResolverSpecification",
+        "substitutedMangledTypeName": "10AppIntents0A4EnumPAAE28defaultResolverSpecificationQrvpZQOy13DeurBeheerDev8DoorModeO_Qo_",
+        "opaqueTypeProtocolRequirements": [
+          "AppIntents.ResolverSpecification"
+        ],
+        "opaqueTypeSameTypeRequirements": []
+      },
+      {
+        "typeAliasName": "AllCases",
+        "substitutedTypeName": "Swift.Array<DeurBeheerDev.DoorMode>",
+        "substitutedMangledTypeName": "Say13DeurBeheerDev8DoorModeOG"
+      }
+    ],
+    "properties": [
+      {
+        "label": "typeDisplayRepresentation",
+        "type": "AppIntents.TypeDisplayRepresentation",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 6,
+        "valueKind": "RawLiteral",
+        "value": "Status"
+      },
+      {
+        "label": "caseDisplayRepresentations",
+        "type": "Swift.Dictionary<DeurBeheerDev.DoorMode, AppIntents.DisplayRepresentation>",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 7,
+        "valueKind": "Dictionary",
+        "value": [
+          {
+            "key": {
+              "valueKind": "Enum",
+              "value": {
+                "name": "open"
+              }
+            },
+            "value": {
+              "valueKind": "RawLiteral",
+              "value": "Open"
+            }
+          },
+          {
+            "key": {
+              "valueKind": "Enum",
+              "value": {
+                "name": "closed"
+              }
+            },
+            "value": {
+              "valueKind": "RawLiteral",
+              "value": "Gesloten"
+            }
+          },
+          {
+            "key": {
+              "valueKind": "Enum",
+              "value": {
+                "name": "busy"
+              }
+            },
+            "value": {
+              "valueKind": "RawLiteral",
+              "value": "Bezet"
+            }
+          }
+        ]
+      },
+      {
+        "label": "allCases",
+        "type": "Swift.Array<DeurBeheerDev.DoorMode>",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "true",
+        "valueKind": "Array",
+        "value": [
+          {
+            "valueKind": "Enum",
+            "value": {
+              "name": "open"
+            }
+          },
+          {
+            "valueKind": "Enum",
+            "value": {
+              "name": "closed"
+            }
+          },
+          {
+            "valueKind": "Enum",
+            "value": {
+              "name": "busy"
+            }
+          }
+        ]
+      },
+      {
+        "label": "rawValue",
+        "type": "Swift.String",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "false",
+        "isComputed": "true",
+        "valueKind": "Runtime"
+      }
+    ],
+    "cases": [
+      {
+        "name": "open",
+        "rawValue": "open"
+      },
+      {
+        "name": "closed",
+        "rawValue": "closed"
+      },
+      {
+        "name": "busy",
+        "rawValue": "busy"
+      }
+    ]
+  },
+  {
+    "typeName": "DeurBeheerDev.SetDoorStatusIntent",
+    "mangledTypeName": "13DeurBeheerDev19SetDoorStatusIntentV",
+    "kind": "struct",
+    "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+    "line": 10,
+    "conformances": [
+      "AppIntents.AppIntent",
+      "AppIntents.PersistentlyIdentifiable",
+      "AppIntents._SupportsAppDependencies",
+      "Swift.Sendable",
+      "Swift.SendableMetatype"
+    ],
+    "allConformances": [
+      {
+        "protocolName": "AppIntents.AppIntent",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents.PersistentlyIdentifiable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents._SupportsAppDependencies",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.Sendable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.SendableMetatype",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      }
+    ],
+    "associatedTypeAliases": [
+      {
+        "typeAliasName": "PerformResult",
+        "substitutedTypeName": "some AppIntents.ProvidesDialog",
+        "substitutedMangledTypeName": "13DeurBeheerDev19SetDoorStatusIntentV7performQryYaKFQOy_Qo_",
+        "opaqueTypeProtocolRequirements": [
+          "AppIntents.ProvidesDialog"
+        ],
+        "opaqueTypeSameTypeRequirements": []
+      },
+      {
+        "typeAliasName": "SummaryContent",
+        "substitutedTypeName": "some AppIntents.ParameterSummary",
+        "substitutedMangledTypeName": "13DeurBeheerDev19SetDoorStatusIntentV16parameterSummaryQrvpZQOy_Qo_",
+        "opaqueTypeProtocolRequirements": [
+          "AppIntents.ParameterSummary"
+        ],
+        "opaqueTypeSameTypeRequirements": []
+      }
+    ],
+    "properties": [
+      {
+        "label": "_mode",
+        "type": "AppIntents.IntentParameter<DeurBeheerDev.DoorMode>",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "false",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 15,
+        "valueKind": "InitCall",
+        "value": {
+          "type": "AppIntents.IntentParameter<DeurBeheerDev.DoorMode>",
+          "arguments": [
+            {
+              "label": "title",
+              "type": "Foundation.LocalizedStringResource",
+              "valueKind": "RawLiteral",
+              "value": "Status"
+            },
+            {
+              "label": "description",
+              "type": "Swift.Optional<Foundation.LocalizedStringResource>",
+              "valueKind": "NilLiteral"
+            },
+            {
+              "label": "default",
+              "type": "Swift.Optional<DeurBeheerDev.DoorMode>",
+              "valueKind": "NilLiteral"
+            },
+            {
+              "label": "requestValueDialog",
+              "type": "Swift.Optional<AppIntents.IntentDialog>",
+              "valueKind": "NilLiteral"
+            },
+            {
+              "label": "requestDisambiguationDialog",
+              "type": "Swift.Optional<AppIntents.IntentDialog>",
+              "valueKind": "NilLiteral"
+            },
+            {
+              "label": "inputConnectionBehavior",
+              "type": "AppIntents.InputConnectionBehavior",
+              "valueKind": "Runtime"
+            },
+            {
+              "label": "supportedValues",
+              "type": "Swift.Array<DeurBeheerDev.DoorMode>",
+              "valueKind": "Runtime"
+            }
+          ]
+        }
+      },
+      {
+        "label": "title",
+        "type": "Foundation.LocalizedStringResource",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 11,
+        "valueKind": "RawLiteral",
+        "value": "Zet de deurstatus"
+      },
+      {
+        "label": "description",
+        "type": "AppIntents.IntentDescription",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 12,
+        "valueKind": "RawLiteral",
+        "value": "Zet de deur op Open, Gesloten of Bezet."
+      },
+      {
+        "label": "authenticationPolicy",
+        "type": "AppIntents.IntentAuthenticationPolicy",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 13,
+        "valueKind": "Enum",
+        "value": {
+          "name": "requiresAuthentication"
+        }
+      },
+      {
+        "label": "mode",
+        "type": "DeurBeheerDev.DoorMode",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "false",
+        "isComputed": "true",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 15,
+        "valueKind": "InitCall",
+        "value": {
+          "type": "AppIntents.IntentParameter<DeurBeheerDev.DoorMode>",
+          "arguments": [
+            {
+              "label": "title",
+              "type": "Foundation.LocalizedStringResource",
+              "valueKind": "RawLiteral",
+              "value": "Status"
+            },
+            {
+              "label": "description",
+              "type": "Swift.Optional<Foundation.LocalizedStringResource>",
+              "valueKind": "NilLiteral"
+            },
+            {
+              "label": "default",
+              "type": "Swift.Optional<DeurBeheerDev.DoorMode>",
+              "valueKind": "NilLiteral"
+            },
+            {
+              "label": "requestValueDialog",
+              "type": "Swift.Optional<AppIntents.IntentDialog>",
+              "valueKind": "NilLiteral"
+            },
+            {
+              "label": "requestDisambiguationDialog",
+              "type": "Swift.Optional<AppIntents.IntentDialog>",
+              "valueKind": "NilLiteral"
+            },
+            {
+              "label": "inputConnectionBehavior",
+              "type": "AppIntents.InputConnectionBehavior",
+              "valueKind": "Runtime"
+            },
+            {
+              "label": "supportedValues",
+              "type": "Swift.Array<DeurBeheerDev.DoorMode>",
+              "valueKind": "Runtime"
+            }
+          ]
+        },
+        "propertyWrappers": [
+          {
+            "type": "AppIntents.IntentParameter",
+            "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+            "line": 15,
+            "arguments": [
+              {
+                "label": "title",
+                "type": "Foundation.LocalizedStringResource",
+                "valueKind": "RawLiteral",
+                "value": "Status"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "label": "$mode",
+        "type": "AppIntents.IntentParameter<DeurBeheerDev.DoorMode>",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "false",
+        "isComputed": "true",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 15,
+        "valueKind": "Runtime"
+      },
+      {
+        "label": "parameterSummary",
+        "type": "some AppIntents.ParameterSummary",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "true",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 16,
+        "valueKind": "InitCall",
+        "value": {
+          "type": "AppIntents.IntentParameterSummary<DeurBeheerDev.SetDoorStatusIntent>",
+          "arguments": [
+            {
+              "label": "",
+              "type": "AppIntents.ParameterSummaryString<DeurBeheerDev.SetDoorStatusIntent>",
+              "valueKind": "InterpolatedStringLiteral",
+              "value": {
+                "segments": [
+                  {
+                    "valueKind": "RawLiteral",
+                    "value": "Zet de deur op "
+                  },
+                  {
+                    "valueKind": "KeyPath",
+                    "value": {
+                      "path": "$mode",
+                      "rootType": "DeurBeheerDev.SetDoorStatusIntent",
+                      "components": [
+                        {
+                          "label": "$mode",
+                          "type": "AppIntents.IntentParameter<DeurBeheerDev.DoorMode>"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "valueKind": "RawLiteral",
+                    "value": ""
+                  }
+                ]
+              }
+            },
+            {
+              "label": "table",
+              "type": "Swift.Optional<Swift.String>",
+              "valueKind": "NilLiteral"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "typeName": "DeurBeheerDev.LockdownIntent",
+    "mangledTypeName": "13DeurBeheerDev14LockdownIntentV",
+    "kind": "struct",
+    "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+    "line": 28,
+    "conformances": [
+      "AppIntents.AppIntent",
+      "AppIntents.PersistentlyIdentifiable",
+      "AppIntents._SupportsAppDependencies",
+      "Swift.Sendable",
+      "Swift.SendableMetatype",
+      "Swift.BitwiseCopyable"
+    ],
+    "allConformances": [
+      {
+        "protocolName": "AppIntents.AppIntent",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents.PersistentlyIdentifiable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "AppIntents._SupportsAppDependencies",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.Sendable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.SendableMetatype",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.BitwiseCopyable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      }
+    ],
+    "associatedTypeAliases": [
+      {
+        "typeAliasName": "PerformResult",
+        "substitutedTypeName": "some AppIntents.ProvidesDialog",
+        "substitutedMangledTypeName": "13DeurBeheerDev14LockdownIntentV7performQryYaKFQOy_Qo_",
+        "opaqueTypeProtocolRequirements": [
+          "AppIntents.ProvidesDialog"
+        ],
+        "opaqueTypeSameTypeRequirements": []
+      },
+      {
+        "typeAliasName": "SummaryContent",
+        "substitutedTypeName": "some AppIntents.ParameterSummary",
+        "substitutedMangledTypeName": "10AppIntents0A6IntentPAAE16parameterSummaryQrvpZQOy13DeurBeheerDev08LockdownC0V_Qo_",
+        "opaqueTypeProtocolRequirements": [
+          "AppIntents.ParameterSummary"
+        ],
+        "opaqueTypeSameTypeRequirements": []
+      }
+    ],
+    "properties": [
+      {
+        "label": "title",
+        "type": "Foundation.LocalizedStringResource",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 29,
+        "valueKind": "RawLiteral",
+        "value": "Noodstop"
+      },
+      {
+        "label": "description",
+        "type": "AppIntents.IntentDescription",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 30,
+        "valueKind": "RawLiteral",
+        "value": "Deur dicht, paneel vergrendeld en alle anderen uitgelogd."
+      },
+      {
+        "label": "authenticationPolicy",
+        "type": "AppIntents.IntentAuthenticationPolicy",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "false",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 31,
+        "valueKind": "Enum",
+        "value": {
+          "name": "requiresLocalDeviceAuthentication"
+        }
+      }
+    ]
+  },
+  {
+    "typeName": "DeurBeheerDev.DoorShortcuts",
+    "mangledTypeName": "13DeurBeheerDev13DoorShortcutsV",
+    "kind": "struct",
+    "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+    "line": 40,
+    "conformances": [
+      "AppIntents.AppShortcutsProvider",
+      "Swift.Sendable",
+      "Swift.SendableMetatype",
+      "Swift.BitwiseCopyable"
+    ],
+    "allConformances": [
+      {
+        "protocolName": "AppIntents.AppShortcutsProvider",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.Sendable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.SendableMetatype",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      },
+      {
+        "protocolName": "Swift.BitwiseCopyable",
+        "conformanceDefiningModule": "DeurBeheerDev"
+      }
+    ],
+    "associatedTypeAliases": [],
+    "properties": [
+      {
+        "label": "appShortcuts",
+        "type": "Swift.Array<AppIntents.AppShortcut>",
+        "mangledTypeName": "n/a - deprecated",
+        "isStatic": "true",
+        "isComputed": "true",
+        "file": "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/App/Intents.swift",
+        "line": 41,
+        "valueKind": "Builder",
+        "value": {
+          "type": "AppIntents.AppShortcutsBuilder",
+          "members": [
+            {
+              "kind": "buildExpression",
+              "element": {
+                "valueKind": "InitCall",
+                "value": {
+                  "type": "AppIntents.AppShortcut",
+                  "arguments": [
+                    {
+                      "label": "intent",
+                      "type": "DeurBeheerDev.SetDoorStatusIntent",
+                      "valueKind": "InitCall",
+                      "value": {
+                        "type": "DeurBeheerDev.SetDoorStatusIntent",
+                        "arguments": [
+                          {
+                            "label": "mode",
+                            "type": "DeurBeheerDev.DoorMode",
+                            "valueKind": "Enum",
+                            "value": {
+                              "name": "open"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "phrases",
+                      "type": "Swift.Array<AppIntents.AppShortcutPhrase<DeurBeheerDev.SetDoorStatusIntent>>",
+                      "valueKind": "Array",
+                      "value": [
+                        {
+                          "valueKind": "InterpolatedStringLiteral",
+                          "value": {
+                            "segments": [
+                              {
+                                "valueKind": "RawLiteral",
+                                "value": "Zet de deur op open met "
+                              },
+                              {
+                                "valueKind": "Enum",
+                                "value": {
+                                  "name": "applicationName"
+                                }
+                              },
+                              {
+                                "valueKind": "RawLiteral",
+                                "value": ""
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "label": "shortTitle",
+                      "type": "Foundation.LocalizedStringResource",
+                      "valueKind": "RawLiteral",
+                      "value": "Deur open"
+                    },
+                    {
+                      "label": "systemImageName",
+                      "type": "Swift.String",
+                      "valueKind": "RawLiteral",
+                      "value": "door.left.hand.open"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "kind": "buildExpression",
+              "element": {
+                "valueKind": "InitCall",
+                "value": {
+                  "type": "AppIntents.AppShortcut",
+                  "arguments": [
+                    {
+                      "label": "intent",
+                      "type": "DeurBeheerDev.SetDoorStatusIntent",
+                      "valueKind": "InitCall",
+                      "value": {
+                        "type": "DeurBeheerDev.SetDoorStatusIntent",
+                        "arguments": [
+                          {
+                            "label": "mode",
+                            "type": "DeurBeheerDev.DoorMode",
+                            "valueKind": "Enum",
+                            "value": {
+                              "name": "closed"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "phrases",
+                      "type": "Swift.Array<AppIntents.AppShortcutPhrase<DeurBeheerDev.SetDoorStatusIntent>>",
+                      "valueKind": "Array",
+                      "value": [
+                        {
+                          "valueKind": "InterpolatedStringLiteral",
+                          "value": {
+                            "segments": [
+                              {
+                                "valueKind": "RawLiteral",
+                                "value": "Zet de deur op gesloten met "
+                              },
+                              {
+                                "valueKind": "Enum",
+                                "value": {
+                                  "name": "applicationName"
+                                }
+                              },
+                              {
+                                "valueKind": "RawLiteral",
+                                "value": ""
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "label": "shortTitle",
+                      "type": "Foundation.LocalizedStringResource",
+                      "valueKind": "RawLiteral",
+                      "value": "Deur gesloten"
+                    },
+                    {
+                      "label": "systemImageName",
+                      "type": "Swift.String",
+                      "valueKind": "RawLiteral",
+                      "value": "door.left.hand.closed"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "kind": "buildExpression",
+              "element": {
+                "valueKind": "InitCall",
+                "value": {
+                  "type": "AppIntents.AppShortcut",
+                  "arguments": [
+                    {
+                      "label": "intent",
+                      "type": "DeurBeheerDev.SetDoorStatusIntent",
+                      "valueKind": "InitCall",
+                      "value": {
+                        "type": "DeurBeheerDev.SetDoorStatusIntent",
+                        "arguments": [
+                          {
+                            "label": "mode",
+                            "type": "DeurBeheerDev.DoorMode",
+                            "valueKind": "Enum",
+                            "value": {
+                              "name": "busy"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "phrases",
+                      "type": "Swift.Array<AppIntents.AppShortcutPhrase<DeurBeheerDev.SetDoorStatusIntent>>",
+                      "valueKind": "Array",
+                      "value": [
+                        {
+                          "valueKind": "InterpolatedStringLiteral",
+                          "value": {
+                            "segments": [
+                              {
+                                "valueKind": "RawLiteral",
+                                "value": "Zet de deur op bezet met "
+                              },
+                              {
+                                "valueKind": "Enum",
+                                "value": {
+                                  "name": "applicationName"
+                                }
+                              },
+                              {
+                                "valueKind": "RawLiteral",
+                                "value": ""
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "label": "shortTitle",
+                      "type": "Foundation.LocalizedStringResource",
+                      "valueKind": "RawLiteral",
+                      "value": "Bezet"
+                    },
+                    {
+                      "label": "systemImageName",
+                      "type": "Swift.String",
+                      "valueKind": "RawLiteral",
+                      "value": "clock"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "kind": "buildExpression",
+              "element": {
+                "valueKind": "InitCall",
+                "value": {
+                  "type": "AppIntents.AppShortcut",
+                  "arguments": [
+                    {
+                      "label": "intent",
+                      "type": "DeurBeheerDev.LockdownIntent",
+                      "valueKind": "InitCall",
+                      "value": {
+                        "type": "DeurBeheerDev.LockdownIntent",
+                        "arguments": []
+                      }
+                    },
+                    {
+                      "label": "phrases",
+                      "type": "Swift.Array<AppIntents.AppShortcutPhrase<DeurBeheerDev.LockdownIntent>>",
+                      "valueKind": "Array",
+                      "value": [
+                        {
+                          "valueKind": "InterpolatedStringLiteral",
+                          "value": {
+                            "segments": [
+                              {
+                                "valueKind": "RawLiteral",
+                                "value": "Noodstop met "
+                              },
+                              {
+                                "valueKind": "Enum",
+                                "value": {
+                                  "name": "applicationName"
+                                }
+                              },
+                              {
+                                "valueKind": "RawLiteral",
+                                "value": ""
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "label": "shortTitle",
+                      "type": "Foundation.LocalizedStringResource",
+                      "valueKind": "RawLiteral",
+                      "value": "Noodstop"
+                    },
+                    {
+                      "label": "systemImageName",
+                      "type": "Swift.String",
+                      "valueKind": "RawLiteral",
+                      "value": "exclamationmark.octagon"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

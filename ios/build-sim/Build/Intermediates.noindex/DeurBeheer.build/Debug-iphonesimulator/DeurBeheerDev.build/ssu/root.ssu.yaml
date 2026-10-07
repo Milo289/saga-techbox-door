@@ -1,0 +1,71 @@
+apiVersion: ssu/v1
+nlu:
+  shortcuts:
+    bundleIdentifier: nl.sagatechbox.beheer.dev
+    intents:
+    - metadata:
+        name: SetDoorStatusIntent_0
+        title: Zet de deurstatus
+      corpuses:
+        training:
+        - locale: en
+          utterances:
+          - '{${+prefix} }Zet de deur op open met ${+applicationName}'
+    - metadata:
+        name: SetDoorStatusIntent_1
+        title: Zet de deurstatus
+      corpuses:
+        training:
+        - locale: en
+          utterances:
+          - '{${+prefix} }Zet de deur op gesloten met ${+applicationName}'
+    - metadata:
+        name: SetDoorStatusIntent_2
+        title: Zet de deurstatus
+      corpuses:
+        training:
+        - locale: en
+          utterances:
+          - '{${+prefix} }Zet de deur op bezet met ${+applicationName}'
+    - metadata:
+        name: LockdownIntent_3
+        title: Noodstop
+      corpuses:
+        training:
+        - locale: en
+          utterances:
+          - '{${+prefix} }Noodstop met ${+applicationName}'
+    - metadata:
+        name: +negative
+      corpuses:
+        training:
+        - locale: en
+          utterances:
+          - '{${+prefix} }${+standardAppShortcutNegatives}'
+variables:
+- name: +applicationName
+  type: ssu/expansion
+  definitions:
+  - locale: en
+    synomyms:
+    - Deur Dev
+- name: DoorMode
+  type: ssu/parameter
+  definitions:
+  - locale: en
+    synomyms:
+    - Open
+    - Gesloten
+    - Bezet
+- name: +prefix
+  type: ssu/expansion
+  definitions:
+  - locale: en
+    synomyms:
+      $ref: ssu://Resources/prefix/en.yaml
+- name: +standardAppShortcutNegatives
+  type: ssu/expansion
+  definitions:
+  - locale: en
+    synomyms:
+      $ref: ssu://Resources/standardAppShortcutNegatives/en.yaml

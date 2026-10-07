@@ -1,0 +1,64 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildOnly"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "eae6b5f907bb2ef4c632048b08a93c2c836cdf90cf2b198b071f3967741314c3"
+    }
+  ],
+  "containerPath" : "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/DeurBeheer.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "undefined_arch",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : true,
+      "hostTargetedPlatform" : null,
+      "platform" : "iphonesimulator",
+      "sdk" : "iphonesimulator27.0",
+      "sdkVariant" : "iphonesimulator",
+      "supportedArchitectures" : [
+        "i386",
+        "x86_64"
+      ],
+      "targetArchitecture" : "undefined_arch"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/build-sim/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/build-sim/Build/Products",
+      "derivedDataPath" : "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/build-sim",
+      "indexDataStoreFolderPath" : "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/build-sim/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/build-sim/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/milolabordus/Library/Application Support/Claude/scratch-workspaces/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf/8641d9d3-2805-4e7b-b7a2-31b0946dbb40/scratch-2026-10-06-c0e8db/ios/build-sim/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Debug",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+          "CODE_SIGNING_ALLOWED" : "NO",
+          "SDKROOT" : "iphonesimulator27.0"
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "ACTION" : "build",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "launch",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}

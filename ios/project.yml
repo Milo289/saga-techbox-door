@@ -7,18 +7,17 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.9.0"
+    MARKETING_VERSION: "2.0.0"
     CURRENT_PROJECT_VERSION: "1"
-targets:
-  DeurBeheer:
+targetTemplates:
+  App:
     type: application
     platform: iOS
     sources:
       - path: App
+        excludes: ["Info*.plist"]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: nl.sagatechbox.beheer
-        PRODUCT_NAME: DeurBeheer
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -27,7 +26,6 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Deur Beheer
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
@@ -59,10 +57,39 @@ targets:
           - UIApplicationShortcutItemType: nl.sagatechbox.beheer.lockdown
             UIApplicationShortcutItemTitle: Noodstop
             UIApplicationShortcutItemIconSymbolName: exclamationmark.octagon
+targets:
+  DeurBeheer:
+    templates: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: nl.sagatechbox.beheer
+        PRODUCT_NAME: DeurBeheer
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Deur Beheer
+  # the developer app: installs next to the normal one, with the Ontwikkelaar tab always on
+  DeurBeheerDev:
+    templates: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: nl.sagatechbox.beheer.dev
+        PRODUCT_NAME: DeurBeheerDev
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEVELOPER"
+    info:
+      path: App/Info-Dev.plist
+      properties:
+        CFBundleDisplayName: Deur Dev
 schemes:
   DeurBeheer:
     build:
       targets:
         DeurBeheer: all
+    run:
+      config: Debug
+  DeurBeheerDev:
+    build:
+      targets:
+        DeurBeheerDev: all
     run:
       config: Debug

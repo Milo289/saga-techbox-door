@@ -22,6 +22,8 @@ final class AppModel: ObservableObject {
     @Published var configured: Bool
     /// "control" = control panel (your own login, Face ID) · "door" = this iPad/iPhone is the door screen
     @Published var role: String
+    /// set by a quick action or notification to jump to a tab
+    @Published var pendingTab: String?
     @Published var locked: Bool
     @Published var showSettings = false
     @Published var toast: String?
@@ -40,12 +42,14 @@ final class AppModel: ObservableObject {
             UserDefaults.standard.set(false, forKey: "faceID")
             _ = Keychain.save(username: user, password: pass)
         }
+        if let t = env["DEUR_TEST_TAB"] { UserDefaults.standard.set(t, forKey: Pref.startTab) }
         if let a = env["DEUR_TEST_ACTION"], let action = QuickAction(rawValue: a) { pendingAction = action }
         #endif
         let savedRole = UserDefaults.standard.string(forKey: "role") ?? "control"
         role = savedRole
         let has = DoorApi.configured() != nil && (savedRole == "door" || Keychain.load() != nil)
         configured = has
+        UserDefaults.standard.registerAppDefaults()
         faceID = UserDefaults.standard.object(forKey: "faceID") as? Bool ?? true
         locked = savedRole != "door" // a door screen has no login and no Face ID
     }

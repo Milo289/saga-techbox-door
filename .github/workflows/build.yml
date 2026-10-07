@@ -56,28 +56,37 @@ jobs:
       - uses: actions/checkout@v4
       - name: Generate the Xcode project
         run: brew install xcodegen && cd ios && xcodegen generate
-      - name: Build (iPhone)
-        working-directory: ios
-        run: >
-          xcodebuild -project DeurBeheer.xcodeproj -scheme DeurBeheer -configuration Release -sdk iphoneos
-          -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
-      - name: Check that the simulator version builds too
-        working-directory: ios
-        run: >
-          xcodebuild -project DeurBeheer.xcodeproj -scheme DeurBeheer -configuration Debug -sdk iphonesimulator
-          -derivedDataPath build-sim CODE_SIGNING_ALLOWED=NO build
-      - name: Make the .ipa
+      - name: Build both apps (iPhone and iPad)
         working-directory: ios
         run: |
-          rm -rf Payload && mkdir Payload
-          cp -R build/Build/Products/Release-iphoneos/DeurBeheer.app Payload/
-          zip -qry ../Saga-Techbox-Beheer-iOS-unsigned.ipa Payload
-          ls -la ../Saga-Techbox-Beheer-iOS-unsigned.ipa
+          for scheme in DeurBeheer DeurBeheerDev; do
+            xcodebuild -project DeurBeheer.xcodeproj -scheme $scheme -configuration Release -sdk iphoneos \
+              -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          done
+      - name: Check that the simulator versions build too
+        working-directory: ios
+        run: |
+          for scheme in DeurBeheer DeurBeheerDev; do
+            xcodebuild -project DeurBeheer.xcodeproj -scheme $scheme -configuration Debug -sdk iphonesimulator \
+              -derivedDataPath build-sim CODE_SIGNING_ALLOWED=NO build
+          done
+      - name: Make the .ipa files
+        working-directory: ios
+        run: |
+          for pair in "DeurBeheer:Saga-Techbox-Beheer-iOS-unsigned" "DeurBeheerDev:Saga-Techbox-Dev-iOS-unsigned"; do
+            app=${pair%%:*}; out=${pair##*:}
+            rm -rf Payload && mkdir Payload
+            cp -R build/Build/Products/Release-iphoneos/$app.app Payload/
+            zip -qry ../$out.ipa Payload
+          done
+          ls -la ../*.ipa
       - uses: actions/upload-artifact@v4
         with:
-          name: Saga-Techbox-Beheer-iOS
+          name: Saga-Techbox-iOS
           if-no-files-found: error
-          path: Saga-Techbox-Beheer-iOS-unsigned.ipa
+          path: |
+            Saga-Techbox-Beheer-iOS-unsigned.ipa
+            Saga-Techbox-Dev-iOS-unsigned.ipa
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

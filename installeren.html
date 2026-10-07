@@ -47,7 +47,7 @@
 
     <div class="card">
       <h2>Windows <small>pc of laptop — installatiebestand .exe</small></h2>
-      <div class="btns"><a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-windows-setup.exe">Download voor Windows <small>.exe</small></a></div>
+      <div class="btns"><a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-windows-setup.exe">Download voor Windows <small>.exe</small></a></div>
       <ol>
         <li>Dubbelklik op het bestand dat je hebt gedownload.</li>
         <li>Staat er <i>“Windows heeft uw pc beschermd”</i>? Klik op <b>Meer info</b> en dan op <b>Toch uitvoeren</b>.</li>
@@ -59,8 +59,8 @@
     <div class="card">
       <h2>Mac <small>macOS — installatiebestand .pkg</small></h2>
       <div class="btns">
-        <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-mac-arm64.pkg">Mac met Apple-chip <small>.pkg · M1 en nieuwer</small></a>
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-mac-x64.pkg">Mac met Intel <small>.pkg</small></a>
+        <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-mac-arm64.pkg">Mac met Apple-chip <small>.pkg · M1 en nieuwer</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-mac-x64.pkg">Mac met Intel <small>.pkg</small></a>
       </div>
       <ol>
         <li>Dubbelklik op het bestand en klik door het installatievenster. De app komt vanzelf in <b>Programma’s</b>.</li>
@@ -68,7 +68,7 @@
         <li>Zegt de Mac later dat de app “beschadigd” is? Plak dit één keer in Terminal:</li>
       </ol>
       <pre>xattr -cr "/Applications/Saga Techbox Deur.app"</pre>
-      <p class="note">Liever slepen? Er is ook een <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-mac-arm64.dmg">.dmg</a> (<a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-mac-x64.dmg">Intel</a>). Niet zeker welke chip? Klik op  → <b>Over deze Mac</b>: staat er “Apple M…”, kies dan Apple-chip.</p>
+      <p class="note">Liever slepen? Er is ook een <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-mac-arm64.dmg">.dmg</a> (<a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-mac-x64.dmg">Intel</a>). Niet zeker welke chip? Klik op  → <b>Over deze Mac</b>: staat er “Apple M…”, kies dan Apple-chip.</p>
     </div>
 
     <div class="card wide">
@@ -87,6 +87,15 @@
       <h2>iPhone en iPad <small>alleen voor jouw eigen toestel</small></h2>
 
       <div class="opt">
+        <h3>Eén commando <span style="color:var(--acc)">(als je Xcode en een kabel hebt)</span></h3>
+        <p class="note">Sluit je iPhone of iPad aan, ontgrendel hem en tik op <i>Vertrouw</i>. Haal dan het project op een vaste plek en voer uit (vervang <code>JOUWTEAMID</code> door je Apple-team, te vinden in Xcode → Instellingen → Accounts):</p>
+        <pre>cd ~/Documents && git clone https://github.com/Milo289/saga-techbox-door.git && cd saga-techbox-door/ios
+./install.sh --team JOUWTEAMID          # de gewone app (Deur Beheer)
+./install.sh dev --team JOUWTEAMID      # de ontwikkelaarsversie (Deur Dev), naast de gewone</pre>
+        <p class="note">Er zijn twee apps: <b>Deur Beheer</b> is de gewone app. <b>Deur Dev</b> is dezelfde app met een extra tabblad <i>Ontwikkelaar</i> (live gebeurtenissen, ruwe gegevens, API-console, tests). Wil je dat in de gewone app? Tik 7 keer op <i>Versie</i> onder Instellingen.</p>
+      </div>
+
+      <div class="opt">
         <h3>Optie 1 — met Xcode <span style="color:var(--acc)">(het makkelijkst als je Xcode al hebt)</span></h3>
         <ol>
           <li>Haal het project op een vaste plek (niet in een tijdelijke map) en maak het Xcode-project:
@@ -101,7 +110,7 @@
       <div class="opt">
         <h3>Optie 2 — zonder Xcode, met Sideloadly</h3>
         <div class="btns">
-          <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Beheer-iOS-unsigned.ipa">Download voor iPhone <small>.ipa</small></a>
+          <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Beheer-iOS-unsigned.ipa">Download voor iPhone <small>.ipa</small></a>
           <a class="dl alt" href="https://sideloadly.io">Sideloadly downloaden</a>
         </div>
         <ol>
@@ -118,10 +127,10 @@
     <div class="card wide">
       <h2>Linux en Raspberry Pi <small>bestand eindigt op .AppImage of .deb</small></h2>
       <div class="btns">
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-linux-x86_64.AppImage">Linux-pc <small>AppImage</small></a>
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-linux-amd64.deb">Linux-pc <small>.deb</small></a>
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-linux-arm64.AppImage">Raspberry Pi <small>AppImage</small></a>
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v1.9.0/Saga-Techbox-Deur-1.9.0-linux-arm64.deb">Raspberry Pi <small>.deb</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-linux-x86_64.AppImage">Linux-pc <small>AppImage</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-linux-amd64.deb">Linux-pc <small>.deb</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-linux-arm64.AppImage">Raspberry Pi <small>AppImage</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.0.0/Saga-Techbox-Deur-2.0.0-linux-arm64.deb">Raspberry Pi <small>.deb</small></a>
       </div>
       <ol>
         <li><b>AppImage:</b> maak het uitvoerbaar met <code>chmod +x bestandsnaam</code> en dubbelklik of start het.</li>
@@ -152,7 +161,7 @@
     </table>
   </section>
 
-  <p class="note" style="margin-top:30px">Alle bestanden: <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/tag/v1.9.0">github.com/Milo289/saga-techbox-door/releases</a></p>
+  <p class="note" style="margin-top:30px">Alle bestanden: <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/tag/v2.0.0">github.com/Milo289/saga-techbox-door/releases</a></p>
 </main>
 </body>
 </html>

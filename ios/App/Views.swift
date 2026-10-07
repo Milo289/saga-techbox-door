@@ -5,6 +5,9 @@ import WebKit
 struct ContentView: View {
     @ObservedObject var model = AppModel.shared
     @Environment(\.scenePhase) private var phase
+    @AppStorage(Pref.appearance) private var appearance = "dark"
+    @State private var leftAt: Date?
+    private var scheme: ColorScheme? { appearance == "light" ? .light : appearance == "system" ? nil : .dark }
 
     var body: some View {
         ZStack {
@@ -15,7 +18,7 @@ struct ContentView: View {
                 if model.role == "door" {
                     DoorScreenView(base: api.base, model: model).ignoresSafeArea()
                 } else {
-                    WebContainer(base: api.base, model: model).ignoresSafeArea()
+                    MainTabView(model: model)
                     if model.locked { LockView(model: model) }
                 }
             }
@@ -26,14 +29,20 @@ struct ContentView: View {
             }
         }
         .animation(.spring(duration: 0.35), value: model.toast)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(scheme)
         .statusBarHidden(model.configured && model.role == "door")
         .persistentSystemOverlays(model.configured && model.role == "door" ? .hidden : .automatic)
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
         .onAppear { if model.configured && model.role == "control" { Task { await model.unlock() } } }
         .onChange(of: phase) { _, new in
-            if new == .background { model.lockNow() }
-            if new == .active, model.locked, model.configured, model.role == "control" { Task { await model.unlock() } }
+            if new == .background { leftAt = Date() }
+            if new == .active, model.configured, model.role == "control" {
+                // lock again when you were away for longer than you chose (Instellingen → Beveiliging)
+                let wait = UserDefaults.standard.integer(forKey: Pref.autoLock)
+                if let left = leftAt, wait >= 0, Date().timeIntervalSince(left) >= Double(wait) * 60 { model.lockNow() }
+                leftAt = nil
+                if model.locked { Task { await model.unlock() } }
+            }
         }
     }
 }

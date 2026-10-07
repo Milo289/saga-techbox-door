@@ -1,0 +1,117 @@
+{
+  "source" : "\/Users\/milolabordus\/Library\/Application Support\/Claude\/scratch-workspaces\/fc1e4ad9-bb9c-4598-bffb-62bfaab05eaf\/8641d9d3-2805-4e7b-b7a2-31b0946dbb40\/scratch-2026-10-06-c0e8db\/ios\/App\/Intents.swift",
+  "tables" : {
+    "AppShortcuts" : [
+      {
+        "appShortcutMetadata" : [
+          {
+            "actionIdentifier" : "SetDoorStatusIntent",
+            "index" : 0,
+            "parameterDisplayRepresentations" : {
+              "DoorMode" : [
+                "Open",
+                "Gesloten",
+                "Bezet"
+              ]
+            },
+            "parameterTypes" : {
+              "mode" : "DoorMode"
+            },
+            "title" : "Zet de deurstatus"
+          }
+        ],
+        "key" : "Zet de deur op open met ${applicationName}",
+        "location" : {
+          "startingColumn" : 0,
+          "startingLine" : 41
+        },
+        "values" : [
+          "Zet de deur op open met ${applicationName}"
+        ]
+      },
+      {
+        "appShortcutMetadata" : [
+          {
+            "actionIdentifier" : "SetDoorStatusIntent",
+            "index" : 1,
+            "parameterDisplayRepresentations" : {
+              "DoorMode" : [
+                "Open",
+                "Gesloten",
+                "Bezet"
+              ]
+            },
+            "parameterTypes" : {
+              "mode" : "DoorMode"
+            },
+            "title" : "Zet de deurstatus"
+          }
+        ],
+        "key" : "Zet de deur op gesloten met ${applicationName}",
+        "location" : {
+          "startingColumn" : 0,
+          "startingLine" : 41
+        },
+        "values" : [
+          "Zet de deur op gesloten met ${applicationName}"
+        ]
+      },
+      {
+        "appShortcutMetadata" : [
+          {
+            "actionIdentifier" : "SetDoorStatusIntent",
+            "index" : 2,
+            "parameterDisplayRepresentations" : {
+              "DoorMode" : [
+                "Open",
+                "Gesloten",
+                "Bezet"
+              ]
+            },
+            "parameterTypes" : {
+              "mode" : "DoorMode"
+            },
+            "title" : "Zet de deurstatus"
+          }
+        ],
+        "key" : "Zet de deur op bezet met ${applicationName}",
+        "location" : {
+          "startingColumn" : 0,
+          "startingLine" : 41
+        },
+        "values" : [
+          "Zet de deur op bezet met ${applicationName}"
+        ]
+      },
+      {
+        "appShortcutMetadata" : [
+          {
+            "actionIdentifier" : "LockdownIntent",
+            "index" : 3,
+            "parameterDisplayRepresentations" : {
+
+            },
+            "parameterTypes" : {
+
+            },
+            "title" : "Noodstop"
+          }
+        ],
+        "key" : "Noodstop met ${applicationName}",
+        "location" : {
+          "startingColumn" : 0,
+          "startingLine" : 41
+        },
+        "values" : [
+          "Noodstop met ${applicationName}"
+        ]
+      }
+    ],
+    "Localizable" : [
+      {
+        "key" : "Zet de deur op ${mode}"
+      }
+    ]
+  },
+  "version" : 2
+}

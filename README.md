@@ -120,6 +120,17 @@ Emergency exit from any program: **Ctrl/Cmd + Alt + Shift + M** lets go of the m
 - **Safe saving:** every save goes to a temporary file first and the previous good copy is kept (`.bak`). If a settings file is ever damaged, the program restores the last good copy or the newest backup instead of starting empty, and keeps the damaged file next to it.
 - The iPhone/iPad app can't update itself: install the new version through Xcode (press ▶ again).
 
+## The iPhone / iPad apps (a real native app)
+The iPhone/iPad app is written in SwiftUI (no web page inside). It has tabs **Status · Bezoekers · Beheer · Instellingen**:
+- **Status** — a big status card, the three big buttons (Open / Gesloten / Bezet), how long (15 min, 30 min, 1 uur, 2 uur, until a time, no end), quick *+15 / +30 / +1 uur*, back to opening hours, end *Bezet*, your message on the door, switches for doorbell / book a time / question / reasons / opening hours / night dimming, and planning *Bezet*.
+- **Bezoekers** — the inbox with swipe-to-finish, quick replies, confirm appointments, a badge with the number of new visitors.
+- **Beheer** — server and account info, people, users, activity log, back-up, emergency stop, and the full web panel (Ontwerp, texts, layout) one tap away.
+- **Instellingen** — about 25 switches: haptics, sounds, notifications, Face ID and how soon it locks, confirmations, which cards show on the front screen, your own quick durations, large buttons, appearance, keep the screen awake, and more.
+- An iPad or iPhone can also be the **door screen** (first start: *Deurscherm*).
+
+**Two apps:** *Deur Beheer* (normal) and *Deur Dev* (developer, installs next to it) with an extra **Ontwikkelaar** tab: live events, raw server data, an API console, test notifications and haptics, environment info. In the normal app, tap *Versie* seven times under Instellingen to switch the developer tab on.
+Install either with one command (phone connected with a cable): `cd ios && ./install.sh --team YOURTEAMID` or `./install.sh dev --team YOURTEAMID`; `./install.sh --sim dev` uses the simulator.
+
 ## Design: make the door screen yours (*Ontwerp* tab)
 Control panel → **Ontwerp** (needs the settings right):
 - **Teksten** — every word on the door screen and in the visitor steps can be changed: the title above the buttons (standard: *Niet kloppen*), the buttons, the countdown sentences, the questions, the messages. Leave a field empty for the standard text.

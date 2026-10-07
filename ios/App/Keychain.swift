@@ -14,7 +14,13 @@ enum Keychain {
             kSecValueData as String: Data(password.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        if SecItemAdd(query as CFDictionary, nil) == errSecSuccess { return true }
+        #if DEBUG && targetEnvironment(simulator)
+        UserDefaults.standard.set([username, password], forKey: "debug.cred") // test builds in the simulator have no signing, so no Keychain
+        return true
+        #else
+        return false
+        #endif
     }
 
     static func load() -> (username: String, password: String)? {
@@ -30,12 +36,20 @@ enum Keychain {
               let dict = item as? [String: Any],
               let account = dict[kSecAttrAccount as String] as? String,
               let data = dict[kSecValueData as String] as? Data,
-              let password = String(data: data, encoding: .utf8) else { return nil }
+              let password = String(data: data, encoding: .utf8) else {
+            #if DEBUG && targetEnvironment(simulator)
+            if let a = UserDefaults.standard.stringArray(forKey: "debug.cred"), a.count == 2 { return (a[0], a[1]) }
+            #endif
+            return nil
+        }
         return (account, password)
     }
 
     static func delete() {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
         SecItemDelete(query as CFDictionary)
+        #if DEBUG && targetEnvironment(simulator)
+        UserDefaults.standard.removeObject(forKey: "debug.cred")
+        #endif
     }
 }

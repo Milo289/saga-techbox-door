@@ -11,3 +11,4 @@ ios/build/
 ios/DeurBeheer.xcodeproj/
 ios/App/Info.plist
 *.ipa
+ios/App/Info-Dev.plist
