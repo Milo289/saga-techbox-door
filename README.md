@@ -114,6 +114,14 @@ All of these are in *Instellingen → Venster en sneltoetsen* (Ctrl/Cmd+Shift+S)
 - **Safe saving:** every save goes to a temporary file first and the previous good copy is kept (`.bak`). If a settings file is ever damaged, the program restores the last good copy or the newest backup instead of starting empty, and keeps the damaged file next to it.
 - The iPhone/iPad app can't update itself: install the new version through Xcode (press ▶ again).
 
+## Design: make the door screen yours (*Ontwerp* tab)
+Control panel → **Ontwerp** (needs the settings right):
+- **Teksten** — every word on the door screen and in the visitor steps can be changed: the title above the buttons (standard: *Niet kloppen*), the buttons, the countdown sentences, the questions, the messages. Leave a field empty for the standard text.
+- **Kleuren** — your own colour for *Open*, *Gesloten* and *Bezet*.
+- **Eigen onderdelen** — add your own text (size, colour, bold) or a logo/picture (up to 12 items). They appear on the screen and are moved like everything else.
+- **Indeling** — drag anything to another place, resize it or hide it (see below). Each screen type (vertical, horizontal, phone) has its own layout.
+Changes appear on every door screen at once after *Opslaan*.
+
 ## Moving things around (*Indeling aanpassen*)
 If something sits in the wrong place, you can move it yourself: control panel → *Instellingen → Scherm → Indeling*, or on the door screen itself **Ctrl/Cmd + Shift + E**
 (or add `?edit=1` to the address). Log in, then drag the parts of the screen (status, the line with the time, your message, the three buttons, …) where you want

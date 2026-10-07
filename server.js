@@ -41,6 +41,8 @@ const DEFAULT_SETTINGS = {
   note: '',
   theme: 'dark', // dark | light
   layout: { orientation: 'auto', rotate: 0, hour12: false, keyboard: true },
+  ui: {}, // filled in below from UI_TEXTS (one empty text per key)
+  colors: { open: '', closed: '', busy: '' }, // status colours; empty = the standard colour
   dim: { enabled: false, from: '22:00', to: '07:00', level: 0.2 },
   ntfyServer: 'https://ntfy.sh',
   ntfyTopic: '',
@@ -101,6 +103,7 @@ const freshState = () => ({
   lastBackupDay: '',
   lastVersion: '', // the program version that last used this data (a backup is made before the first start of a new version)
   positions: {}, // door-screen layout per screen type (see cleanPositions)
+  blocks: [], // extra texts / logos on the door screen (see cleanBlocks)
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
   seededAdmin: false,
   users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
@@ -122,9 +125,80 @@ const isEmail = (v) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(String(v || ''
 const addrOf = (v) => { const m = String(v || '').match(/<([^>]+)>/); return (m ? m[1] : String(v || '')).trim(); };
 const maskEmail = (e) => { const [u, d] = String(e).split('@'); return d ? `${u.slice(0, 1)}${'•'.repeat(Math.max(2, Math.min(6, u.length - 1)))}@${d}` : ''; };
 
+// ----- every word on the door screen can be changed (empty = the standard text) -----
+// key: [group, what it is, standard text]. {…} are filled in by the screen.
+const UI_TEXTS = {
+  askTitle: ['Hoofdscherm', 'Titel boven de knoppen', 'Niet kloppen'],
+  bell: ['Hoofdscherm', 'Knop deurbel', 'Deurbel'],
+  bellOff: ['Hoofdscherm', 'Knop deurbel als de bel uit staat', 'Deurbel uit'],
+  bellWait: ['Hoofdscherm', 'Knop deurbel tijdens de wachttijd ({s} = seconden)', 'Deurbel · {s}s'],
+  book: ['Hoofdscherm', 'Knop om een tijd te boeken', 'Tijd booken'],
+  question: ['Hoofdscherm', 'Knop voor een vraagje', 'Vraagje'],
+  todayOpen: ['Hoofdscherm', 'Regel met openingstijden ({from} en {to})', 'Vandaag open {from}–{to}'],
+  todayClosed: ['Hoofdscherm', 'Regel als het vandaag dicht is', 'Vandaag gesloten'],
+  over: ['Tot-tekst', 'Aftelzin ({time} = bijv. 30 minuten)', 'Over {time}'],
+  closeSoon: ['Tot-tekst', 'Als we bijna sluiten ({over} = de aftelzin)', '{over} gaan we sluiten'],
+  closeLater: ['Tot-tekst', 'Sluiten, later vandaag of verder weg', 'We sluiten'],
+  openSoon: ['Tot-tekst', 'Als we bijna weer open zijn', '{over} zijn we weer open'],
+  openLater: ['Tot-tekst', 'Weer open, verder weg', 'Weer open'],
+  busySoon: ['Tot-tekst', 'Als we bijna bezet zijn', '{over} zijn we bezet'],
+  busyLater: ['Tot-tekst', 'Bezet vanaf, verder weg', 'Bezet vanaf'],
+  cancel: ['Knoppen', 'Annuleren', 'Annuleren'],
+  back: ['Knoppen', 'Terug', 'Terug'],
+  next: ['Knoppen', 'Volgende', 'Volgende'],
+  send: ['Knoppen', 'Versturen', 'Versturen'],
+  request: ['Knoppen', 'Aanvragen', 'Aanvragen'],
+  close: ['Knoppen', 'Sluiten', 'Sluiten'],
+  aboutWhat: ['Vraagje', 'Titel', 'Waarover gaat het?'],
+  tellMore: ['Vraagje', 'Tekstveld', 'Vertel er iets meer over (optioneel)'],
+  typeOwn: ['Vraagje', 'Eigen tekst toevoegen', '+ Typ er zelf iets bij'],
+  pickTopic: ['Vraagje', 'Foutmelding zonder onderwerp', 'Kies een onderwerp of typ je vraag'],
+  bookHint: ['Tijd booken', 'Uitleg', 'Kies een dag en een tijd.'],
+  bookLoading: ['Tijd booken', 'Tijden laden', 'Tijden laden…'],
+  who: ['Wie ben je?', 'Titel', 'Wie ben je?'],
+  whoHint: ['Wie ben je?', 'Uitleg bij het nummerpaneel', 'Tik je nummer in — dan vullen we de rest voor je in.'],
+  yourNumber: ['Wie ben je?', 'Leeg nummerveld', 'Je nummer'],
+  typeUsername: ['Wie ben je?', 'Link: gebruikersnaam typen', 'Typ een gebruikersnaam'],
+  makeProfile: ['Wie ben je?', 'Profiel maken', 'Profiel maken'],
+  noNumber: ['Wie ben je?', 'Zonder nummer verder', 'Geen nummer'],
+  notYou: ['Wie ben je?', 'Als het niet de juiste persoon is', 'Niet jij?'],
+  hi: ['Wie ben je?', 'Begroeting ({name} = voornaam)', 'Hoi {name}!'],
+  mailAlso: ['Wie ben je?', 'Schakelaar antwoord mailen ({email})', 'Antwoord ook mailen naar {email}'],
+  yourNameOpt: ['Wie ben je?', 'Naamveld (mag leeg)', 'Je naam (optioneel)'],
+  yourName: ['Wie ben je?', 'Naamveld (verplicht)', 'Je naam'],
+  sentBell: ['Na het versturen', 'Titel na aanbellen', 'Er is aangebeld'],
+  sentAppt: ['Na het versturen', 'Titel na een afspraakverzoek', 'Aanvraag verstuurd'],
+  sent: ['Na het versturen', 'Titel na een vraagje', 'Verstuurd'],
+  forTime: ['Na het versturen', 'Gevraagde tijd ({at})', 'Voor {at}'],
+  mailNote: ['Na het versturen', 'Melding antwoord per mail ({mail})', 'Je krijgt het antwoord ook per mail ({mail}).'],
+  waiting: ['Na het versturen', 'Wachten op antwoord', 'Even wachten op antwoord…'],
+  toastBellOff: ['Meldingen', 'Als de bel uit staat', 'De deurbel staat nu uit — stel een vraagje'],
+  toastRang: ['Meldingen', 'Als er aangebeld is (ook op andere schermen)', 'Er is aangebeld'],
+  toastWait: ['Meldingen', 'Als de bel nog wacht ({s} = seconden)', 'Er is net aangebeld — nog {s} s'],
+};
+const resolveUi = (over) => Object.fromEntries(Object.entries(UI_TEXTS).map(([k, v]) => [k, (over && String(over[k] || '').trim()) || v[2]]));
+const UI_DEFAULTS = Object.fromEntries(Object.keys(UI_TEXTS).map((k) => [k, '']));
+DEFAULT_SETTINGS.ui = UI_DEFAULTS;
+
+// ----- extra things on the door screen: your own text or logo, moved with "Indeling aanpassen" -----
+const cleanBlocks = (raw) => (Array.isArray(raw) ? raw : []).slice(0, 12).map((b) => {
+  if (!b || typeof b !== 'object') return null;
+  const type = b.type === 'image' ? 'image' : 'text';
+  const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, Math.round(n * 10) / 10)) : d; };
+  const out = { id: /^[a-z0-9]{4,12}$/.test(String(b.id)) ? String(b.id) : newId().replace(/[^a-z0-9]/g, '').slice(0, 10) || 'blk' + Math.random().toString(36).slice(2, 8), type, size: num(b.size, 1, 40, 4), color: /^#[0-9a-f]{6}$/i.test(String(b.color)) ? String(b.color) : '', bold: !!b.bold, text: '', src: '', w: num(b.w, 4, 120, 24) };
+  if (type === 'text') out.text = str(b.text, 300);
+  else {
+    const src = String(b.src || '');
+    out.src = (/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(src) && src.length <= 300000) || (/^https:\/\/[^\s"'<>]{4,290}$/.test(src)) ? src : '';
+    if (!out.src) return null;
+  }
+  return out;
+}).filter(Boolean);
+
 // ----- layout: where each part of the door screen sits (moved by hand in "Indeling aanpassen") -----
 const LAYOUT_KEYS = ['portrait', 'landscape', 'phone'];
 const LAYOUT_ITEMS = ['name', 'time', 'ring', 'label', 'until', 'untilAt', 'message', 'note', 'extra', 'askTitle', 'reasons', 'actions'];
+const layoutId = (id) => LAYOUT_ITEMS.includes(id) || /^blk_[a-z0-9]{4,12}$/.test(id);
 function cleanPositions(raw) {
   const out = {};
   if (!raw || typeof raw !== 'object') return out;
@@ -133,7 +207,7 @@ function cleanPositions(raw) {
     const items = raw[key];
     if (!items || typeof items !== 'object') continue;
     const clean = {};
-    for (const id of LAYOUT_ITEMS) {
+    for (const id of Object.keys(items).filter(layoutId)) {
       const it = items[id];
       if (!it || typeof it !== 'object') continue;
       const r = { x: num(it.x, -100, 100, 0), y: num(it.y, -100, 100, 0), s: num(it.s, 0.4, 2.5, 1), hide: !!it.hide };
@@ -214,7 +288,7 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, positions: cleanPositions(raw.positions), system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
@@ -331,6 +405,7 @@ function publicState() {
   const s = state.settings;
   const settings = {};
   for (const k of Object.keys(s)) if (!PRIVATE_SETTINGS.includes(k)) settings[k] = s[k];
+  settings.ui = resolveUi(s.ui); // the door screen gets the words ready to use
   const now = Date.now();
   return {
     build: BUILD,
@@ -341,6 +416,7 @@ function publicState() {
     mailOn: mailOn(),
     hasPeople: state.people.length > 0,
     positions: state.positions || {},
+    blocks: state.blocks || [],
     serverTime: now,
   };
 }
@@ -468,6 +544,8 @@ function adminState(id) {
   return {
     build: BUILD,
     settings,
+    uiTexts: UI_TEXTS,
+    blocks: state.blocks || [],
     people: full('people') ? state.people : [],
     peopleRev: state.peopleRev || 0,
     mailOn: mailOn(),
@@ -800,6 +878,14 @@ const adminRoutes = {
     state.positions = next;
     log('system', `Indeling ${clean ? 'aangepast' : 'hersteld'} (${{ portrait: 'verticaal', landscape: 'horizontaal', phone: 'telefoon' }[b.key]})`);
   },
+  'POST /api/blocks': (b) => {
+    state.blocks = cleanBlocks(b.blocks);
+    const keep = new Set(state.blocks.map((x) => 'blk_' + x.id)); // positions of removed blocks go with them
+    const pos = {};
+    for (const [k, items] of Object.entries(state.positions || {})) { const kept = Object.fromEntries(Object.entries(items).filter(([id]) => !id.startsWith('blk_') || keep.has(id))); if (Object.keys(kept).length) pos[k] = kept; }
+    state.positions = pos;
+    log('system', `Eigen onderdelen op het scherm opgeslagen (${state.blocks.length})`);
+  },
   'POST /api/password': (b, id) => {
     if (id.kind !== 'user') throw bad('Alleen voor gebruikers met een account');
     if (id.root) throw bad('Het wachtwoord van dit account kun je niet wijzigen');
@@ -870,6 +956,8 @@ const adminRoutes = {
     if (!['auto', 'portrait', 'landscape'].includes(merged.layout.orientation)) merged.layout.orientation = 'auto';
     if (!['dark', 'light'].includes(merged.theme)) merged.theme = 'dark';
     for (const m of MODES) if (!merged.texts[m].label) merged.texts[m].label = DEFAULT_SETTINGS.texts[m].label;
+    for (const k of Object.keys(UI_TEXTS)) merged.ui[k] = str(merged.ui[k], 120).trim();
+    for (const m of MODES) if (!/^#[0-9a-f]{6}$/i.test(String(merged.colors[m]))) merged.colors[m] = '';
     // tidy the mail settings so a small slip does not break sending
     const mm = merged.mail;
     for (const k of ['host', 'user', 'from', 'adminTo']) mm[k] = String(mm[k] || '').trim();
@@ -924,7 +1012,7 @@ const adminRoutes = {
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
-    state = { ...d, ...b, positions: cleanPositions(b.positions), users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
+    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
   },
 };
@@ -1005,7 +1093,7 @@ adminRoutes['POST /api/v1/people/upsert'] = (b) => {
 adminRoutes['GET /api/v1/audit'] = () => ({ history: state.history.slice(0, 200) });
 
 const NEED = {
-  'GET /api/admin-state': 'view', 'GET /api/me': 'view', 'POST /api/password': 'view', 'POST /api/layout': 'settings', 'POST /api/lock': 'view', 'POST /api/lock/set': 'view', 'POST /api/lock/remove': 'view', 'POST /api/lock/unlock': 'view',
+  'GET /api/admin-state': 'view', 'GET /api/me': 'view', 'POST /api/password': 'view', 'POST /api/layout': 'settings', 'POST /api/blocks': 'settings', 'POST /api/lock': 'view', 'POST /api/lock/set': 'view', 'POST /api/lock/remove': 'view', 'POST /api/lock/unlock': 'view',
   'POST /api/status': 'status', 'POST /api/status/auto': 'status', 'POST /api/busy/add': 'status', 'POST /api/busy/remove': 'status', 'POST /api/busy/end': 'status',
   'POST /api/settings': (b) => { const ks = Object.keys(b); return ks.every((k) => k === 'note') ? 'status' : ks.every((k) => ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'].includes(k)) ? 'mail' : 'settings'; }, // the door message needs only the status right; mail fields only the mail right
   'POST /api/test-notify': 'mail', 'POST /api/mail/test': 'mail',

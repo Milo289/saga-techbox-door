@@ -116,6 +116,8 @@
   .hidden { display: none !important; }
 
   /* ---------- layout editor (only with ?edit=1; the normal screen can never be moved) ---------- */
+  .blk { max-width: 100%; text-align: center; line-height: 1.2; overflow-wrap: anywhere; }
+  img.blk { height: auto; object-fit: contain; display: block; }
   .pos-hide { display: none !important; }
   body.editing, body.editing.idle { cursor: default; }
   body.editing .ph:empty { display: block !important; min-width: 8em; min-height: 1.3em; }
@@ -219,7 +221,7 @@
       <div id="extra" class="ph" data-ph="Bezet 13:00–14:00 · Vandaag open 09:00–17:00"></div>
     </section>
     <section class="ask" id="ask">
-      <h2 id="askTitle">Niet kloppen — tik hier</h2>
+      <h2 id="askTitle">Niet kloppen</h2>
       <div class="grid ph" id="reasons" data-ph="Redenen (bijv. Ik heb een afspraak)"></div>
       <div class="grid" id="actions"></div>
     </section>
@@ -259,6 +261,12 @@
     check: '<path d="M20 6 9 17l-5-5"/>',
   };
   const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.innerHTML = ICONS[n]; return s; };
+  // every word on the screen comes from the settings (Ontwerp → Teksten); {…} are filled in here
+  const tx = (k, vars) => {
+    let out = (S && S.settings.ui && S.settings.ui[k]) || k;
+    if (vars) for (const [a, b] of Object.entries(vars)) out = out.split(`{${a}}`).join(String(b));
+    return out;
+  };
   const pad = (n) => String(n).padStart(2, '0');
   const now = () => Date.now() + offset;
   const fmtTime = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -292,11 +300,11 @@
   function untilText(v, t) {
     const left = v.until - t;
     const soon = left < 3 * 3600e3 && dayDiff(v.until) === 0;
-    const over = `Over ${duration(left)}`;
+    const over = tx('over', { time: duration(left) });
     const at = atText(v.until);
-    if (v.then === 'closed') return soon ? [`${over} gaan we sluiten`, at] : ['We sluiten', at];
-    if (v.then === 'open') return soon ? [`${over} zijn we weer open`, at] : ['Weer open', at];
-    if (v.then === 'busy') return soon ? [`${over} zijn we bezet`, at] : ['Bezet vanaf', at];
+    if (v.then === 'closed') return soon ? [tx('closeSoon', { over }), at] : [tx('closeLater'), at];
+    if (v.then === 'open') return soon ? [tx('openSoon', { over }), at] : [tx('openLater'), at];
+    if (v.then === 'busy') return soon ? [tx('busySoon', { over }), at] : [tx('busyLater'), at];
     return ['', `tot ${fmtWhen(v.until)}`];
   }
 
@@ -339,14 +347,21 @@
   }
   // ---------- positions: every part of the screen can sit somewhere else (per screen type) ----------
   const EDIT = params.get('edit') === '1';
-  const MOVABLE = { name: '#hname', time: '#time', ring: '.ring', label: '#label', until: '#until', untilAt: '#untilAt', message: '#message', note: '#note', extra: '#extra', askTitle: '#askTitle', reasons: '#reasons', actions: '#actions' };
+  const MOVABLE_BASE = { name: '#hname', time: '#time', ring: '.ring', label: '#label', until: '#until', untilAt: '#untilAt', message: '#message', note: '#note', extra: '#extra', askTitle: '#askTitle', reasons: '#reasons', actions: '#actions' };
   const NAMES = { name: 'Naam', time: 'Klok', ring: 'Statuspunt', label: 'Status', until: 'Tot-tekst', untilAt: 'Tijd', message: 'Bericht', note: 'Jouw bericht', extra: 'Extra regel', askTitle: 'Titel boven de knoppen', reasons: 'Redenen', actions: 'Deurbel, Tijd booken, Vraagje' };
+  const movable = () => ({ ...MOVABLE_BASE, ...Object.fromEntries(((S && S.blocks) || []).map((b) => [`blk_${b.id}`, `#blk_${b.id}`])) });
+  const nameOf = (id) => {
+    if (NAMES[id]) return NAMES[id];
+    const b = ((S && S.blocks) || []).find((x) => `blk_${x.id}` === id);
+    return b ? (b.type === 'image' ? 'Eigen afbeelding' : `Eigen tekst: ${b.text.slice(0, 18)}`) : id;
+  };
+  const editHooks = {};
   let work = null, workKey = '';
   const posKey = () => (VISIT ? 'phone' : app.classList.contains('landscape') ? 'landscape' : 'portrait');
   function applyPositions() {
     if (EDIT && S && workKey !== posKey()) { workKey = posKey(); work = structuredClone(S.positions?.[workKey] || {}); }
     const items = (EDIT ? work : S?.positions?.[posKey()]) || {};
-    for (const [id, sel] of Object.entries(MOVABLE)) {
+    for (const [id, sel] of Object.entries(movable())) {
       const el = document.querySelector(sel);
       if (!el) continue;
       const p = items[id] || {};
@@ -355,6 +370,23 @@
       el.classList.toggle('pos-hide', !!p.hide && !EDIT);
       el.classList.toggle('pos-ghost', !!p.hide && EDIT);
     }
+  }
+  // ---------- your own extra texts / logos ----------
+  let blockSig = '';
+  function renderBlocks() {
+    const list = (S && S.blocks) || [];
+    const sig = JSON.stringify(list);
+    if (sig === blockSig) return;
+    blockSig = sig;
+    document.querySelectorAll('.hero > .blk').forEach((e) => e.remove());
+    const hero = document.querySelector('.hero');
+    for (const b of list) {
+      const el = b.type === 'image' ? h('img', { class: 'blk', id: `blk_${b.id}`, alt: '' }) : h('div', { class: 'blk', id: `blk_${b.id}` }, b.text);
+      if (b.type === 'image') { el.src = b.src; el.style.width = `calc(var(--u) * ${b.w})`; }
+      else { el.style.fontSize = `calc(var(--u) * ${b.size})`; if (b.color) el.style.color = b.color; if (b.bold) el.style.fontWeight = '800'; }
+      hero.append(el);
+    }
+    if (editHooks.mark) editHooks.mark();
   }
   function fitLabel() {
     const el = $('label');
@@ -375,11 +407,14 @@
     render.mode = v.mode;
     const light = st.theme === 'light';
     document.body.classList.toggle('light', light);
-    document.documentElement.style.setProperty('--c', (light ? COLORS_LIGHT : COLORS)[v.mode]);
+    const own = st.colors && /^#[0-9a-f]{6}$/i.test(st.colors[v.mode]) ? st.colors[v.mode] : '';
+    document.documentElement.style.setProperty('--c', own || (light ? COLORS_LIGHT : COLORS)[v.mode]);
     document.querySelector('meta[name=theme-color]').content = light ? '#eef0f4' : '#000000';
     document.title = `${v.label} — ${st.name}`;
+    renderBlocks();
     layout();
     $('name').textContent = st.name;
+    $('askTitle').textContent = tx('askTitle');
     $('subtitle').textContent = st.subtitle ? `· ${st.subtitle}` : '';
     $('label').textContent = v.label;
     fitLabel();
@@ -388,7 +423,7 @@
     const next = v.upcoming[0];
     $('note').textContent = st.note || '';
     const hrs = st.hours;
-    const todayHours = hrs.enabled ? (hrs.days.includes(new Date(now()).getDay()) ? `Vandaag open ${hrs.from}–${hrs.to}` : 'Vandaag gesloten') : '';
+    const todayHours = hrs.enabled ? (hrs.days.includes(new Date(now()).getDay()) ? tx('todayOpen', { from: hrs.from, to: hrs.to }) : tx('todayClosed')) : '';
     $('extra').textContent = [next && `${st.texts.busy.label} ${fmtTime(next.from)}–${fmtTime(next.to)}`, todayHours].filter(Boolean).join('  ·  ');
     renderVisitors();
     tick();
@@ -400,17 +435,17 @@
   const bellWait = () => Math.max(0, Math.ceil(((S?.bellReadyAt || 0) - now()) / 1000));
   function updateBell() {
     if (!bellBtn) return;
-    if (!bellAllowed()) { bellBtn.classList.add('wait'); bellLabel.textContent = 'Deurbel uit'; return; }
+    if (!bellAllowed()) { bellBtn.classList.add('wait'); bellLabel.textContent = tx('bellOff'); return; }
     const w = bellWait();
     bellBtn.classList.toggle('wait', w > 0);
-    bellLabel.textContent = w > 0 ? `Deurbel · ${w}s` : 'Deurbel';
+    bellLabel.textContent = w > 0 ? tx('bellWait', { s: w }) : tx('bell');
   }
   const bellAllowed = () => S.view.mode === 'open' || S.settings.visitors.bellWhenBlocked;
 
   // only rebuilt when something relevant changes, so taps are never lost mid-update
   function renderVisitors() {
     const st = S.settings, v = st.visitors;
-    const sig = JSON.stringify([v, st.reasons, bellAllowed()]);
+    const sig = JSON.stringify([v, st.reasons, bellAllowed(), st.ui]);
     if (sig === visitorSig) return;
     visitorSig = sig;
     const reasons = v.reasons ? st.reasons : [];
@@ -419,12 +454,12 @@
     const acts = [];
     bellBtn = bellLabel = null;
     if (v.doorbell) {
-      bellLabel = h('span', {}, 'Deurbel');
+      bellLabel = h('span', {}, tx('bell'));
       bellBtn = h('button', { class: 'tile', onclick: ringBell }, icon('bell'), bellLabel);
       acts.push(bellBtn);
     }
-    if (v.appointments) acts.push(h('button', { class: 'tile', onclick: () => openAppointment() }, icon('cal'), 'Tijd booken'));
-    if (v.messages) acts.push(h('button', { class: 'tile', onclick: openQuestion }, icon('msg'), 'Vraagje'));
+    if (v.appointments) acts.push(h('button', { class: 'tile', onclick: () => openAppointment() }, icon('cal'), tx('book')));
+    if (v.messages) acts.push(h('button', { class: 'tile', onclick: openQuestion }, icon('msg'), tx('question')));
     $('actions').style.gridTemplateColumns = `repeat(${Math.max(1, acts.length)}, 1fr)`;
     $('actions').replaceChildren(...acts);
     $('ask').classList.toggle('hidden', !acts.length && !reasons.length);
@@ -520,11 +555,11 @@
   function showSent(payload, mailTo) {
     openSheet('done',
       h('div', { class: 'badge pop' }, payload.type === 'bell' ? icon('bell') : icon('check')),
-      h('h3', {}, payload.type === 'bell' ? 'Er is aangebeld' : payload.type === 'appointment' ? 'Aanvraag verstuurd' : 'Verstuurd'),
-      payload.type === 'appointment' ? h('p', { class: 'muted' }, `Voor ${atText(payload.at)}`) : null,
-      mailTo ? h('p', { class: 'muted' }, `Je krijgt het antwoord ook per mail (${mailTo}).`) : null,
-      h('div', { id: 'replyBox', class: 'wait-line' }, h('div', { class: 'spin' }), 'Even wachten op antwoord…'),
-      h('div', { class: 'btns', style: 'width:100%' }, h('button', { class: 'btn', onclick: closeSheet }, 'Sluiten')));
+      h('h3', {}, payload.type === 'bell' ? tx('sentBell') : payload.type === 'appointment' ? tx('sentAppt') : tx('sent')),
+      payload.type === 'appointment' ? h('p', { class: 'muted' }, tx('forTime', { at: atText(payload.at) })) : null,
+      mailTo ? h('p', { class: 'muted' }, tx('mailNote', { mail: mailTo })) : null,
+      h('div', { id: 'replyBox', class: 'wait-line' }, h('div', { class: 'spin' }), tx('waiting')),
+      h('div', { class: 'btns', style: 'width:100%' }, h('button', { class: 'btn', onclick: closeSheet }, tx('close'))));
     bumpIdle(300000);
     checkReply();
   }
@@ -544,8 +579,8 @@
   // ---------- visitor flows ----------
   let lastLocalRing = 0;
   function ringBell() {
-    if (!bellAllowed()) return toast('De deurbel staat nu uit — stel een vraagje');
-    if (bellWait() > 0) return toast(`Er is net aangebeld — nog ${bellWait()} s`);
+    if (!bellAllowed()) return toast(tx('toastBellOff'));
+    if (bellWait() > 0) return toast(tx('toastWait', { s: bellWait() }));
     lastLocalRing = Date.now();
     chime('bell');
     sendVisit({ type: 'bell' });
@@ -554,36 +589,36 @@
   function formButtons(label, onSend) {
     const go = h('button', { class: 'btn go' }, label);
     go.onclick = () => onSend(go);
-    return h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, 'Annuleren'), go);
+    return h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), go);
   }
 
   function openReason(reason) {
-    const name = field('input', { placeholder: 'Je naam (optioneel)', maxlength: 60 });
+    const name = field('input', { placeholder: tx('yourNameOpt'), maxlength: 60 });
     const err = h('div', { class: 'err' });
     openSheet('', h('h3', {}, reason), name, keyboard(), err,
-      formButtons('Versturen', (b) => sendVisit({ type: 'reason', reason, name: name.value }, err, b)));
+      formButtons(tx('send'), (b) => sendVisit({ type: 'reason', reason, name: name.value }, err, b)));
   }
 
   // Vraagje, step 1: what is it about (preset topics, optional own text)
   function openQuestion() {
     let topic = '';
     const topics = S.settings.topics || [];
-    const msg = field('textarea', { placeholder: 'Vertel er iets meer over (optioneel)', maxlength: 500 });
+    const msg = field('textarea', { placeholder: tx('tellMore'), maxlength: 500 });
     const extra = h('div', { class: topics.length ? 'hidden' : '' }, msg, keyboard());
     const err = h('div', { class: 'err' });
-    const next = h('button', { class: 'btn go', disabled: !!topics.length }, 'Volgende');
+    const next = h('button', { class: 'btn go', disabled: !!topics.length }, tx('next'));
     const ok = () => { next.disabled = !(topic || msg.value.trim()); };
     msg.addEventListener('input', ok);
     const tiles = topics.map((t) => h('button', { class: 'topic', onclick: (e) => { topic = t; tiles.forEach((x) => x.classList.toggle('sel', x === e.currentTarget)); err.textContent = ''; ok(); bumpIdle(); } }, t));
     next.onclick = () => {
-      if (!topic && !msg.value.trim()) { err.textContent = 'Kies een onderwerp of typ je vraag'; return; }
-      whoAreYou({ title: 'Vraagje', send: 'Versturen', payload: { type: 'message', topic, message: msg.value }, back: openQuestion });
+      if (!topic && !msg.value.trim()) { err.textContent = tx('pickTopic'); return; }
+      whoAreYou({ title: tx('question'), send: tx('send'), payload: { type: 'message', topic, message: msg.value }, back: openQuestion });
     };
-    openSheet('', h('h3', {}, 'Waarover gaat het?'),
+    openSheet('', h('h3', {}, tx('aboutWhat')),
       topics.length ? h('div', { class: 'topics' }, ...tiles) : null,
-      topics.length ? h('button', { class: 'link', onclick: (e) => { extra.classList.remove('hidden'); e.currentTarget.remove(); msg.focus({ preventScroll: true }); activeInput = msg; } }, '+ Typ er zelf iets bij') : null,
+      topics.length ? h('button', { class: 'link', onclick: (e) => { extra.classList.remove('hidden'); e.currentTarget.remove(); msg.focus({ preventScroll: true }); activeInput = msg; } }, tx('typeOwn')) : null,
       extra, err,
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, 'Annuleren'), next));
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), next));
   }
 
   // "Wie ben je?": a number fills in everything; otherwise name (+ e-mail when mail is on)
@@ -623,16 +658,16 @@
       if (!v) { err.textContent = 'Vul je gebruikersnaam in'; return; }
       go.disabled = true; await greet(opt, v, err, nr); go.disabled = false;
     };
-    openSheet('', h('h3', {}, 'Wie ben je?'), nr, keyboard(), err,
+    openSheet('', h('h3', {}, tx('who')), nr, keyboard(), err,
       h('button', { class: 'link', onclick: () => profileForm(opt) }, 'Nog geen profiel? Maak er een'),
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => (S.hasPeople ? numberPad(opt) : nameForm(opt)) }, 'Terug'), go));
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => (S.hasPeople ? numberPad(opt) : nameForm(opt)) }, tx('back')), go));
   }
   function profileForm(opt) {
     const nr = field('input', { placeholder: 'Kies een gebruikersnaam (bijv. anna)', maxlength: 20, autocapitalize: 'none' });
     const name = field('input', { placeholder: 'Je naam', maxlength: 60 });
     const email = field('input', { type: 'email', placeholder: S.mailOn ? 'E-mail — dan krijg je antwoorden ook per mail' : 'E-mail (optioneel)', maxlength: 120 });
     const err = h('div', { class: 'err' });
-    const go = h('button', { class: 'btn go' }, 'Profiel maken');
+    const go = h('button', { class: 'btn go' }, tx('makeProfile'));
     go.onclick = async () => {
       const u = nr.value.trim().toLowerCase(), em = email.value.trim();
       if (!/^[a-z0-9._-]{3,20}$/.test(u)) { err.textContent = 'Gebruikersnaam: 3 tot 20 tekens (letters, cijfers, punt, streepje)'; return; }
@@ -647,16 +682,16 @@
       } catch (e) { err.textContent = e instanceof TypeError ? 'Geen verbinding — probeer opnieuw' : e.message; }
       go.disabled = false;
     };
-    openSheet('', h('h3', {}, 'Profiel maken'), h('p', { class: 'muted' }, 'Daarna vul je bij elke vraag alleen je gebruikersnaam in.'), nr, name, email, keyboard(), err,
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => whoAreYou(opt) }, 'Terug'), go));
+    openSheet('', h('h3', {}, tx('makeProfile')), h('p', { class: 'muted' }, 'Daarna vul je bij elke vraag alleen je gebruikersnaam in.'), nr, name, email, keyboard(), err,
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => whoAreYou(opt) }, tx('back')), go));
   }
 
   function numberPad(opt) {
     let nr = '';
-    const shown = h('div', { class: 'nrdisp' }, h('span', { class: 'ph' }, 'Je nummer'));
+    const shown = h('div', { class: 'nrdisp' }, h('span', { class: 'ph' }, tx('yourNumber')));
     const err = h('div', { class: 'err' });
     const okBtn = h('button', { class: 'key ok', disabled: true }, icon('check'));
-    const draw = () => { shown.replaceChildren(nr ? h('span', {}, nr) : h('span', { class: 'ph' }, 'Je nummer')); okBtn.disabled = !nr; };
+    const draw = () => { shown.replaceChildren(nr ? h('span', {}, nr) : h('span', { class: 'ph' }, tx('yourNumber'))); okBtn.disabled = !nr; };
     const key = (label, fn, cls = '') => h('button', { class: 'key ' + cls, onpointerdown: (e) => { e.preventDefault(); fn(); bumpIdle(); } }, label);
     const pad = h('div', { class: 'keypad' },
       ...'123456789'.split('').map((d) => key(d, () => { if (nr.length < 12) { nr += d; err.textContent = ''; draw(); } })),
@@ -665,9 +700,9 @@
       okBtn.disabled = true;
       if (!(await greet(opt, nr, err, shown))) { nr = ''; draw(); }
     };
-    openSheet('pad', h('h3', {}, 'Wie ben je?'), h('p', { class: 'muted' }, 'Tik je nummer in — dan vullen we de rest voor je in.'), shown, pad, err,
-      h('div', { class: 'row-links' }, h('button', { class: 'link', onclick: () => userForm(opt) }, 'Typ een gebruikersnaam'), h('button', { class: 'link', onclick: () => profileForm(opt) }, 'Profiel maken')),
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => opt.back() }, 'Terug'), h('button', { class: 'btn', onclick: () => nameForm(opt) }, 'Geen nummer')));
+    openSheet('pad', h('h3', {}, tx('who')), h('p', { class: 'muted' }, tx('whoHint')), shown, pad, err,
+      h('div', { class: 'row-links' }, h('button', { class: 'link', onclick: () => userForm(opt) }, tx('typeUsername')), h('button', { class: 'link', onclick: () => profileForm(opt) }, tx('makeProfile'))),
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => opt.back() }, tx('back')), h('button', { class: 'btn', onclick: () => nameForm(opt) }, tx('noNumber'))));
   }
 
   function hello(opt, nr, person) {
@@ -676,13 +711,13 @@
     const go = h('button', { class: 'btn go' }, opt.send);
     go.onclick = () => sendVisit({ ...opt.payload, nr, mail }, err, go);
     const toggle = person.email ? h('button', { class: 'switch on', role: 'switch', 'aria-checked': 'true', onclick: (e) => { mail = !mail; e.currentTarget.classList.toggle('on', mail); e.currentTarget.setAttribute('aria-checked', String(mail)); } },
-      h('span', { class: 'knob' }), h('span', {}, `Antwoord ook mailen naar ${person.email}`)) : null;
-    openSheet('', h('div', { class: 'hello' }, h('div', { class: 'avatar pop' }, person.name.trim()[0].toUpperCase()), h('h3', {}, `Hoi ${person.name.split(' ')[0]}!`)), opt.summary ? h('div', { class: 'picked' }, h('span', {}, opt.summary)) : null, toggle, err,
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { forgetProfile(); S.hasPeople ? numberPad(opt) : userForm(opt); } }, 'Niet jij?'), go));
+      h('span', { class: 'knob' }), h('span', {}, tx('mailAlso', { email: person.email }))) : null;
+    openSheet('', h('div', { class: 'hello' }, h('div', { class: 'avatar pop' }, person.name.trim()[0].toUpperCase()), h('h3', {}, tx('hi', { name: person.name.split(' ')[0] }))), opt.summary ? h('div', { class: 'picked' }, h('span', {}, opt.summary)) : null, toggle, err,
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { forgetProfile(); S.hasPeople ? numberPad(opt) : userForm(opt); } }, tx('notYou')), go));
   }
 
   function nameForm(opt) {
-    const name = field('input', { placeholder: opt.payload.type === 'appointment' ? 'Je naam' : 'Je naam (optioneel)', maxlength: 60 });
+    const name = field('input', { placeholder: opt.payload.type === 'appointment' ? tx('yourName') : tx('yourNameOpt'), maxlength: 60 });
     const email = S.mailOn ? field('input', { type: 'email', placeholder: 'E-mail (optioneel) — dan krijg je het antwoord ook per mail', maxlength: 120 }) : null;
     const err = h('div', { class: 'err' });
     const go = h('button', { class: 'btn go' }, opt.send);
@@ -694,7 +729,7 @@
     };
     openSheet('', h('h3', {}, opt.title), opt.summary ? h('div', { class: 'picked' }, h('span', {}, opt.summary)) : null, name, email, keyboard(), err,
       h('button', { class: 'link', onclick: () => profileForm(opt) }, 'Profiel maken — dan hoef je dit niet steeds in te vullen'),
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => (S.hasPeople ? numberPad(opt) : opt.back()) }, 'Terug'), go));
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => (S.hasPeople ? numberPad(opt) : opt.back()) }, tx('back')), go));
   }
 
   const shortDay = (t) => { const d = dayDiff(t); if (d === 0) return 'Vandaag'; if (d === 1) return 'Morgen'; const x = new Date(t).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }); return x[0].toUpperCase() + x.slice(1); };
@@ -704,11 +739,11 @@
     let sel = typeof preselect === 'number' ? preselect : null;
     const err = h('div', { class: 'err' });
     const tabs = h('div', { class: 'daytabs' });
-    const grid = h('div', { class: 'slots' }, h('div', { class: 'wait-line' }, h('div', { class: 'spin' }), 'Tijden laden…'));
-    const next = h('button', { class: 'btn go', disabled: !sel }, 'Volgende');
-    next.onclick = () => { if (sel) whoAreYou({ title: 'Tijd booken', send: 'Aanvragen', summary: `${shortDay(sel)} om ${fmtTime(sel)}`, payload: { type: 'appointment', at: sel }, back: () => openAppointment(sel) }); };
-    openSheet('book', h('h3', {}, 'Tijd booken'), h('p', { class: 'muted' }, 'Kies een dag en een tijd.'), tabs, grid, err,
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, 'Annuleren'), next));
+    const grid = h('div', { class: 'slots' }, h('div', { class: 'wait-line' }, h('div', { class: 'spin' }), tx('bookLoading')));
+    const next = h('button', { class: 'btn go', disabled: !sel }, tx('next'));
+    next.onclick = () => { if (sel) whoAreYou({ title: tx('book'), send: tx('request'), summary: `${shortDay(sel)} om ${fmtTime(sel)}`, payload: { type: 'appointment', at: sel }, back: () => openAppointment(sel) }); };
+    openSheet('book', h('h3', {}, tx('book')), h('p', { class: 'muted' }, tx('bookHint')), tabs, grid, err,
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), next));
     let slots;
     try { ({ slots } = await fetch('/api/slots', { cache: 'no-store' }).then((r) => r.json())); }
     catch { grid.replaceChildren(h('p', { class: 'muted' }, 'Tijden konden niet geladen worden — probeer opnieuw.')); return; }
@@ -736,7 +771,7 @@
     const cur = (id) => ({ x: 0, y: 0, s: 1, hide: false, ...(work[id] || {}) });
     const put = (id, patch) => { work[id] = { ...cur(id), ...patch }; applyPositions(); setDirty(); drawBar(); };
     const setDirty = () => { dirty = JSON.stringify(work) !== saved; };
-    const els = () => Object.entries(MOVABLE).map(([id, q]) => [id, document.querySelector(q)]).filter(([, el]) => el);
+    const els = () => Object.entries(movable()).map(([id, q]) => [id, document.querySelector(q)]).filter(([, el]) => el);
     const mark = () => els().forEach(([id, el]) => { el.classList.add('movable'); el.classList.toggle('sel', id === sel); });
     const close = () => {
       if (dirty && !confirm('Je wijzigingen zijn nog niet opgeslagen. Toch sluiten?')) return;
@@ -752,7 +787,7 @@
       const p = sel ? cur(sel) : null;
       bar.replaceChildren(...[
         h('b', {}, `Indeling aanpassen — ${KEYNAME[workKey] || ''}`),
-        sel ? h('span', {}, `· ${NAMES[sel]}`) : h('small', {}, 'Sleep een onderdeel naar een andere plek. Pijltjestoetsen verplaatsen precies.'),
+        sel ? h('span', {}, `· ${nameOf(sel)}`) : h('small', {}, 'Sleep een onderdeel naar een andere plek. Pijltjestoetsen verplaatsen precies.'),
         sel ? h('button', { onclick: () => put(sel, { s: Math.max(0.4, Math.round((p.s - 0.05) * 100) / 100) }) }, '−') : null,
         sel ? h('button', { onclick: () => put(sel, { s: Math.min(2.5, Math.round((p.s + 0.05) * 100) / 100) }) }, '+') : null,
         sel ? h('button', { onclick: () => put(sel, { hide: !p.hide }) }, p.hide ? 'Tonen' : 'Verbergen') : null,
@@ -818,6 +853,7 @@
     });
     // nothing on the screen may do its normal job while editing
     document.addEventListener('click', (e) => { if (!e.target.closest('#editbar')) { e.preventDefault(); e.stopPropagation(); } }, true);
+    editHooks.mark = mark;
     drawLogin(''); check();
   }
 
@@ -840,7 +876,7 @@
     ring.classList.remove('ding'); void ring.offsetWidth; ring.classList.add('ding');
     if (Date.now() - lastLocalRing < 5000) return; // this screen already played the bell
     chime('bell');
-    if (!$('modal').classList.contains('open')) toast('Er is aangebeld');
+    if (!$('modal').classList.contains('open')) toast(tx('toastRang'));
   }
   // browsers only allow sound after the first tap; unlock it on any touch
   const unlockAudio = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {} };
