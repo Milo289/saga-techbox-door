@@ -35,6 +35,11 @@
   .wide { grid-column: 1 / -1; }
   .opt { border-left: 3px solid var(--acc); padding-left: 14px; display: grid; gap: 8px; }
   .opt h3 { margin: 0; font-size: 17px; }
+  #mine { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc), 0 12px 40px rgba(48,209,88,.12); margin-bottom: 18px; }
+  #mine h2 { font-size: 26px; }
+  a.dl.big { font-size: 18px; padding: 15px 24px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: rgba(48,209,88,.18); color: var(--acc); vertical-align: 2px; }
+  .good { color: var(--acc); font-weight: 700; } .bad { color: var(--warn); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -43,11 +48,31 @@
   <p class="lead">Kies je apparaat, download het bestand en volg de drie stappen.</p>
   <p class="note" style="margin-bottom:22px">De downloads staan in een privé-omgeving: je moet <b style="color:var(--fg)">ingelogd zijn bij GitHub</b> met jouw account, anders zie je een foutmelding.</p>
 
+  <div class="card" id="mine" hidden>
+    <h2 id="mineTitle"></h2>
+    <div class="btns" id="mineBtns"></div>
+    <p class="note" id="mineNote"></p>
+  </div>
+
+  <div class="card wide" style="margin-bottom:16px">
+    <h2>Eén bestand dat zelf je apparaat herkent <small>Mac, Windows of Linux — dubbelklik en klaar</small></h2>
+    <div class="btns">
+      <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Installeer-Mac-Linux.zip">Mac of Linux <small>.zip</small></a>
+      <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Installeer-Windows.zip">Windows <small>.zip</small></a>
+    </div>
+    <ol>
+      <li>Download het bestand voor jouw computer en pak het uit (dubbelklik op de .zip).</li>
+      <li><b>Mac/Linux:</b> dubbelklik op <code>Installeer.command</code> (Linux: <code>bash Installeer.command</code>). <b>Windows:</b> dubbelklik op <code>Installeer-Windows.bat</code>.</li>
+      <li>Het bestand ziet welke computer je hebt (Apple-chip of Intel, Windows, Linux), haalt de nieuwste versie op en start de installatie. De eerste keer log je eenmalig in bij GitHub.</li>
+    </ol>
+    <p class="note">Zegt je Mac dat het bestand niet geopend kan worden? Rechtsklik erop → <b>Open</b> → <b>Open</b>.</p>
+  </div>
+
   <div class="grid">
 
     <div class="card">
       <h2>Windows <small>pc of laptop — installatiebestand .exe</small></h2>
-      <div class="btns"><a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-windows-setup.exe">Download voor Windows <small>.exe</small></a></div>
+      <div class="btns"><a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-windows-setup.exe">Download voor Windows <small>.exe</small></a></div>
       <ol>
         <li>Dubbelklik op het bestand dat je hebt gedownload.</li>
         <li>Staat er <i>“Windows heeft uw pc beschermd”</i>? Klik op <b>Meer info</b> en dan op <b>Toch uitvoeren</b>.</li>
@@ -59,8 +84,8 @@
     <div class="card">
       <h2>Mac <small>macOS — installatiebestand .pkg</small></h2>
       <div class="btns">
-        <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-mac-arm64.pkg">Mac met Apple-chip <small>.pkg · M1 en nieuwer</small></a>
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-mac-x64.pkg">Mac met Intel <small>.pkg</small></a>
+        <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-mac-arm64.pkg">Mac met Apple-chip <small>.pkg · M1 en nieuwer</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-mac-x64.pkg">Mac met Intel <small>.pkg</small></a>
       </div>
       <ol>
         <li>Dubbelklik op het bestand en klik door het installatievenster. De app komt vanzelf in <b>Programma’s</b>.</li>
@@ -68,7 +93,7 @@
         <li>Zegt de Mac later dat de app “beschadigd” is? Plak dit één keer in Terminal:</li>
       </ol>
       <pre>xattr -cr "/Applications/Saga Techbox Deur.app"</pre>
-      <p class="note">Liever slepen? Er is ook een <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-mac-arm64.dmg">.dmg</a> (<a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-mac-x64.dmg">Intel</a>). Niet zeker welke chip? Klik op  → <b>Over deze Mac</b>: staat er “Apple M…”, kies dan Apple-chip.</p>
+      <p class="note">Liever slepen? Er is ook een <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-mac-arm64.dmg">.dmg</a> (<a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-mac-x64.dmg">Intel</a>). Niet zeker welke chip? Klik op  → <b>Over deze Mac</b>: staat er “Apple M…”, kies dan Apple-chip.</p>
     </div>
 
     <div class="card wide">
@@ -83,7 +108,7 @@
       <p class="note">Je kunt dit later altijd veranderen met <b>Ctrl/Cmd + Shift + S</b>.</p>
     </div>
 
-    <div class="card wide">
+    <div class="card wide" id="ios">
       <h2>iPhone en iPad <small>alleen voor jouw eigen toestel</small></h2>
 
       <div class="opt">
@@ -110,7 +135,7 @@
       <div class="opt">
         <h3>Optie 2 — zonder Xcode, met Sideloadly</h3>
         <div class="btns">
-          <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Beheer-iOS-unsigned.ipa">Download voor iPhone <small>.ipa</small></a>
+          <a class="dl" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Beheer-iOS-unsigned.ipa">Download voor iPhone <small>.ipa</small></a>
           <a class="dl alt" href="https://sideloadly.io">Sideloadly downloaden</a>
         </div>
         <ol>
@@ -127,10 +152,10 @@
     <div class="card wide">
       <h2>Linux en Raspberry Pi <small>bestand eindigt op .AppImage of .deb</small></h2>
       <div class="btns">
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-linux-x86_64.AppImage">Linux-pc <small>AppImage</small></a>
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-linux-amd64.deb">Linux-pc <small>.deb</small></a>
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-linux-arm64.AppImage">Raspberry Pi <small>AppImage</small></a>
-        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.2.0/Saga-Techbox-Deur-2.2.0-linux-arm64.deb">Raspberry Pi <small>.deb</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-linux-x86_64.AppImage">Linux-pc <small>AppImage</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-linux-amd64.deb">Linux-pc <small>.deb</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-linux-arm64.AppImage">Raspberry Pi <small>AppImage</small></a>
+        <a class="dl alt" href="https://github.com/Milo289/saga-techbox-door/releases/download/v2.3.0/Saga-Techbox-Deur-2.3.0-linux-arm64.deb">Raspberry Pi <small>.deb</small></a>
       </div>
       <ol>
         <li><b>AppImage:</b> maak het uitvoerbaar met <code>chmod +x bestandsnaam</code> en dubbelklik of start het.</li>
@@ -161,7 +186,62 @@
     </table>
   </section>
 
-  <p class="note" style="margin-top:30px">Alle bestanden: <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/tag/v2.2.0">github.com/Milo289/saga-techbox-door/releases</a></p>
+  <p class="note" style="margin-top:30px">Alle bestanden: <a style="color:var(--acc)" href="https://github.com/Milo289/saga-techbox-door/releases/tag/v2.3.0">github.com/Milo289/saga-techbox-door/releases</a></p>
+  <section id="permanent">
+    <h2>Altijd blijven werken, zonder betaald developer-account</h2>
+    <p class="note" style="margin-bottom:12px">Een app op je iPhone of iPad die je met een <b style="color:var(--fg)">gratis Apple-ID</b> zelf installeert, stopt na <b>7 dagen</b>. Dat is een regel van Apple, die ik niet kan uitzetten. Zo houd je het toch werkend:</p>
+    <table>
+      <tr><th>Apparaat</th><th>Blijft het werken?</th><th>Hoe</th></tr>
+      <tr><td><b>Mac</b></td><td class="good">Ja, altijd</td><td>De Mac-app (.pkg) heeft geen tijdslimiet en heeft geen developer-account nodig.</td></tr>
+      <tr><td><b>Windows en Linux</b></td><td class="good">Ja, altijd</td><td>Geen limiet.</td></tr>
+      <tr><td><b>iPhone en iPad</b> — als web-app</td><td class="good">Ja, altijd, gratis</td><td>Open het adres van je server met <code>/admin</code> in <b>Safari</b> → Deel-knop → <b>Zet op beginscherm</b>. Er komt een icoon op je beginscherm dat voor altijd blijft. Dit heeft geen Face ID, Siri of trillen; de rest werkt.</td></tr>
+      <tr><td><b>iPhone en iPad</b> — echte app, ververst zichzelf</td><td class="good">Ja, gratis</td><td>Gebruik <b>AltStore</b> (altstore.io) of <b>SideStore</b>: een klein programma op je Mac of pc ververst de app elke week vanzelf via wifi, zolang die computer aan staat en op hetzelfde wifi zit. Je installeert de <code>.ipa</code> (zie hieronder) één keer met AltStore.</td></tr>
+      <tr><td><b>iPhone en iPad</b> — echte app, zelf verversen</td><td class="bad">Elke 7 dagen</td><td>Opnieuw op ▶ drukken in Xcode, of in Sideloadly op <i>Start</i> klikken. Met een gratis Apple-ID kun je maximaal 3 eigen apps tegelijk hebben.</td></tr>
+      <tr><td><b>iPhone en iPad</b> — met Apple Developer Program</td><td class="good">Ja, 1 jaar (of 90 dagen via TestFlight)</td><td>Kost 99 dollar per jaar. Dan werkt de app een jaar lang en kun je hem via TestFlight delen. Alleen nodig als je de echte app écht permanent wilt zonder gedoe.</td></tr>
+    </table>
+    <p class="note" style="margin-top:12px">Mijn advies: <b style="color:var(--fg)">Mac, Windows en Linux</b> gewoon installeren. Op de iPhone en iPad de <b style="color:var(--fg)">web-app</b> op het beginscherm zetten (altijd gratis) en, als je Face ID en trillen wilt, de echte app met <b style="color:var(--fg)">AltStore</b>.</p>
+  </section>
+
+  <script>
+  (() => {
+    const V = '2.3.0', BASE = `https://github.com/Milo289/saga-techbox-door/releases/download/v${V}/Saga-Techbox-Deur-${V}-`;
+    const ua = navigator.userAgent || '', plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    const touch = navigator.maxTouchPoints > 1;
+    let kind = 'other';
+    if (/iPhone/.test(ua)) kind = 'iphone';
+    else if (/iPad/.test(ua) || (/Mac/.test(plat) && touch)) kind = 'ipad';
+    else if (/Android/.test(ua)) kind = 'android';
+    else if (/Win/.test(plat) || /Windows/.test(ua)) kind = 'windows';
+    else if (/Mac/.test(plat) || /Macintosh/.test(ua)) kind = 'mac';
+    else if (/Linux|X11|CrOS/.test(ua)) kind = 'linux';
+    // browsers hide Apple chip or Intel; the graphics card gives it away
+    const apple = () => { try { const gl = document.createElement('canvas').getContext('webgl'); const r = gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info').UNMASKED_RENDERER_WEBGL); return /Apple/.test(r) ? true : /Intel|AMD|Radeon|NVIDIA/.test(r) ? false : null; } catch { return null; } };
+    const btn = (href, text, small, cls = '') => `<a class="dl ${cls}" href="${href}">${text}${small ? ` <small>${small}</small>` : ''}</a>`;
+    let title = '', btns = '', note = '';
+    if (kind === 'windows') { title = 'Dit is een Windows-pc <span class="tag">herkend</span>'; btns = btn(BASE + 'windows-setup.exe', 'Download voor Windows', '.exe', 'big'); note = 'Dubbelklik op het bestand. Staat er “Windows heeft uw pc beschermd”? Klik op Meer info → Toch uitvoeren.'; }
+    else if (kind === 'mac') {
+      const a = apple();
+      title = `Dit is een Mac ${a === true ? 'met Apple-chip' : a === false ? 'met Intel-chip' : ''} <span class="tag">herkend</span>`;
+      const arm = btn(BASE + 'mac-arm64.pkg', 'Mac met Apple-chip', '.pkg · M1 en nieuwer', a === false ? 'alt' : 'big');
+      const intel = btn(BASE + 'mac-x64.pkg', 'Mac met Intel', '.pkg', a === false ? 'big' : 'alt');
+      btns = a === false ? intel + arm : arm + intel;
+      note = a === null ? 'Ik kon niet zien welke chip je hebt. Staat er bij  → Over deze Mac “Apple M…”? Kies dan Apple-chip.' : 'Dubbelklik op het bestand. Zegt de Mac dat het niet geopend kan worden? Rechtsklik → Open → Open.';
+    }
+    else if (kind === 'linux') { title = 'Dit is een Linux-computer <span class="tag">herkend</span>'; btns = btn(BASE + 'linux-amd64.deb', 'Download .deb', 'Ubuntu, Debian', 'big') + btn(BASE + 'linux-x86_64.AppImage', 'AppImage', 'andere Linux', 'alt'); note = 'Raspberry Pi of een ARM-computer? Kies hieronder de arm64-versie. Of gebruik het slimme installatiebestand hierboven.'; }
+    else if (kind === 'iphone' || kind === 'ipad') {
+      title = `Dit is een ${kind === 'ipad' ? 'iPad' : 'iPhone'} <span class="tag">herkend</span>`;
+      btns = btn('#permanent', 'Altijd gratis: zet het op je beginscherm', '', 'big') + btn('#ios', 'De echte app installeren', '', 'alt');
+      note = 'Een iPhone of iPad installeert de echte app via een computer (Xcode of AltStore). Open deze pagina op je Mac of pc om verder te gaan, of kies de web-app: die werkt direct, gratis en voor altijd.';
+    }
+    else if (kind === 'android') { title = 'Dit is een Android-toestel'; btns = ''; note = 'Er is geen Android-app. Open het adres van je server met /admin in Chrome en kies “Toevoegen aan startscherm”.'; }
+    if (title) {
+      document.getElementById('mineTitle').innerHTML = title;
+      document.getElementById('mineBtns').innerHTML = btns;
+      document.getElementById('mineNote').textContent = note;
+      document.getElementById('mine').hidden = false;
+    }
+  })();
+  </script>
 </main>
 </body>
 </html>

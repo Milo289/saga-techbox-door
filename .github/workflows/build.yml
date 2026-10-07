@@ -97,10 +97,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
+      - name: The smart installers (they recognise the computer themselves)
+        run: |
+          (cd install && zip -q ../out/Installeer-Mac-Linux.zip Installeer.command)
+          (cd install && zip -q ../out/Installeer-Windows.zip Installeer-Windows.bat Installeer-Windows.ps1)
+          ls -la out | head -30
       - uses: softprops/action-gh-release@v2
         with:
           files: out/*

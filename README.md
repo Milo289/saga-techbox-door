@@ -11,6 +11,11 @@ A door sign people can talk to. The door screen shows **Open**, **Gesloten** or 
 | Control panel | `/admin` | You — PIN protected |
 | Phone page | `/visit` | Visitors on their own phone |
 
+## The easy way: one installer that recognises your device
+Open `installeren.html` (it detects your device and shows the right download first), or download **Installeer-Mac-Linux.zip** / **Installeer-Windows.zip** from the Releases page, unzip, and double-click `Installeer.command` (Mac; Linux: `bash Installeer.command`) or `Installeer-Windows.bat`. It sees whether you have an Apple-chip Mac, an Intel Mac, Windows or Linux, downloads the newest version through the GitHub CLI (`gh`, one-time login) and starts the installation. `--dry-run` / `-DryRun` only shows what it would pick.
+
+**Keeping the iPhone/iPad app alive without a paid developer account:** apps installed with a free Apple ID stop after 7 days (an Apple rule). Options: put the web app on the home screen (Safari → Share → *Zet op beginscherm*; free and permanent), use AltStore/SideStore, which refreshes the app by itself every week, or pay for the Apple Developer Program (a year, or TestFlight). The Mac, Windows and Linux apps have no such limit. Details are on `installeren.html`. The plan for future updates is in `ROADMAP.md`.
+
 ## Three ways to run it
 
 ### 1. The desktop app (macOS, Windows, Linux)
