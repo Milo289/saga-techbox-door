@@ -36,8 +36,9 @@ function winScript(r, hb) {
   return `
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class Dpi { [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }'
-[void][Dpi]::SetProcessDPIAware()
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Dpi { [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v); }'
+# per-monitor aware: with two monitors of different scaling every coordinate is a real pixel (otherwise the box lands in the wrong place)
+try { [void][Dpi]::SetProcessDpiAwarenessContext([IntPtr](-4)) } catch { [void][Dpi]::SetProcessDPIAware() }
 $rect = New-Object System.Drawing.Rectangle(${r.x}, ${r.y}, ${r.width}, ${r.height})
 $hb = '${esc}'
 try {
