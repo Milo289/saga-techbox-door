@@ -42,6 +42,8 @@ struct StatusView: View {
                 if showPlanner { plannerCard }
             }
             .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 40)
+            .frame(maxWidth: 720) // on an iPad the cards stay a comfortable width, centred
+            .frame(maxWidth: .infinity)
         }
         .refreshable { try? await store.refresh() }
         .background(background)

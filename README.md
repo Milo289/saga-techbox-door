@@ -43,7 +43,7 @@ The app isn't signed with a paid certificate, so the first time:
 ```
 docker compose up -d --build
 ```
-Set your PIN and time zone in `docker-compose.yml` (or `ADMIN_PIN=4821 TZ=Europe/Amsterdam docker compose up -d --build`).
+Set the time zone in `docker-compose.yml` (or `TZ=Europe/Amsterdam docker compose up -d --build`). There is no PIN by default; log in with an account. An old-style PIN is optional: `ADMIN_PIN=4821 docker compose up -d --build`.
 
 ### 3. Plain Node.js (18 or newer, nothing to install)
 ```
@@ -112,6 +112,10 @@ All of these are in *Instellingen → Venster en sneltoetsen* (Ctrl/Cmd+Shift+S)
 macOS and Windows keep the pointer on the monitor; on Linux only the other monitors are blacked out. If the app ever stops, the helper releases the pointer by itself within five seconds.
 The settings window (Ctrl/Cmd + Shift + S) and quitting (Ctrl/Cmd + Shift + Q) always work from the keyboard.
 Emergency exit from any program: **Ctrl/Cmd + Alt + Shift + M** lets go of the mouse (press again to lock it again).
+
+## Quality
+`npm test` runs 29 automatic tests (accounts and rights, the screen lock, visitors and profiles, design texts/colours/layout/blocks, safe saving and recovery, the live connection, the updater). They run on Windows, macOS and Linux before every release.
+The server also sends security headers, only lets its own pages be shown in a frame, and saves the very last change even when it is stopped at once.
 
 ## Updates and safe settings
 - **Updater (desktop app):** the app looks for a newer version about once every 12 hours (switch off in *Instellingen → Updates*) and shows a notice plus *Update naar …* in the tray icon. It downloads the right installer for your computer (`.pkg`, `.exe`, `.AppImage`/`.deb`) to *Downloads* and opens it only when you say *Installeren*. **Instellingen → Updates → Nu controleren** checks right away.

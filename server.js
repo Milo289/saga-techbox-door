@@ -294,18 +294,25 @@ function load() {
   }
 }
 let state = load();
-let saveTimer = null;
+let saveTimer = null, savePending = false;
+function writeState() {
+  savePending = false;
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(state, null, 2));
+    try { if (fs.existsSync(STATE_FILE)) fs.copyFileSync(STATE_FILE, STATE_FILE + '.bak'); } catch {} // the last good copy, in case anything goes wrong
+    fs.renameSync(STATE_FILE + '.tmp', STATE_FILE);
+  } catch (e) { console.error('save failed:', e.message); }
+}
 function save() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(state, null, 2));
-      try { if (fs.existsSync(STATE_FILE)) fs.copyFileSync(STATE_FILE, STATE_FILE + '.bak'); } catch {} // the last good copy, in case anything goes wrong
-      fs.renameSync(STATE_FILE + '.tmp', STATE_FILE);
-    } catch (e) { console.error('save failed:', e.message); }
-  }, 150);
+  savePending = true;
+  saveTimer = setTimeout(writeState, 150);
 }
+// the last change must never be lost because the program is stopped within a fraction of a second
+function flushSave() { if (savePending) { clearTimeout(saveTimer); writeState(); } }
+process.on('exit', flushSave);
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { flushSave(); process.exit(0); });
 let actor = ''; // who is doing the current action (shown in the activity log)
 let actorRoot = false;
 function log(type, text, by, root) {
@@ -1162,6 +1169,9 @@ function handleVisit(req, b) {
 }
 
 const server = http.createServer(async (req, res) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'"); // only this server's own pages may show its pages in a frame
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   try {

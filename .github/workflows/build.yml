@@ -24,6 +24,8 @@ jobs:
       - run: npm ci
       - name: Check the code
         run: node --check server.js && node --check app/main.js
+      - name: Run the tests (server, accounts, lock, design, saving, updater)
+        run: npm test
       - name: Build installers
         run: npm run dist
         env:
