@@ -226,6 +226,7 @@ test('live connection (SSE) delivers state and the doorbell', async (t) => {
 
 test('safety: headers and the last change survives a stop', async (t) => {
   const srv = await startServer({ patch: true });
+  t.after(() => srv.stop()); // (a no-op when the test below already stopped it)
   const dir = srv.dir;
   const tok = await login(srv);
 
