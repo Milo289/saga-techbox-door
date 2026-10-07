@@ -1192,9 +1192,22 @@
         h('div', { class: 'row', style: 'margin-top:12px' },
           h('button', { onclick: () => { if (blocks.length >= 12) return toast('Er passen maximaal 12 onderdelen op'); blocks.push({ id: newId(), type: 'text', text: 'Nieuwe tekst', size: 4, color: '', bold: false, src: '', w: 24 }); keepDraft(); redraw(); } }, '+ Tekst'),
           h('button', { onclick: () => fileIn.click() }, '+ Afbeelding'), fileIn));
+      // live preview of the door screen: drag the text and buttons right here (works exactly like the edit mode on the door screen)
+      const MODES = [['portrait', 'Verticaal', '/?edit=1&orientation=portrait', [360, 640]], ['landscape', 'Horizontaal', '/?edit=1&orientation=landscape', [720, 405]], ['phone', 'Telefoon', '/visit?edit=1', [360, 640]]];
+      let mode = store.get('doorPreview', 'portrait');
+      if (!MODES.some((m) => m[0] === mode)) mode = 'portrait';
+      const frameBox = h('div', { style: 'margin-top:12px;display:flex;justify-content:center' });
+      const modeBtns = MODES.map(([k, label]) => h('button', { class: mode === k ? 'white' : '', onclick: () => { mode = k; store.set('doorPreview', k); drawPreview(); } }, label));
+      function drawPreview() {
+        const m = MODES.find((x) => x[0] === mode);
+        modeBtns.forEach((b, i) => b.classList.toggle('white', MODES[i][0] === mode));
+        frameBox.replaceChildren(h('iframe', { src: m[2], title: 'Voorbeeld van het deurscherm', style: `width:${m[3][0]}px;height:${m[3][1]}px;max-width:100%;border:1px solid var(--line);border-radius:14px;background:#000` }));
+      }
       const layoutCard = h('div', { class: 'card' }, h('h2', {}, 'Indeling'),
-        h('p', { class: 'muted', style: 'margin-top:0' }, 'Sleep alles waar je het wilt hebben: de status, de tijd, je bericht, de knoppen en je eigen onderdelen. Elk schermtype heeft zijn eigen indeling. Het beste doe je dit op het deurscherm zelf (in de app: Ctrl/Cmd+Shift+E), dan zie je precies hoe het wordt.'),
-        h('div', { class: 'row' }, ...[['Verticaal', '/?edit=1&orientation=portrait'], ['Horizontaal', '/?edit=1&orientation=landscape'], ['Telefoon', '/visit?edit=1']].map(([t, u]) => h('button', { onclick: () => window.open(u, '_blank') }, t))));
+        h('p', { class: 'muted', style: 'margin-top:0' }, 'Sleep hieronder alles waar je het wilt hebben: de status, de tijd, je bericht, de knoppen en je eigen onderdelen. Met de knoppen in de blauwe balk maak je iets groter, kleiner of onzichtbaar, en vergeet niet op Opslaan in de blauwe balk te klikken. Elk schermtype heeft zijn eigen indeling.'),
+        h('div', { class: 'row' }, ...modeBtns, h('span', { style: 'flex:1' }), h('button', { class: 'sm ghost', onclick: () => window.open(MODES.find((x) => x[0] === mode)[2], '_blank') }, 'Groot openen ↗')),
+        frameBox);
+      setTimeout(drawPreview, 0);
       const save = async () => {
         await api('/api/settings', { ui: st.ui, colors: st.colors });
         await api('/api/blocks', { blocks });

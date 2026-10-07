@@ -117,7 +117,8 @@ function loadWithRetry(w, url) {
 }
 
 function webPrefs() {
-  return { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false };
+  // autoplay: the bell must sound without anyone clicking first; no throttling: sound and live updates keep going when the window is covered or hidden
+  return { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false, autoplayPolicy: 'no-user-gesture-required', backgroundThrottling: false };
 }
 
 // Ctrl/Cmd+Shift+S = settings, Ctrl/Cmd+Shift+Q = quit (handy on the door screen, which has no menu)

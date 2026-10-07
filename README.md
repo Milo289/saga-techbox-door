@@ -127,6 +127,7 @@ Control panel → **Ontwerp** (needs the settings right):
 - **Eigen onderdelen** — add your own text (size, colour, bold) or a logo/picture (up to 12 items). They appear on the screen and are moved like everything else.
 - **Indeling** — drag anything to another place, resize it or hide it (see below). Each screen type (vertical, horizontal, phone) has its own layout.
 Changes appear on every door screen at once after *Opslaan*.
+The **Indeling** card shows a live preview of the door screen (vertical, horizontal, phone): drag the parts right there, then press *Opslaan* in the blue bar.
 
 ## Moving things around (*Indeling aanpassen*)
 If something sits in the wrong place, you can move it yourself: control panel → *Instellingen → Scherm → Indeling*, or on the door screen itself **Ctrl/Cmd + Shift + E**

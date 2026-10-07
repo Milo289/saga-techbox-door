@@ -134,6 +134,10 @@
   #editbar input { background: #fff; color: #111; width: 150px; }
   #editbar .grow { flex: 1; }
   #editbar small { font-weight: 500; opacity: .9; }
+  #editbar.framed { padding: 5px 8px; gap: 5px; font-size: 12px; }
+  #editbar.framed small { display: none; }
+  #editbar.framed button, #editbar.framed input { padding: 4px 8px; font-size: 12px; }
+  #editbar.framed input { width: 110px; }
 
   /* ---------- Vraagje: topics, number pad, greeting ---------- */
   .topics { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(var(--u)*1); }
@@ -762,9 +766,10 @@
   // ---------- "Indeling aanpassen": drag the parts of the screen where you want them ----------
   function startEdit() {
     document.body.classList.add('editing');
+    const framed = window.top !== window; // shown inside the control panel's preview
     let tok = '', sel = null, saved = '{}', dirty = false;
     try { tok = sessionStorage.getItem('doorEditToken') || localStorage.getItem('doorToken') || ''; } catch {}
-    const bar = h('div', { id: 'editbar' });
+    const bar = h('div', { id: 'editbar', class: framed ? 'framed' : '' });
     document.body.append(bar);
     const headers = () => ({ 'Content-Type': 'application/json', authorization: 'Bearer ' + tok });
     const KEYNAME = { portrait: 'verticaal', landscape: 'horizontaal', phone: 'telefoon' };
@@ -795,7 +800,7 @@
         h('span', { class: 'grow' }),
         h('button', { onclick: () => { work = {}; sel = null; applyPositions(); setDirty(); drawBar(); } }, 'Alles herstellen'),
         h('button', { class: 'main', disabled: !dirty, onclick: save }, 'Opslaan'),
-        h('button', { onclick: close }, 'Sluiten')].filter(Boolean));
+        framed ? null : h('button', { onclick: close }, 'Sluiten')].filter(Boolean));
     }
     function drawLogin(msg) {
       const u = h('input', { placeholder: 'Gebruikersnaam', autocapitalize: 'none' }), pw = h('input', { type: 'password', placeholder: 'Wachtwoord' });
@@ -807,7 +812,7 @@
         check();
       };
       pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-      bar.replaceChildren(...[h('b', {}, 'Inloggen om de indeling aan te passen'), u, pw, h('button', { class: 'main', onclick: go }, 'Inloggen'), msg ? h('span', {}, msg) : null, h('span', { class: 'grow' }), h('button', { onclick: close }, 'Sluiten')].filter(Boolean));
+      bar.replaceChildren(...[h('b', {}, 'Inloggen om de indeling aan te passen'), u, pw, h('button', { class: 'main', onclick: go }, 'Inloggen'), msg ? h('span', {}, msg) : null, h('span', { class: 'grow' }), framed ? null : h('button', { onclick: close }, 'Sluiten')].filter(Boolean));
     }
     async function check() {
       try {
