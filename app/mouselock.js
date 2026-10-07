@@ -73,7 +73,13 @@ function start(rect) {
 function stop() {
   if (beat) { clearInterval(beat); beat = null; }
   try { if (hbFile) fs.unlinkSync(hbFile); } catch {} // no heartbeat file = the helper ends itself within a second
-  if (child) { try { child.kill(); } catch {} child = null; }
+  if (child) {
+    const c = child; child = null;
+    // On Windows the pointer is only let go when the script ends on its own (killing it would leave the pointer clipped),
+    // so it gets time to do that; the kill is only the last resort. macOS has nothing to release.
+    if (process.platform === 'win32') { const t = setTimeout(() => { try { c.kill(); } catch {} }, 4000); if (t.unref) t.unref(); }
+    else { try { c.kill(); } catch {} }
+  }
 }
 
 module.exports = { start, stop, macScript, winScript, running: () => !!child };
