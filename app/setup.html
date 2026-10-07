@@ -105,6 +105,18 @@
     </div>
   </details>
 
+  <div class="card" id="updBox">
+    <div class="row"><b class="grow">Updates</b><span class="hint" id="updState"></span></div>
+    <label class="check"><input type="checkbox" id="autoUpdate"> Automatisch op updates controleren</label>
+    <div class="row"><button type="button" id="updCheck">Nu controleren</button><button type="button" id="updGo" class="hidden">Downloaden en installeren</button></div>
+    <p class="hint" id="updMsg">Je instellingen en gegevens staan buiten de app en blijven bewaard bij een update. De server maakt zelf een back-up voordat een nieuwe versie voor het eerst start.</p>
+    <details class="adv"><summary>Privé-opslagplaats?</summary><div class="body">
+      <label class="f">GitHub-toegangssleutel (alleen lezen)<input type="password" id="updToken" placeholder="github_pat_…" autocomplete="off"></label>
+      <div class="row"><button type="button" id="updSaveToken">Bewaren</button><span class="hint" id="updTokenState"></span></div>
+      <p class="hint">Alleen nodig als de versies in een privé-opslagplaats staan. De sleutel wordt versleuteld door je computer bewaard en nergens anders voor gebruikt.</p>
+    </div></details>
+  </div>
+
   <div class="card" id="aboutBox">
     <p class="hint" id="about" style="margin:0"></p>
     <div class="row"><button type="button" id="reveal" class="hidden">Open de gegevensmap</button></div>
@@ -170,6 +182,34 @@
     $('lan').append(addrs.length ? 'Op andere apparaten in dit netwerk: ' : 'Deze computer heeft nog geen netwerkverbinding.');
     addrs.forEach((u, i) => { const code = document.createElement('code'); code.textContent = u + '/admin'; $('lan').append(i ? ' of ' : '', code); });
   };
+  // ---- updates ----
+  const upd = window.setup.update;
+  $('autoUpdate').checked = c.autoUpdate !== false;
+  const showFound = (f) => {
+    $('updGo').classList.toggle('hidden', !f || !f.version || f.upToDate);
+    if (f && !f.upToDate && f.version) { $('updState').textContent = `Versie ${f.version} is beschikbaar`; $('updState').className = 'hint ok'; }
+  };
+  const u0 = await upd.get();
+  $('updState').textContent = `Je hebt versie ${u0.version}`;
+  $('updTokenState').textContent = u0.hasToken ? 'Een sleutel is bewaard.' : '';
+  showFound(u0.found && { ...u0.found, upToDate: false });
+  $('updCheck').onclick = async () => {
+    $('updCheck').disabled = true; $('updMsg').className = 'hint'; $('updMsg').textContent = 'Controleren…';
+    const r = await upd.check();
+    $('updCheck').disabled = false;
+    if (r.error) { $('updMsg').textContent = r.error; $('updMsg').className = 'hint bad'; return; }
+    if (r.upToDate) { $('updMsg').textContent = `Je hebt de nieuwste versie (${r.version}).`; $('updMsg').className = 'hint ok'; showFound(null); return; }
+    $('updMsg').textContent = r.notes ? `Nieuw in ${r.version}: ${r.notes.split('\n').slice(0, 6).join(' · ')}` : `Versie ${r.version} staat klaar.`;
+    $('updMsg').className = 'hint'; showFound(r);
+  };
+  $('updGo').onclick = async () => { $('updGo').disabled = true; $('updMsg').textContent = 'Downloaden…'; await upd.download(); };
+  upd.onProgress((pct) => { if (pct < 0) { $('updGo').disabled = false; $('updMsg').textContent = 'Klaar.'; } else $('updMsg').textContent = `Downloaden… ${pct}%`; });
+  $('updSaveToken').onclick = async () => {
+    const r = await upd.saveToken($('updToken').value);
+    $('updTokenState').textContent = r.ok ? (r.hasToken ? 'Bewaard.' : 'Sleutel verwijderd.') : (r.error || 'Bewaren lukte niet.');
+    $('updTokenState').className = r.ok ? 'hint ok' : 'hint bad'; if (r.ok) $('updToken').value = '';
+  };
+
   $('port').addEventListener('input', showLan);
   showLan();
 
@@ -185,7 +225,7 @@
     const res = await window.setup.save({
       role: effective().role, serverMode: effective().mode, url: $('url').value.trim(),
       port: $('port').value, pin: $('pin').value, autostart: $('autostart').checked,
-      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
+      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), autoUpdate: $('autoUpdate').checked, alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
       closeToTray: $('closeToTray').checked, hotkeys: $('hotkeys').checked, display: $('display').value, windowed: $('windowed').checked,
     });
     if (!res || !res.ok) { $('err').textContent = (res && res.error) || 'Opslaan lukte niet.'; $('save').disabled = false; }

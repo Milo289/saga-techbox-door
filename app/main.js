@@ -35,14 +35,22 @@ const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
 const DEFAULTS = {
   role: null, serverMode: 'here', url: 'http://localhost:8080', port: 8080, pin: '', autostart: true,
   zoom: 1, alwaysOnTop: false, tray: true, closeToTray: false, hotkeys: false,
+  autoUpdate: true,
   display: '', windowed: false, reloadAt: '',          // door screen: which monitor, window instead of kiosk, daily refresh time
 };
+// Settings are written safely: first to a temporary file, the previous good copy is kept as .bak, and a damaged file falls back to it.
 function loadConfig() {
-  try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) }; } catch { return { ...DEFAULTS }; }
+  for (const f of [CONFIG_FILE, `${CONFIG_FILE}.bak`]) {
+    try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(f, 'utf8')) }; } catch {}
+  }
+  return { ...DEFAULTS };
 }
 function saveConfig(c) {
   fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(c, null, 2), { mode: 0o600 });
+  const tmp = `${CONFIG_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(c, null, 2), { mode: 0o600 });
+  try { if (fs.existsSync(CONFIG_FILE)) fs.copyFileSync(CONFIG_FILE, `${CONFIG_FILE}.bak`); } catch {}
+  fs.renameSync(tmp, CONFIG_FILE);
 }
 let config = loadConfig();
 
@@ -243,6 +251,7 @@ function updateTray() {
   const control = config.role === 'control', serverOnly = config.role === 'server';
   tray.setToolTip(`Saga Techbox Deur${report.label ? ` — ${report.label}` : ''}${report.open ? ` · ${report.open} open` : ''}`);
   tray.setContextMenu(Menu.buildFromTemplate([
+    ...(updateInfo ? [{ label: `Update naar ${updateInfo.version}…`, click: () => doUpdate() }, { type: 'separator' }] : []),
     ...(serverOnly ? [
       { label: 'Deurserver draait', enabled: false },
       ...lanAddresses(config.port).map((u) => ({ label: `${u}/admin`, click: () => { clipboard.writeText(`${u}/admin`); } })),
@@ -401,6 +410,7 @@ ipcMain.handle('setup:save', async (e, next) => {
     alwaysOnTop: !!next.alwaysOnTop, tray: !!next.tray, closeToTray: !!next.closeToTray, hotkeys: !!next.hotkeys,
     display: String(next.display || ''), windowed: !!next.windowed,
     reloadAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(next.reloadAt) ? next.reloadAt : '',
+    autoUpdate: next.autoUpdate !== false,
   };
   if (c.serverMode === 'remote' && !/^https?:\/\/[^\s/]+/.test(c.url)) return { ok: false, error: 'Vul een geldig adres in, bijv. http://192.168.1.50:8080' };
   const restartServer = localServerUrl && (c.serverMode !== 'here' || c.port !== config.port || c.pin !== config.pin);
@@ -413,12 +423,75 @@ ipcMain.handle('setup:save', async (e, next) => {
   return { ok: true };
 });
 
+// ---------- updates ----------
+// Looks on the GitHub releases page; downloads the installer for this computer and opens it only after you say so.
+// Your settings and data live outside the app, so an update never touches them (the server also makes a backup of its own data first).
+const updater = require('./updater');
+const UPDATE_TOKEN_FILE = path.join(app.getPath('userData'), 'update-token.bin');
+let updateInfo = null, updating = false, notifiedVersion = '';
+function updateToken() {
+  try { return fs.existsSync(UPDATE_TOKEN_FILE) && secureStorageOk() ? safeStorage.decryptString(fs.readFileSync(UPDATE_TOKEN_FILE)) : ''; } catch { return ''; }
+}
+const sendSetup = (ch, ...a) => { if (setupWin && !setupWin.isDestroyed()) setupWin.webContents.send(ch, ...a); };
+async function checkForUpdates() {
+  const found = await updater.check(app.getVersion(), updateToken(), { platform: process.platform, arch: process.arch, appImage: !!process.env.APPIMAGE });
+  updateInfo = found.upToDate ? null : found;
+  updateTray();
+  return found;
+}
+async function doUpdate() {
+  if (updating || !updateInfo) return;
+  if (!updateInfo.asset) { shell.openExternal(updateInfo.page || 'https://github.com/Milo289/saga-techbox-door/releases'); return; }
+  updating = true;
+  try {
+    const file = await updater.download(updateInfo.asset, updateToken(), app.getPath('downloads'), (pct) => sendSetup('update:progress', pct));
+    const appImage = file.endsWith('.AppImage');
+    if (appImage) fs.chmodSync(file, 0o755);
+    const r = await dialog.showMessageBox({ type: 'info', title: 'Update klaar', message: `Versie ${updateInfo.version} is gedownload.`,
+      detail: appImage ? 'Het bestand staat in je map Downloads. Sluit deze app en start het nieuwe bestand.\n\nJe instellingen blijven bewaard.' : 'Het installatieprogramma gaat open. Je instellingen en gegevens blijven bewaard.',
+      buttons: ['Installeren', 'Later'], defaultId: 0, cancelId: 1 });
+    if (r.response === 0) { if (appImage) shell.showItemInFolder(file); else shell.openPath(file); }
+  } catch (e) {
+    dialog.showErrorBox('Updaten lukte niet', e.message);
+  } finally { updating = false; sendSetup('update:progress', -1); }
+}
+async function backgroundCheck() {
+  if (config.autoUpdate === false || !config.role) return;
+  try {
+    const found = await checkForUpdates();
+    if (!found.upToDate && notifiedVersion !== found.version && Notification.isSupported()) {
+      notifiedVersion = found.version;
+      const n = new Notification({ title: 'Er is een update', body: `Versie ${found.version} staat klaar. Kies “Update” in het icoon bij de klok, of open Instellingen.` });
+      n.on('click', () => doUpdate()); n.show();
+    }
+  } catch { /* offline or private: stay quiet, the settings window explains */ }
+}
+setTimeout(backgroundCheck, 45e3);
+setInterval(backgroundCheck, 12 * 3600e3);
+
+const fromSetupWin = (e) => setupWin && !setupWin.isDestroyed() && e.sender === setupWin.webContents;
+ipcMain.handle('update:get', (e) => (fromSetupWin(e) ? { version: app.getVersion(), found: updateInfo && { version: updateInfo.version, notes: updateInfo.notes }, hasToken: !!updateToken(), canStore: secureStorageOk() } : null));
+ipcMain.handle('update:check', async (e) => {
+  if (!fromSetupWin(e)) return null;
+  try { const f = await checkForUpdates(); return f.upToDate ? { upToDate: true, version: f.version } : { upToDate: false, version: f.version, notes: f.notes, downloadable: !!f.asset }; }
+  catch (err) { return { error: err.message }; }
+});
+ipcMain.handle('update:download', (e) => { if (fromSetupWin(e)) doUpdate(); return { ok: true }; });
+ipcMain.handle('update:saveToken', (e, token) => {
+  if (!fromSetupWin(e)) return { ok: false };
+  token = String(token || '').trim().slice(0, 300);
+  if (!token) { try { fs.unlinkSync(UPDATE_TOKEN_FILE); } catch {} return { ok: true, hasToken: false }; }
+  if (!secureStorageOk()) return { ok: false, error: 'Dit systeem heeft geen veilige opslag (sleutelhanger) — de sleutel is niet bewaard' };
+  fs.writeFileSync(UPDATE_TOKEN_FILE, safeStorage.encryptString(token), { mode: 0o600 });
+  return { ok: true, hasToken: true };
+});
+
 // ---------- menu ----------
 function buildMenu() {
   const mod = process.platform === 'darwin' ? 'Cmd' : 'Ctrl';
   const template = [
     ...(process.platform === 'darwin' ? [{ label: app.name, submenu: [{ role: 'about', label: 'Over Saga Techbox Deur' }, { type: 'separator' }, { label: 'Instellingen…', accelerator: 'Cmd+,', click: openSetup }, { type: 'separator' }, { role: 'hide', label: 'Verberg' }, { role: 'quit', label: 'Stop' }] }] : []),
-    { label: 'Bestand', submenu: [{ label: 'Instellingen…', accelerator: `${mod}+Shift+S`, click: openSetup }, { type: 'separator' }, { role: 'quit', label: 'Afsluiten', accelerator: `${mod}+Shift+Q` }] },
+    { label: 'Bestand', submenu: [{ label: 'Instellingen…', accelerator: `${mod}+Shift+S`, click: openSetup }, { label: 'Op updates controleren…', click: openSetup }, { type: 'separator' }, { role: 'quit', label: 'Afsluiten', accelerator: `${mod}+Shift+Q` }] },
     { label: 'Bewerken', submenu: [{ role: 'undo', label: 'Ongedaan maken' }, { role: 'redo', label: 'Opnieuw' }, { type: 'separator' }, { role: 'cut', label: 'Knippen' }, { role: 'copy', label: 'Kopiëren' }, { role: 'paste', label: 'Plakken' }, { role: 'selectAll', label: 'Alles selecteren' }] },
     { label: 'Weergave', submenu: [{ role: 'reload', label: 'Opnieuw laden' }, { role: 'togglefullscreen', label: 'Volledig scherm' }, { type: 'separator' }, { role: 'resetZoom', label: 'Ware grootte' }, { role: 'zoomIn', label: 'Inzoomen' }, { role: 'zoomOut', label: 'Uitzoomen' }] },
   ];

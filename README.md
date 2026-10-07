@@ -107,6 +107,13 @@ Install the app (see above) and you get, on top of the website:
 
 All of these are in *Instellingen → Venster en sneltoetsen* (Ctrl/Cmd+Shift+S) and on the *Deze app* card in the control panel.
 
+## Updates and safe settings
+- **Updater (desktop app):** the app looks for a newer version about once every 12 hours (switch off in *Instellingen → Updates*) and shows a notice plus *Update naar …* in the tray icon. It downloads the right installer for your computer (`.pkg`, `.exe`, `.AppImage`/`.deb`) to *Downloads* and opens it only when you say *Installeren*. **Instellingen → Updates → Nu controleren** checks right away.
+  If the repository is private, give the app a read-only GitHub token once (*Privé-opslagplaats?*); it is stored encrypted by your computer's own secure storage.
+- **Your settings survive an update:** they live outside the app (settings of this computer and the server's data). Before a new version starts for the first time the server makes a backup (`…_voor-update.json`).
+- **Safe saving:** every save goes to a temporary file first and the previous good copy is kept (`.bak`). If a settings file is ever damaged, the program restores the last good copy or the newest backup instead of starting empty, and keeps the damaged file next to it.
+- The iPhone/iPad app can't update itself: install the new version through Xcode (press ▶ again).
+
 ## Moving things around (*Indeling aanpassen*)
 If something sits in the wrong place, you can move it yourself: control panel → *Instellingen → Scherm → Indeling*, or on the door screen itself **Ctrl/Cmd + Shift + E**
 (or add `?edit=1` to the address). Log in, then drag the parts of the screen (status, the line with the time, your message, the three buttons, …) where you want

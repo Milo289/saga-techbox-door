@@ -7,4 +7,11 @@ contextBridge.exposeInMainWorld('setup', {
   test: (url) => ipcRenderer.invoke('setup:test', url),
   save: (config) => ipcRenderer.invoke('setup:save', config),
   reveal: () => ipcRenderer.invoke('setup:reveal'),
+  update: {
+    get: () => ipcRenderer.invoke('update:get'),
+    check: () => ipcRenderer.invoke('update:check'),
+    download: () => ipcRenderer.invoke('update:download'),
+    saveToken: (t) => ipcRenderer.invoke('update:saveToken', String(t || '')),
+    onProgress: (cb) => { if (typeof cb === 'function') ipcRenderer.on('update:progress', (_e, pct) => cb(Number(pct))); },
+  },
 });

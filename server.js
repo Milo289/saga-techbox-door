@@ -99,6 +99,7 @@ const freshState = () => ({
   peopleRev: 0,
   system: { ...DEFAULT_SYSTEM },
   lastBackupDay: '',
+  lastVersion: '', // the program version that last used this data (a backup is made before the first start of a new version)
   positions: {}, // door-screen layout per screen type (see cleanPositions)
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
   seededAdmin: false,
@@ -179,10 +180,34 @@ function toDutch(s) {
   for (const k of ['autoReplyText', 'closedReply']) if (s[k] === OLD_EN[k]) s[k] = D[k];
   return s;
 }
+// Reads the saved settings. A damaged file never means "start empty and overwrite it": we fall back to the copy made
+// before the last save, then to the newest nightly/manual backup, and the damaged file is kept next to it.
+function readSavedState() {
+  if (!fs.existsSync(STATE_FILE)) return null;
+  const backupDir = path.join(DATA_DIR, 'backups');
+  let newest = [];
+  try { newest = fs.readdirSync(backupDir).filter((n) => /^state-.*\.json$/.test(n)).map((n) => path.join(backupDir, n)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs); } catch {}
+  for (const f of [STATE_FILE, STATE_FILE + '.bak', ...newest]) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (!raw || typeof raw !== 'object') continue;
+      if (f !== STATE_FILE) {
+        try { fs.renameSync(STATE_FILE, `${STATE_FILE}.corrupt-${Date.now()}`); } catch {}
+        console.error(`Het opslagbestand was beschadigd — hersteld uit ${path.basename(f)}`);
+        setTimeout(() => save(), 500); // write the recovered settings back as the main file straight away
+      }
+      return raw;
+    } catch {}
+  }
+  try { fs.renameSync(STATE_FILE, `${STATE_FILE}.corrupt-${Date.now()}`); } catch {}
+  console.error('Het opslagbestand was beschadigd en er is geen back-up — er wordt opnieuw begonnen (het oude bestand is bewaard).');
+  return null;
+}
 function load() {
   const d = freshState();
   try {
-    const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    const raw = readSavedState();
+    if (!raw) return d;
     if (raw.version !== 2) {
       // older version: keep what still applies
       d.settings.name = str(raw.settings?.name, 60) || d.settings.name;
@@ -202,6 +227,7 @@ function save() {
     try {
       fs.mkdirSync(DATA_DIR, { recursive: true });
       fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(state, null, 2));
+      try { if (fs.existsSync(STATE_FILE)) fs.copyFileSync(STATE_FILE, STATE_FILE + '.bak'); } catch {} // the last good copy, in case anything goes wrong
       fs.renameSync(STATE_FILE + '.tmp', STATE_FILE);
     } catch (e) { console.error('save failed:', e.message); }
   }, 150);
@@ -1164,6 +1190,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// after an update: take a safe copy of everything first, then carry on
+if (state.lastVersion && state.lastVersion !== APP_VERSION) {
+  try { writeBackup('voor-update'); log('systeem', `Bijgewerkt van ${state.lastVersion} naar ${APP_VERSION} — een back-up is gemaakt`, 'systeem'); } catch {}
+}
+if (state.lastVersion !== APP_VERSION) { state.lastVersion = APP_VERSION; save(); }
 lastView = JSON.stringify(computeView());
 // `ready` lets the desktop app wait for the server (or show why it couldn't start)
 const ready = new Promise((resolve, reject) => {
