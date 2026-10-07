@@ -234,6 +234,7 @@
     <button class="white" id="pinBtn" type="submit">Ontgrendelen</button>
   </form>
   <button class="link-btn hidden" id="swapLogin" type="button"></button>
+  <button class="link-btn hidden" id="appSettings" type="button">Server, IP of account wijzigen</button>
   <p class="muted" id="pinErr"></p>
 </div>
 
@@ -400,6 +401,8 @@
     $('pinErr').textContent = msg || '';
     if (es) { es.close(); es = null; }
     try { authInfo = await fetch('/api/auth-info', { cache: 'no-store' }).then((r) => r.json()); } catch {}
+    $('appSettings').classList.toggle('hidden', !window.doorApp?.openSettings);
+    $('appSettings').onclick = () => window.doorApp.openSettings();
     const pinOnly = authInfo.mode === 'pin';
     setLoginForm(pinOnly ? 'pin' : 'user');
     $('swapLogin').classList.toggle('hidden', pinOnly || !authInfo.pin);
@@ -884,6 +887,11 @@
       me.canLock ? h('div', { class: 'list', style: 'margin-top:16px' }, h('div', { class: 'muted' }, 'Schermcode (6 cijfers)'), h('div', { class: 'row' },
         h('button', { class: 'sm', onclick: () => lockSetupDialog(false) }, me.hasLock ? 'Wijzigen' : 'Instellen'),
         me.hasLock ? h('button', { class: 'sm ghost', onclick: lockRemoveDialog }, 'Verwijderen') : null)) : null,
+      h('div', { class: 'list', style: 'margin-top:16px' }, h('div', { class: 'muted' }, 'Verbinding'),
+        h('div', {}, `Server: ${location.host}`),
+        h('div', { class: 'row' },
+          me.kind !== 'open' ? h('button', { class: 'sm', onclick: () => { closeAlert(); logout(); } }, 'Account wisselen') : null,
+          window.doorApp?.openSettings ? h('button', { class: 'sm ghost', onclick: () => { closeAlert(); window.doorApp.openSettings(); } }, 'Server of IP wijzigen…') : null)),
       h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten'), h('span', { style: 'flex:1' }), me.kind !== 'open' ? h('button', { class: 'danger', onclick: () => { closeAlert(); logout(); } }, 'Uitloggen') : null));
     $('alert').classList.add('open');
   }

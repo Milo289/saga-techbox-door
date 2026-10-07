@@ -21,6 +21,7 @@ struct StatusView: View {
     @State private var note = ""
     @State private var noteLoaded = false
     @State private var pendingMode: String?
+    @State private var showAccount = false
     @State private var planFrom = Date()
     @State private var planTo = Date().addingTimeInterval(3600)
     @State private var planNote = ""
@@ -34,7 +35,7 @@ struct StatusView: View {
             VStack(spacing: 18) {
                 hero
                 modeButtons
-                if !canChange { Label("Je hebt geen recht om de status te wijzigen.", systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary) }
+                if store.hasState && !canChange { Label("Je hebt geen recht om de status te wijzigen.", systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary) }
                 if showDuration { durationCard }
                 if showExtend { extendCard }
                 if showMessage { messageCard }
@@ -48,11 +49,17 @@ struct StatusView: View {
         .refreshable { try? await store.refresh() }
         .background(background)
         .sheet(isPresented: $showCustom) { customSheet }
+        .sheet(isPresented: $showAccount) { AccountSheet(store: store, model: AppModel.shared) }
         .confirmationDialog("De deur zetten op \(DoorModeKind(rawValue: pendingMode ?? "")?.label ?? "")?", isPresented: Binding(get: { pendingMode != nil }, set: { if !$0 { pendingMode = nil } }), titleVisibility: .visible) {
             Button("Ja, zet de deur om") { if let m = pendingMode { apply(m) }; pendingMode = nil }
             Button("Annuleren", role: .cancel) { pendingMode = nil }
         }
-        .onAppear { if !noteLoaded { note = store.state.settings.note.str; noteLoaded = true } }
+        .onAppear {
+            if !noteLoaded { note = store.state.settings.note.str; noteLoaded = true }
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["DEUR_TEST_SHEET"] == "account" { showAccount = true } // test aid
+            #endif
+        }
     }
 
     private var background: some View {
@@ -69,7 +76,8 @@ struct StatusView: View {
                 Circle().fill(current).frame(width: 12, height: 12).shadow(color: current, radius: 8)
                 Text(store.name).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 Spacer()
-                connectionPill
+                Button { showAccount = true } label: { connectionPill }.buttonStyle(.plain)
+                Button { showAccount = true } label: { Image(systemName: "person.crop.circle").font(.title3) }.buttonStyle(.plain).accessibilityLabel("Account en server")
             }
             Text(store.hasState ? store.label : "…").font(.system(size: 64, weight: .heavy, design: .rounded)).foregroundStyle(current)
                 .minimumScaleFactor(0.5).lineLimit(1).contentTransition(.opacity)
@@ -78,6 +86,14 @@ struct StatusView: View {
                     Text(untilLine).font(.title3.weight(.semibold))
                     if !store.message.isEmpty { Text(store.message).font(.subheadline).foregroundStyle(.secondary) }
                 }
+            }
+            if case .offline(let reason) = store.connection {
+                Button { showAccount = true } label: {
+                    Label("\(reason.trimmingCharacters(in: CharacterSet(charactersIn: ". "))) — tik om de server of het account te wijzigen", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.semibold)).multilineTextAlignment(.leading)
+                        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Palette.busy.opacity(0.18), in: RoundedRectangle(cornerRadius: 12, style: .continuous)).foregroundStyle(Palette.busy)
+                }.buttonStyle(.plain)
             }
             HStack(spacing: 8) {
                 tag(sourceText, symbol: "tag.fill")

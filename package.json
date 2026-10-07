@@ -1,7 +1,7 @@
 {
   "name": "saga-techbox-door",
   "productName": "Saga Techbox Deur",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Deurscherm en bedieningspaneel van Saga Techbox",
   "main": "app/main.js",
   "author": "Saga Techbox",

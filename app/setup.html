@@ -106,6 +106,12 @@
     </div>
   </details>
 
+  <div class="card" id="acctBox">
+    <div class="row"><b class="grow">Account</b><span class="hint" id="acctState"></span></div>
+    <p class="hint" style="margin:0">Heb je je inlog laten onthouden en wil je met een ander account werken? Vergeet dan deze inlog: het bedieningspaneel vraagt daarna opnieuw om een gebruikersnaam en wachtwoord. Het serveradres (IP) wijzig je hierboven.</p>
+    <div class="row"><button type="button" id="forgetLogin">Andere account gebruiken</button></div>
+  </div>
+
   <div class="card" id="updBox">
     <div class="row"><b class="grow">Updates</b><span class="hint" id="updState"></span></div>
     <label class="check"><input type="checkbox" id="autoUpdate"> Automatisch op updates controleren</label>
@@ -168,6 +174,7 @@
     $('rowHotkeys').classList.toggle('hidden', door || server);
     $('rowCloseTray').classList.toggle('hidden', door || server);
     $('advWindow').classList.toggle('hidden', server);
+    $('acctBox').classList.toggle('hidden', role !== 'control');
     $('reveal').classList.toggle('hidden', !here);
     $('hereBox').classList.toggle('hidden', !here);
     $('remoteBox').classList.toggle('hidden', here);
@@ -184,6 +191,14 @@
     $('lan').append(addrs.length ? 'Op andere apparaten in dit netwerk: ' : 'Deze computer heeft nog geen netwerkverbinding.');
     addrs.forEach((u, i) => { const code = document.createElement('code'); code.textContent = u + '/admin'; $('lan').append(i ? ' of ' : '', code); });
   };
+  $('forgetLogin').onclick = async () => {
+    $('forgetLogin').disabled = true;
+    const r = await window.setup.forgetLogin();
+    $('acctState').textContent = r && r.ok ? 'Vergeten — log opnieuw in' : 'Dat lukte niet';
+    $('acctState').className = r && r.ok ? 'hint ok' : 'hint bad';
+    setTimeout(() => { $('forgetLogin').disabled = false; }, 1500);
+  };
+
   // ---- updates ----
   const upd = window.setup.update;
   $('autoUpdate').checked = c.autoUpdate !== false;

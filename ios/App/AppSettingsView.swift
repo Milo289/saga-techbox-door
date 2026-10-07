@@ -29,6 +29,7 @@ struct AppSettingsView: View {
     @State private var server = UserDefaults.standard.string(forKey: "serverURL") ?? ""
     @State private var taps = 0
     @State private var askForget = false
+    @State private var showAccount = false
 
     var body: some View {
         NavigationStack {
@@ -79,6 +80,7 @@ struct AppSettingsView: View {
                 }
 
                 Section("Server") {
+                    Button { showAccount = true } label: { Label("Account en server wijzigen…", systemImage: "person.crop.circle.badge.questionmark") }
                     TextField("Adres", text: $server).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     Button("Opslaan en opnieuw verbinden") {
                         if let u = DoorApi.normalize(server) { UserDefaults.standard.set(u.absoluteString, forKey: "serverURL"); store.restart(); store.show("Verbinden…") } else { store.show("Dat adres klopt niet.") }
@@ -105,6 +107,7 @@ struct AppSettingsView: View {
             }
             .scrollContentBackground(.hidden).background(Color.black.ignoresSafeArea())
             .navigationTitle("Instellingen")
+            .sheet(isPresented: $showAccount) { AccountSheet(store: store, model: model) }
             .confirmationDialog("Inlog en server vergeten?", isPresented: $askForget, titleVisibility: .visible) {
                 Button("Vergeten", role: .destructive) { store.forget(); model.forgetEverything() }
                 Button("Annuleren", role: .cancel) {}

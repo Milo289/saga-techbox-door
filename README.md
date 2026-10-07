@@ -113,6 +113,11 @@ macOS and Windows keep the pointer on the monitor; on Linux only the other monit
 The settings window (Ctrl/Cmd + Shift + S) and quitting (Ctrl/Cmd + Shift + Q) always work from the keyboard.
 Emergency exit from any program: **Ctrl/Cmd + Alt + Shift + M** lets go of the mouse (press again to lock it again).
 
+## Changing the account or the server (IP) in every app
+- **iPhone / iPad:** the person icon next to *Live* on the Status screen (and *Instellingen → Account en server wijzigen…*) opens **Account en server**: change the server address, log in with another account, reconnect, or forget everything. If the server can't be reached an orange notice on the Status screen opens the same screen.
+- **Desktop app (Windows, macOS, Linux):** in the control panel click your name → **Account wisselen** or **Server of IP wijzigen…**; the login screen has **Server, IP of account wijzigen**; and while the app is still "Verbinden met de deurserver…" that page has the same button. In *Instellingen* there is **Andere account gebruiken**.
+- **Door screen in the desktop app:** click five times quickly in the top-left corner to open the settings (invisible to visitors); Ctrl/Cmd + Shift + S still works.
+
 ## Quality
 `npm test` runs 29 automatic tests (accounts and rights, the screen lock, visitors and profiles, design texts/colours/layout/blocks, safe saving and recovery, the live connection, the updater). They run on Windows, macOS and Linux before every release.
 The server also sends security headers, only lets its own pages be shown in a frame, and saves the very last change even when it is stopped at once.

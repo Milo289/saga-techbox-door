@@ -105,7 +105,7 @@ function keepOnOrigin(w, base) {
 
 // Keep trying until the server answers (after power-on the server may still be starting)
 function loadWithRetry(w, url) {
-  const waiting = `data:text/html;charset=utf-8,${encodeURIComponent(`<body style="margin:0;height:100vh;display:grid;place-items:center;background:#000;color:#6b6b73;font:500 18px system-ui,sans-serif">Verbinden met de deurserver…</body>`)}`;
+  const waiting = `data:text/html;charset=utf-8,${encodeURIComponent(`<body style="margin:0;height:100vh;display:grid;place-items:center;background:#000;color:#6b6b73;font:500 18px system-ui,sans-serif;text-align:center"><div>Verbinden met de deurserver…<div style="margin-top:24px"><button onclick="window.doorApp&&window.doorApp.openSettings()" style="font:600 15px system-ui,sans-serif;padding:11px 20px;border-radius:12px;border:0;background:#26262a;color:#e4e4e7;cursor:pointer">Server, IP of account wijzigen</button></div><div style="margin-top:14px;font-size:13px;opacity:.7">of druk op Ctrl/Cmd + Shift + S</div></div></body>`)}`;
   w.webContents.on('did-fail-load', (_e, code, _desc, failedUrl, isMain) => {
     if (!isMain || code === -3 || failedUrl.startsWith('data:')) return; // -3 = aborted by a newer load
     w.loadURL(waiting).catch(() => {});
@@ -418,6 +418,18 @@ ipcMain.handle('setup:get', (e) => {
     config: { ...config }, platform: process.platform, version: app.getVersion(), lan: lanAddresses(config.port), running: !!localServerUrl, dataDir: DATA_DIR,
     displays: screen.getAllDisplays().map((d, i) => ({ id: String(d.id), label: `Scherm ${i + 1} — ${d.bounds.width}×${d.bounds.height}${d.id === screen.getPrimaryDisplay().id ? ' (hoofdscherm)' : ''}` })),
   };
+});
+// "use another account": forget the stored login and the session, so the control panel asks for a login again
+ipcMain.handle('setup:forgetLogin', async (e) => {
+  if (!fromSetup(e)) return { ok: false };
+  try { fs.unlinkSync(LOGIN_FILE); } catch {}
+  if (win && !win.isDestroyed() && config.role === 'control') {
+    try {
+      await win.webContents.executeJavaScript(`(async () => { try { const t = localStorage.getItem('doorToken'); if (t) await fetch('/api/logout', { method: 'POST', headers: { authorization: 'Bearer ' + t } }); } catch {} try { localStorage.removeItem('doorToken'); localStorage.removeItem('doorPin'); } catch {} })()`);
+      win.webContents.reload();
+    } catch {}
+  }
+  return { ok: true };
 });
 ipcMain.handle('setup:test', async (e, url) => (fromSetup(e) ? isDoorServer(String(url)) : false));
 ipcMain.handle('setup:reveal', (e) => { if (fromSetup(e) && fs.existsSync(DATA_DIR)) shell.openPath(DATA_DIR); });

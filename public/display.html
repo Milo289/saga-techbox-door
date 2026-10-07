@@ -915,6 +915,17 @@
   async function keepAwake() { try { if (!VISIT && 'wakeLock' in navigator && document.visibilityState === 'visible') await navigator.wakeLock.request('screen'); } catch {} }
   document.addEventListener('visibilitychange', keepAwake);
   keepAwake();
+  // in the desktop app: five quick clicks or taps in the top-left corner open the app's settings (server/IP, role, account).
+  // Invisible, so visitors never see it.
+  if (!VISIT && !EDIT && window.doorApp && window.doorApp.openSettings) {
+    let n = 0, last = 0;
+    document.addEventListener('pointerdown', (e) => {
+      if (e.clientX > 90 || e.clientY > 90) { n = 0; return; }
+      const now = Date.now();
+      n = now - last < 1500 ? n + 1 : 1; last = now;
+      if (n >= 5) { n = 0; window.doorApp.openSettings(); }
+    }, true);
+  }
   let idleCursor;
   document.addEventListener('pointermove', () => { document.body.classList.remove('idle'); clearTimeout(idleCursor); idleCursor = setTimeout(() => document.body.classList.add('idle'), 4000); });
   $('time').addEventListener('dblclick', () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.(); });
