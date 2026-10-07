@@ -121,7 +121,7 @@
   const c = info.config;
   const mod = info.platform === 'darwin' ? 'Cmd' : 'Ctrl';
   $('ver').textContent = `Versie ${info.version}`;
-  $('keys').textContent = `Sneltoetsen: ${mod}+Shift+S opent deze instellingen, ${mod}+Shift+Q sluit de app af (ook op het deurscherm).`;
+  $('keys').textContent = `Sneltoetsen: ${mod}+Shift+S opent deze instellingen, ${mod}+Shift+Q sluit de app af (ook op het deurscherm), ${mod}+Shift+E laat je de indeling van het deurscherm aanpassen.`;
 
   const radio = (name, value) => { const r = document.querySelector(`input[name=${name}][value=${value}]`); if (r) r.checked = true; };
   const val = (name) => document.querySelector(`input[name=${name}]:checked`)?.value;

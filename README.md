@@ -107,6 +107,12 @@ Install the app (see above) and you get, on top of the website:
 
 All of these are in *Instellingen → Venster en sneltoetsen* (Ctrl/Cmd+Shift+S) and on the *Deze app* card in the control panel.
 
+## Moving things around (*Indeling aanpassen*)
+If something sits in the wrong place, you can move it yourself: control panel → *Instellingen → Scherm → Indeling*, or on the door screen itself **Ctrl/Cmd + Shift + E**
+(or add `?edit=1` to the address). Log in, then drag the parts of the screen (status, the line with the time, your message, the three buttons, …) where you want
+them; arrow keys move precisely, **+ / −** resize, *Verbergen* hides a part. *Opslaan* puts it on every door screen at once.
+Vertical, horizontal and the phone page each have their own layout. The normal screen can never be moved by accident: only the edit mode lets you drag, and it needs a login with the settings right.
+
 ## Look
 - **Donker** — black, calm.
 - **Licht** — light background with the status in a big full-colour card (green / red / orange).

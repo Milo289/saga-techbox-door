@@ -99,6 +99,7 @@ const freshState = () => ({
   peopleRev: 0,
   system: { ...DEFAULT_SYSTEM },
   lastBackupDay: '',
+  positions: {}, // door-screen layout per screen type (see cleanPositions)
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
   seededAdmin: false,
   users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
@@ -120,6 +121,27 @@ const isEmail = (v) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(String(v || ''
 const addrOf = (v) => { const m = String(v || '').match(/<([^>]+)>/); return (m ? m[1] : String(v || '')).trim(); };
 const maskEmail = (e) => { const [u, d] = String(e).split('@'); return d ? `${u.slice(0, 1)}${'•'.repeat(Math.max(2, Math.min(6, u.length - 1)))}@${d}` : ''; };
 
+// ----- layout: where each part of the door screen sits (moved by hand in "Indeling aanpassen") -----
+const LAYOUT_KEYS = ['portrait', 'landscape', 'phone'];
+const LAYOUT_ITEMS = ['name', 'time', 'ring', 'label', 'until', 'untilAt', 'message', 'note', 'extra', 'askTitle', 'reasons', 'actions'];
+function cleanPositions(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, Math.round(n * 10) / 10)) : d; };
+  for (const key of LAYOUT_KEYS) {
+    const items = raw[key];
+    if (!items || typeof items !== 'object') continue;
+    const clean = {};
+    for (const id of LAYOUT_ITEMS) {
+      const it = items[id];
+      if (!it || typeof it !== 'object') continue;
+      const r = { x: num(it.x, -100, 100, 0), y: num(it.y, -100, 100, 0), s: num(it.s, 0.4, 2.5, 1), hide: !!it.hide };
+      if (r.x || r.y || r.s !== 1 || r.hide) clean[id] = r;
+    }
+    if (Object.keys(clean).length) out[key] = clean;
+  }
+  return out;
+}
 function coerce(def, val) {
   if (val === undefined || val === null) return structuredClone(def);
   if (typeof def === 'boolean') return !!val;
@@ -167,7 +189,7 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, positions: cleanPositions(raw.positions), system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
@@ -292,6 +314,7 @@ function publicState() {
     bellReadyAt: lastBellAt + BELL_COOLDOWN,
     mailOn: mailOn(),
     hasPeople: state.people.length > 0,
+    positions: state.positions || {},
     serverTime: now,
   };
 }
@@ -743,6 +766,14 @@ const adminRoutes = {
     save();
     throw bad(`Verkeerde code (${MAX_LOCK_FAILS - ss.lockFails} pogingen over)`);
   },
+  'POST /api/layout': (b) => {
+    if (!LAYOUT_KEYS.includes(b.key)) throw bad('Onbekend schermtype');
+    const next = { ...(state.positions || {}) };
+    const clean = cleanPositions({ [b.key]: b.items })[b.key];
+    if (clean) next[b.key] = clean; else delete next[b.key]; // nothing moved = back to the standard layout
+    state.positions = next;
+    log('system', `Indeling ${clean ? 'aangepast' : 'hersteld'} (${{ portrait: 'verticaal', landscape: 'horizontaal', phone: 'telefoon' }[b.key]})`);
+  },
   'POST /api/password': (b, id) => {
     if (id.kind !== 'user') throw bad('Alleen voor gebruikers met een account');
     if (id.root) throw bad('Het wachtwoord van dit account kun je niet wijzigen');
@@ -867,7 +898,7 @@ const adminRoutes = {
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
-    state = { ...d, ...b, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
+    state = { ...d, ...b, positions: cleanPositions(b.positions), users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
   },
 };
@@ -948,7 +979,7 @@ adminRoutes['POST /api/v1/people/upsert'] = (b) => {
 adminRoutes['GET /api/v1/audit'] = () => ({ history: state.history.slice(0, 200) });
 
 const NEED = {
-  'GET /api/admin-state': 'view', 'GET /api/me': 'view', 'POST /api/password': 'view', 'POST /api/lock': 'view', 'POST /api/lock/set': 'view', 'POST /api/lock/remove': 'view', 'POST /api/lock/unlock': 'view',
+  'GET /api/admin-state': 'view', 'GET /api/me': 'view', 'POST /api/password': 'view', 'POST /api/layout': 'settings', 'POST /api/lock': 'view', 'POST /api/lock/set': 'view', 'POST /api/lock/remove': 'view', 'POST /api/lock/unlock': 'view',
   'POST /api/status': 'status', 'POST /api/status/auto': 'status', 'POST /api/busy/add': 'status', 'POST /api/busy/remove': 'status', 'POST /api/busy/end': 'status',
   'POST /api/settings': (b) => { const ks = Object.keys(b); return ks.every((k) => k === 'note') ? 'status' : ks.every((k) => ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'].includes(k)) ? 'mail' : 'settings'; }, // the door message needs only the status right; mail fields only the mail right
   'POST /api/test-notify': 'mail', 'POST /api/mail/test': 'mail',

@@ -116,6 +116,7 @@ function shortcuts(w) {
     if (hardLocked) return; // locked: no settings, no quit
     if (input.type !== 'keyDown' || !(input.control || input.meta) || !input.shift) return;
     const k = input.key.toLowerCase();
+    if (k === 'e' && config.role === 'door' && baseOrigin) { e.preventDefault(); w.loadURL(`${baseOrigin}/?edit=1`).catch(() => {}); } // move the parts of the door screen
     if (k === 's') { e.preventDefault(); openSetup(); }
     if (k === 'q') { e.preventDefault(); app.quit(); }
   });

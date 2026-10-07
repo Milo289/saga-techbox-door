@@ -115,6 +115,24 @@
   #boot { position: fixed; inset: 0; display: grid; place-items: center; color: #5c5c64; font: 500 16px system-ui, sans-serif; background: #000; z-index: 100; }
   .hidden { display: none !important; }
 
+  /* ---------- layout editor (only with ?edit=1; the normal screen can never be moved) ---------- */
+  .pos-hide { display: none !important; }
+  body.editing, body.editing.idle { cursor: default; }
+  body.editing .ph:empty { display: block !important; min-width: 8em; min-height: 1.3em; }
+  body.editing .ph:empty::before { content: attr(data-ph); opacity: .45; }
+  .movable { cursor: move !important; outline: 2px dashed rgba(128,128,128,.8); outline-offset: 4px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .movable.sel { outline: 3px solid #0a84ff; }
+  .movable.pos-ghost { opacity: .3; }
+  .movable * { pointer-events: none; }
+  #editbar { position: fixed; top: 0; left: 0; right: 0; z-index: 500; background: #0a84ff; color: #fff; font: 600 14px/1.3 system-ui, sans-serif; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+  #editbar button, #editbar input { font: inherit; border-radius: 8px; border: 0; padding: 7px 12px; }
+  #editbar button { background: rgba(255,255,255,.22); color: #fff; cursor: pointer; }
+  #editbar button.main { background: #fff; color: #0a84ff; }
+  #editbar button:disabled { opacity: .45; }
+  #editbar input { background: #fff; color: #111; width: 150px; }
+  #editbar .grow { flex: 1; }
+  #editbar small { font-weight: 500; opacity: .9; }
+
   /* ---------- Vraagje: topics, number pad, greeting ---------- */
   .topics { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(var(--u)*1); }
   .topic { padding: calc(var(--u)*2.2) calc(var(--u)*1.6); border-radius: calc(var(--u)*1.6); background: var(--s2); font-size: calc(var(--u)*2.5); font-weight: 600; text-align: center; }
@@ -187,22 +205,22 @@
 <div id="boot">Verbinden…</div>
 <div id="app">
   <header>
-    <div><span id="name"></span><span id="subtitle"></span></div>
+    <div id="hname"><span id="name"></span><span id="subtitle"></span></div>
     <div id="time"></div>
   </header>
   <main>
     <section class="hero">
       <div class="ring"></div>
       <div id="label"></div>
-      <div id="until"></div>
-      <div id="untilAt"></div>
-      <div id="message"></div>
-      <div id="note"></div>
-      <div id="extra"></div>
+      <div id="until" class="ph" data-ph="Over 30 minuten gaan we sluiten"></div>
+      <div id="untilAt" class="ph" data-ph="om 15:12"></div>
+      <div id="message" class="ph" data-ph="Bericht"></div>
+      <div id="note" class="ph" data-ph="Jouw bericht aan bezoekers"></div>
+      <div id="extra" class="ph" data-ph="Bezet 13:00–14:00 · Vandaag open 09:00–17:00"></div>
     </section>
     <section class="ask" id="ask">
-      <h2>Niet kloppen — tik hier</h2>
-      <div class="grid" id="reasons"></div>
+      <h2 id="askTitle">Niet kloppen — tik hier</h2>
+      <div class="grid ph" id="reasons" data-ph="Redenen (bijv. Ik heb een afspraak)"></div>
       <div class="grid" id="actions"></div>
     </section>
   </main>
@@ -317,6 +335,26 @@
     app.classList.toggle('portrait', !land);
     const base = VISIT ? Math.min(W, 520) * 1.1 : land ? Math.min(W * 0.6, H) : Math.min(W, H * 0.6);
     document.documentElement.style.setProperty('--u', (base / 100) + 'px');
+    applyPositions();
+  }
+  // ---------- positions: every part of the screen can sit somewhere else (per screen type) ----------
+  const EDIT = params.get('edit') === '1';
+  const MOVABLE = { name: '#hname', time: '#time', ring: '.ring', label: '#label', until: '#until', untilAt: '#untilAt', message: '#message', note: '#note', extra: '#extra', askTitle: '#askTitle', reasons: '#reasons', actions: '#actions' };
+  const NAMES = { name: 'Naam', time: 'Klok', ring: 'Statuspunt', label: 'Status', until: 'Tot-tekst', untilAt: 'Tijd', message: 'Bericht', note: 'Jouw bericht', extra: 'Extra regel', askTitle: 'Titel boven de knoppen', reasons: 'Redenen', actions: 'Deurbel, Tijd booken, Vraagje' };
+  let work = null, workKey = '';
+  const posKey = () => (VISIT ? 'phone' : app.classList.contains('landscape') ? 'landscape' : 'portrait');
+  function applyPositions() {
+    if (EDIT && S && workKey !== posKey()) { workKey = posKey(); work = structuredClone(S.positions?.[workKey] || {}); }
+    const items = (EDIT ? work : S?.positions?.[posKey()]) || {};
+    for (const [id, sel] of Object.entries(MOVABLE)) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      const p = items[id] || {};
+      el.style.translate = p.x || p.y ? `calc(var(--u) * ${p.x || 0}) calc(var(--u) * ${p.y || 0})` : '';
+      el.style.scale = p.s && p.s !== 1 ? String(p.s) : '';
+      el.classList.toggle('pos-hide', !!p.hide && !EDIT);
+      el.classList.toggle('pos-ghost', !!p.hide && EDIT);
+    }
   }
   function fitLabel() {
     const el = $('label');
@@ -686,6 +724,103 @@
   }
 
 
+  // ---------- "Indeling aanpassen": drag the parts of the screen where you want them ----------
+  function startEdit() {
+    document.body.classList.add('editing');
+    let tok = '', sel = null, saved = '{}', dirty = false;
+    try { tok = sessionStorage.getItem('doorEditToken') || localStorage.getItem('doorToken') || ''; } catch {}
+    const bar = h('div', { id: 'editbar' });
+    document.body.append(bar);
+    const headers = () => ({ 'Content-Type': 'application/json', authorization: 'Bearer ' + tok });
+    const KEYNAME = { portrait: 'verticaal', landscape: 'horizontaal', phone: 'telefoon' };
+    const cur = (id) => ({ x: 0, y: 0, s: 1, hide: false, ...(work[id] || {}) });
+    const put = (id, patch) => { work[id] = { ...cur(id), ...patch }; applyPositions(); setDirty(); drawBar(); };
+    const setDirty = () => { dirty = JSON.stringify(work) !== saved; };
+    const els = () => Object.entries(MOVABLE).map(([id, q]) => [id, document.querySelector(q)]).filter(([, el]) => el);
+    const mark = () => els().forEach(([id, el]) => { el.classList.add('movable'); el.classList.toggle('sel', id === sel); });
+    const close = () => {
+      if (dirty && !confirm('Je wijzigingen zijn nog niet opgeslagen. Toch sluiten?')) return;
+      params.delete('edit'); location.href = location.pathname + (params.toString() ? '?' + params : '');
+    };
+    async function save() {
+      const res = await fetch('/api/layout', { method: 'POST', headers: headers(), body: JSON.stringify({ key: workKey, items: work }) });
+      if (!res.ok) { toast((await res.json().catch(() => ({}))).error || 'Opslaan lukte niet'); return; }
+      saved = JSON.stringify(work); dirty = false; toast('Indeling opgeslagen'); drawBar();
+    }
+    function drawBar() {
+      mark();
+      const p = sel ? cur(sel) : null;
+      bar.replaceChildren(...[
+        h('b', {}, `Indeling aanpassen — ${KEYNAME[workKey] || ''}`),
+        sel ? h('span', {}, `· ${NAMES[sel]}`) : h('small', {}, 'Sleep een onderdeel naar een andere plek. Pijltjestoetsen verplaatsen precies.'),
+        sel ? h('button', { onclick: () => put(sel, { s: Math.max(0.4, Math.round((p.s - 0.05) * 100) / 100) }) }, '−') : null,
+        sel ? h('button', { onclick: () => put(sel, { s: Math.min(2.5, Math.round((p.s + 0.05) * 100) / 100) }) }, '+') : null,
+        sel ? h('button', { onclick: () => put(sel, { hide: !p.hide }) }, p.hide ? 'Tonen' : 'Verbergen') : null,
+        sel ? h('button', { onclick: () => { delete work[sel]; applyPositions(); setDirty(); drawBar(); } }, 'Dit onderdeel herstellen') : null,
+        h('span', { class: 'grow' }),
+        h('button', { onclick: () => { work = {}; sel = null; applyPositions(); setDirty(); drawBar(); } }, 'Alles herstellen'),
+        h('button', { class: 'main', disabled: !dirty, onclick: save }, 'Opslaan'),
+        h('button', { onclick: close }, 'Sluiten')].filter(Boolean));
+    }
+    function drawLogin(msg) {
+      const u = h('input', { placeholder: 'Gebruikersnaam', autocapitalize: 'none' }), pw = h('input', { type: 'password', placeholder: 'Wachtwoord' });
+      const go = async () => {
+        const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.value, password: pw.value }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) return drawLogin(out.error || 'Inloggen lukte niet');
+        tok = out.token; try { sessionStorage.setItem('doorEditToken', tok); } catch {}
+        check();
+      };
+      pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      bar.replaceChildren(...[h('b', {}, 'Inloggen om de indeling aan te passen'), u, pw, h('button', { class: 'main', onclick: go }, 'Inloggen'), msg ? h('span', {}, msg) : null, h('span', { class: 'grow' }), h('button', { onclick: close }, 'Sluiten')].filter(Boolean));
+    }
+    async function check() {
+      try {
+        const res = await fetch('/api/me', { headers: headers() });
+        if (!res.ok) return drawLogin('');
+        const me = await res.json();
+        if (!me.perms.includes('settings')) { bar.replaceChildren(h('b', {}, 'Je hebt geen recht om de indeling te wijzigen.'), h('span', { class: 'grow' }), h('button', { onclick: close }, 'Sluiten')); return; }
+        work = work || {}; saved = JSON.stringify(work); mark(); drawBar();
+      } catch { drawLogin('Geen verbinding met de deurserver'); }
+    }
+    // dragging (corrected for a rotated screen)
+    let drag = null;
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('#editbar') || !work) return;
+      const hit = els().find(([, el]) => el.contains(e.target));
+      if (!hit) { sel = null; drawBar(); return; }
+      e.preventDefault();
+      sel = hit[0]; const c = cur(sel);
+      drag = { id: sel, x0: e.clientX, y0: e.clientY, ox: c.x, oy: c.y };
+      drawBar();
+    });
+    document.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const u = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 8;
+      const r = Number(params.get('rotate') ?? S?.settings.layout.rotate ?? 0);
+      const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+      const [lx, ly] = r === 90 ? [dy, -dx] : r === 180 ? [-dx, -dy] : r === 270 ? [-dy, dx] : [dx, dy];
+      const snap = (v) => Math.max(-100, Math.min(100, Math.round(v * 2) / 2));
+      work[drag.id] = { ...cur(drag.id), x: snap(drag.ox + lx / u), y: snap(drag.oy + ly / u) };
+      applyPositions(); setDirty();
+    });
+    const endDrag = () => { if (drag) { drag = null; drawBar(); } };
+    document.addEventListener('pointerup', endDrag); document.addEventListener('pointercancel', endDrag);
+    document.addEventListener('keydown', (e) => {
+      if (!sel || e.target.closest?.('#editbar input')) return;
+      const step = e.shiftKey ? 2 : 0.5, c = cur(sel);
+      if (e.key === 'ArrowLeft') put(sel, { x: c.x - step }); else if (e.key === 'ArrowRight') put(sel, { x: c.x + step });
+      else if (e.key === 'ArrowUp') put(sel, { y: c.y - step }); else if (e.key === 'ArrowDown') put(sel, { y: c.y + step });
+      else if (e.key === '+' || e.key === '=') put(sel, { s: Math.min(2.5, Math.round((c.s + 0.05) * 100) / 100) });
+      else if (e.key === '-') put(sel, { s: Math.max(0.4, Math.round((c.s - 0.05) * 100) / 100) });
+      else return;
+      e.preventDefault();
+    });
+    // nothing on the screen may do its normal job while editing
+    document.addEventListener('click', (e) => { if (!e.target.closest('#editbar')) { e.preventDefault(); e.stopPropagation(); } }, true);
+    drawLogin(''); check();
+  }
+
   // ---------- connection: live updates + fallback polling + watchdog ----------
   let es = null, lastMsg = 0, online = true;
   function apply(data) {
@@ -696,6 +831,7 @@
     $('boot').classList.add('hidden');
     setOnline(true);
     render();
+    if (EDIT && !document.body.classList.contains('editing')) startEdit();
   }
   // someone rang (here, on another door screen or on the phone page): ring on this screen too
   function onRing() {

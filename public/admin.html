@@ -1204,6 +1204,9 @@
             h('label', {}, 'Draaien'), sel(st.layout, 'rotate', [[0, 'Niet'], [90, '90° met de klok mee'], [180, '180°'], [270, '90° tegen de klok in']], true),
             h('span', {}), h('span', { class: 'muted' }, 'Gebruik Draaien als de monitor op zijn kant staat maar de computer nog een liggend beeld stuurt.'),
             h('label', {}, 'Toetsenbord'), chk(st.layout, 'keyboard', 'Aanraaktoetsenbord op het deurscherm'),
+            h('label', {}, 'Indeling'), h('div', { class: 'row' },
+              ...[['Verticaal', '/?edit=1&orientation=portrait'], ['Horizontaal', '/?edit=1&orientation=landscape'], ['Telefoon', '/visit?edit=1']].map(([t, u]) => h('button', { onclick: () => window.open(u, '_blank') }, t))),
+            h('span', {}), h('span', { class: 'muted' }, 'Staat iets niet goed? Sleep onderdelen van het deurscherm naar een andere plek, maak ze groter of kleiner, of verberg ze. Elk schermtype (verticaal, horizontaal, telefoon) heeft zijn eigen indeling. Het beste doe je dit op het deurscherm zelf (in de app: Ctrl/Cmd+Shift+E), dan zie je precies hoe het wordt. Het normale scherm kan nooit per ongeluk verschoven worden.'),
             h('label', {}, 'Nacht'), h('div', { class: 'row' }, chk(st.dim, 'enabled', 'Dimmen van'), timePicker(st.dim.from, (x) => { st.dim.from = x; }, 15), h('span', { class: 'muted' }, 'tot'), timePicker(st.dim.to, (x) => { st.dim.to = x; }, 15)))),
 
         h('div', { class: 'card' }, h('h2', {}, 'Meldingen op je telefoon'),
