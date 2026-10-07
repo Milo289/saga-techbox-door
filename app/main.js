@@ -278,6 +278,10 @@ function updateTray() {
 // ---------- global shortcuts (work from any program) ----------
 function registerHotkeys() {
   globalShortcut.unregisterAll();
+  // emergency exit for the mouse lock, from any program: Ctrl/Cmd+Alt+Shift+M lets go of the mouse (press again to lock it again)
+  if (config.role === 'door' && config.lockMouse) {
+    try { globalShortcut.register('CommandOrControl+Alt+Shift+M', () => { if (mouselock.running() || mouseCovers.length) releaseMouseLock(); else engageMouseLock(); }); } catch {}
+  }
   if (!config.hotkeys || config.role !== 'control') return;
   for (const [key, mode] of [['O', 'open'], ['G', 'closed'], ['B', 'busy']]) {
     try { globalShortcut.register(`CommandOrControl+Alt+${key}`, () => sendStatus(mode)); } catch {}

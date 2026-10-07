@@ -111,6 +111,7 @@ All of these are in *Instellingen → Venster en sneltoetsen* (Ctrl/Cmd+Shift+S)
 *Instellingen → Venster en sneltoetsen → Muis vergrendelen* (door screen, desktop app): the mouse pointer cannot leave the door monitor and every other monitor goes black.
 macOS and Windows keep the pointer on the monitor; on Linux only the other monitors are blacked out. If the app ever stops, the helper releases the pointer by itself within five seconds.
 The settings window (Ctrl/Cmd + Shift + S) and quitting (Ctrl/Cmd + Shift + Q) always work from the keyboard.
+Emergency exit from any program: **Ctrl/Cmd + Alt + Shift + M** lets go of the mouse (press again to lock it again).
 
 ## Updates and safe settings
 - **Updater (desktop app):** the app looks for a newer version about once every 12 hours (switch off in *Instellingen → Updates*) and shows a notice plus *Update naar …* in the tray icon. It downloads the right installer for your computer (`.pkg`, `.exe`, `.AppImage`/`.deb`) to *Downloads* and opens it only when you say *Installeren*. **Instellingen → Updates → Nu controleren** checks right away.
