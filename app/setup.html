@@ -101,6 +101,7 @@
       <div id="rowDoor" class="body" style="margin:0">
         <label class="f">Op welke monitor staat het deurscherm?<select id="display"></select></label>
         <label class="check"><input type="checkbox" id="windowed"> Het deurscherm in een gewoon venster tonen (niet schermvullend)</label>
+        <label class="check"><input type="checkbox" id="lockMouse"> Muis vergrendelen: de muis kan dit beeldscherm niet verlaten en andere beeldschermen gaan zwart <span class="hint">(macOS en Windows; op Linux gaan alleen de andere beeldschermen zwart)</span></label>
       </div>
     </div>
   </details>
@@ -149,6 +150,7 @@
   $('reloadAt').value = c.reloadAt || '';
   $('alwaysOnTop').checked = !!c.alwaysOnTop; $('tray').checked = c.tray !== false; $('closeToTray').checked = !!c.closeToTray; $('hotkeys').checked = !!c.hotkeys;
   $('windowed').checked = !!c.windowed;
+  $('lockMouse').checked = !!c.lockMouse;
   $('display').replaceChildren(...info.displays.map((d) => new Option(d.label, d.id, false, d.id === c.display)));
   $('about').textContent = `Versie ${info.version} · ${info.platform} · gegevens in ${info.dataDir}`;
   // the four choices boil down to a role (door / control / server) and where the server runs (here / remote)
@@ -226,7 +228,7 @@
       role: effective().role, serverMode: effective().mode, url: $('url').value.trim(),
       port: $('port').value, pin: $('pin').value, autostart: $('autostart').checked,
       zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), autoUpdate: $('autoUpdate').checked, alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
-      closeToTray: $('closeToTray').checked, hotkeys: $('hotkeys').checked, display: $('display').value, windowed: $('windowed').checked,
+      closeToTray: $('closeToTray').checked, hotkeys: $('hotkeys').checked, display: $('display').value, windowed: $('windowed').checked, lockMouse: $('lockMouse').checked,
     });
     if (!res || !res.ok) { $('err').textContent = (res && res.error) || 'Opslaan lukte niet.'; $('save').disabled = false; }
   };

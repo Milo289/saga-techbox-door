@@ -8,6 +8,7 @@
 // Extras that only the app has (a browser can't do these): tray icon with quick status, global shortcuts,
 // badge with the number of open requests, choose the monitor, always on top, zoom, daily refresh,
 // native save/open dialogs for backups and start at login.
+const mouselock = require('./mouselock');
 const { app, BrowserWindow, ipcMain, powerMonitor, clipboard, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -36,6 +37,7 @@ const DEFAULTS = {
   role: null, serverMode: 'here', url: 'http://localhost:8080', port: 8080, pin: '', autostart: true,
   zoom: 1, alwaysOnTop: false, tray: true, closeToTray: false, hotkeys: false,
   autoUpdate: true,
+  lockMouse: false,                                    // door screen: the mouse cannot leave this monitor, other monitors go black
   display: '', windowed: false, reloadAt: '',          // door screen: which monitor, window instead of kiosk, daily refresh time
 };
 // Settings are written safely: first to a temporary file, the previous good copy is kept as .bak, and a damaged file falls back to it.
@@ -166,6 +168,7 @@ function openControl(base) {
 
 function openSetup() {
   if (setupWin && !setupWin.isDestroyed()) { setupWin.focus(); return; }
+  releaseMouseLock(); // the settings window may be on another monitor
   if (win && !win.isDestroyed() && win.isKiosk()) win.setKiosk(false); // so the settings window can come to the front
   setupWin = new BrowserWindow({
     title: 'Instellingen — Saga Techbox Deur', icon: ICON, width: 660, height: 840, resizable: true, minWidth: 520, minHeight: 600,
@@ -176,7 +179,7 @@ function openSetup() {
   setupWin.loadFile(path.join(__dirname, 'setup.html'));
   setupWin.on('closed', () => {
     setupWin = null;
-    if (win && !win.isDestroyed() && config.role === 'door' && !WINDOWED && !config.windowed) win.setKiosk(true);
+    if (win && !win.isDestroyed() && config.role === 'door' && !WINDOWED && !config.windowed) { win.setKiosk(true); engageMouseLock(); }
     if (!win && !config.role) app.quit(); // closed the first-time setup without choosing
   });
 }
@@ -203,6 +206,7 @@ async function launch() {
     if (displayBlocker === null) displayBlocker = powerSaveBlocker.start('prevent-app-suspension');
   } else {
     win = config.role === 'door' ? openDoor(base) : openControl(base);
+    if (config.role === 'door') engageMouseLock(); else releaseMouseLock();
     snapshot(win);
     win.on('closed', () => { if (win && win.isDestroyed()) win = null; });
   }
@@ -293,7 +297,31 @@ setInterval(() => {
 // While locked the window is full screen (kiosk), on top of everything, shown on every desktop/Space (so a
 // three-finger swipe to another desktop still shows it), and every other monitor is covered with black.
 // The web page asks for this each time its lock screen is shown, so a restart of the app keeps it locked.
-let hardLocked = false, systemShutdown = false, coverWins = [];
+let hardLocked = false, systemShutdown = false, coverWins = [], mouseCovers = [];
+// plain black windows on every monitor except one
+function makeCovers(keepId) {
+  return screen.getAllDisplays().filter((d) => d.id !== keepId).map((d) => {
+    const c = new BrowserWindow({ x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height, frame: false, show: false, focusable: false, skipTaskbar: true, resizable: false, movable: false, backgroundColor: '#000000', webPreferences: { sandbox: true } });
+    c.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+    c.setAlwaysOnTop(true, 'screen-saver');
+    c.setBounds(d.bounds);
+    c.showInactive();
+    return c;
+  });
+}
+// door screen: the mouse stays on the door monitor and the other monitors are black (macOS and Windows keep the pointer in; elsewhere only the black-out)
+function engageMouseLock() {
+  releaseMouseLock();
+  if (config.role !== 'door' || !config.lockMouse || WINDOWED || config.windowed || process.env.DOOR_NO_MOUSELOCK) return;
+  const d = displayFor(config.display);
+  mouseCovers = makeCovers(d.id);
+  mouselock.start(process.platform === 'win32' && screen.dipToScreenRect ? screen.dipToScreenRect(null, d.bounds) : d.bounds);
+}
+function releaseMouseLock() {
+  mouselock.stop();
+  for (const c of mouseCovers) { try { c.destroy(); } catch {} }
+  mouseCovers = [];
+}
 function applyHardLock(on) {
   if (on === hardLocked || !win || win.isDestroyed() || config.role !== 'control') return;
   hardLocked = on;
@@ -304,15 +332,7 @@ function applyHardLock(on) {
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setKiosk(true);
     win.focus();
-    const mine = screen.getDisplayMatching(win.getBounds()).id;
-    coverWins = screen.getAllDisplays().filter((d) => d.id !== mine).map((d) => {
-      const c = new BrowserWindow({ x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height, frame: false, show: false, focusable: false, skipTaskbar: true, resizable: false, movable: false, backgroundColor: '#000000', webPreferences: { sandbox: true } });
-      c.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
-      c.setAlwaysOnTop(true, 'screen-saver');
-      c.setBounds(d.bounds);
-      c.showInactive();
-      return c;
-    });
+    coverWins = makeCovers(screen.getDisplayMatching(win.getBounds()).id);
   } else {
     for (const c of coverWins) { try { c.destroy(); } catch {} }
     coverWins = [];
@@ -411,6 +431,7 @@ ipcMain.handle('setup:save', async (e, next) => {
     display: String(next.display || ''), windowed: !!next.windowed,
     reloadAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(next.reloadAt) ? next.reloadAt : '',
     autoUpdate: next.autoUpdate !== false,
+    lockMouse: !!next.lockMouse,
   };
   if (c.serverMode === 'remote' && !/^https?:\/\/[^\s/]+/.test(c.url)) return { ok: false, error: 'Vul een geldig adres in, bijv. http://192.168.1.50:8080' };
   const restartServer = localServerUrl && (c.serverMode !== 'here' || c.port !== config.port || c.pin !== config.pin);
@@ -500,7 +521,7 @@ function buildMenu() {
 
 app.on('before-quit', (e) => { if (hardLocked && !systemShutdown) { e.preventDefault(); return; } quitting = true; });
 powerMonitor.on('shutdown', () => { systemShutdown = true; }); // never block the computer from shutting down
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => { globalShortcut.unregisterAll(); releaseMouseLock(); });
 app.on('second-instance', () => { const w = setupWin || win; if (w && !w.isDestroyed()) { if (!w.isVisible()) w.show(); if (w.isMinimized()) w.restore(); w.focus(); } else if (config.role) openSetup(); });
 app.on('window-all-closed', () => { if (config.role === 'server') return; if (!config.closeToTray || !tray) app.quit(); });
 // Like a protected system file: without a valid access.js the app does not start at all.
