@@ -9,7 +9,7 @@ const ROOT = path.join(__dirname, '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // patch: gives the start account extra rights in a throw-away copy of the server, so the settings routes can be tested
-async function startServer({ patch = false, dir } = {}) {
+async function startServer({ patch = false, dir, env = {} } = {}) {
   dir = dir || fs.mkdtempSync(path.join(os.tmpdir(), 'door-test-'));
   let root = ROOT;
   if (patch) {
@@ -24,7 +24,7 @@ async function startServer({ patch = false, dir } = {}) {
   }
   const port = 20000 + Math.floor(Math.random() * 30000);
   const dataDir = path.join(dir, 'data');
-  const child = spawn(process.execPath, [path.join(root, 'server.js')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [path.join(root, 'server.js')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, HOST: '127.0.0.1', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   child.stdout.on('data', (d) => { log += d; }); child.stderr.on('data', (d) => { log += d; });
   const srv = {
@@ -39,10 +39,10 @@ async function startServer({ patch = false, dir } = {}) {
   throw new Error('server did not start:\n' + log);
 }
 
-async function call(srv, method, p, body, token) {
+async function call(srv, method, p, body, token, headers = {}) {
   const res = await fetch(srv.url + p, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();

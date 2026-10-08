@@ -25,6 +25,10 @@ struct StatusView: View {
     @State private var planFrom = Date()
     @State private var planTo = Date().addingTimeInterval(3600)
     @State private var planNote = ""
+    @State private var awayOn = false
+    @State private var awayDate = Date().addingTimeInterval(86400)
+    @State private var awayText = ""
+    @State private var awayLoaded = false
 
     private var presets: [Int] { presetsText.split(separator: ",").compactMap { Int($0) }.filter { $0 > 0 } }
     private var canChange: Bool { store.can("status") }
@@ -41,6 +45,7 @@ struct StatusView: View {
                 if showMessage { messageCard }
                 if showToggles { togglesCard }
                 if showPlanner { plannerCard }
+                awayCard
             }
             .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 40)
             .frame(maxWidth: 720) // on an iPad the cards stay a comfortable width, centred
@@ -276,6 +281,30 @@ struct StatusView: View {
                 toggle("Scherm dimmen ’s nachts", "moon.fill", "dim", "enabled")
             }
         }.card().disabled(!store.can("settings"))
+    }
+
+    // MARK: absence
+    private var awayCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle("Afwezig", symbol: "airplane")
+            Toggle("Ik ben afwezig (de deur blijft gesloten)", isOn: $awayOn).tint(.green)
+            DatePicker("Tot en met", selection: $awayDate, displayedComponents: [.date])
+            TextField("Bericht, bijv. Op vakantie — terug op 3 november", text: $awayText)
+                .padding(12).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            Button("Opslaan") {
+                let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
+                Task { await store.run(awayOn ? "Afwezig tot \(awayDate.whenText.isEmpty ? "" : f.string(from: awayDate))" : "Weer aanwezig") { _ = try await store.post("api/settings", ["away": ["enabled": awayOn, "until": f.string(from: awayDate), "message": awayText]]) } }
+            }.buttonStyle(PrimaryButton())
+        }
+        .card().disabled(!store.can("settings"))
+        .onAppear {
+            guard !awayLoaded, store.hasState else { return }
+            awayLoaded = true
+            let a = store.state.settings.away
+            awayOn = a.enabled.bool; awayText = a.message.str
+            let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
+            if let d = f.date(from: a.until.str) { awayDate = d }
+        }
     }
 
     // MARK: planned busy

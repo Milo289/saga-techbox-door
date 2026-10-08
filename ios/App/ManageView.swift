@@ -34,6 +34,40 @@ struct ManageView: View {
                     Button { showWeb = true } label: { Label("Volledig webpaneel (Ontwerp, teksten, indeling…)", systemImage: "safari") }
                     Button { showDoor = true } label: { Label("Deurscherm bekijken", systemImage: "rectangle.portrait") }
                 }
+                if store.can("inbox") && !store.state.pendingProfiles.array.isEmpty {
+                    Section("Profielen ter goedkeuring") {
+                        ForEach(Array(store.state.pendingProfiles.array.enumerated()), id: \.offset) { _, p in
+                            HStack {
+                                VStack(alignment: .leading) { Text(p.name.str).font(.headline); Text(p.nr.str).font(.caption).foregroundStyle(.secondary) }
+                                Spacer()
+                                Button("Goedkeuren") { Task { await store.run("Goedgekeurd") { _ = try await store.post("api/moderation/profile", ["id": p.id.str, "approve": true]) } } }.buttonStyle(.borderedProminent).tint(Palette.open).foregroundStyle(.black)
+                                Button("Afwijzen", role: .destructive) { Task { await store.run("Afgewezen") { _ = try await store.post("api/moderation/profile", ["id": p.id.str, "approve": false]) } } }.buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                }
+                if store.can("inbox") && !store.state.blocked.array.isEmpty {
+                    Section("Geblokkeerd") {
+                        ForEach(Array(store.state.blocked.array.enumerated()), id: \.offset) { _, b in
+                            HStack {
+                                VStack(alignment: .leading) { Text(b.kind.str == "ip" ? "Telefoon" : "Profiel \(b.value.str)").font(.headline); Text(b.until.date.map { "tot \($0.whenText)" } ?? "voor altijd").font(.caption).foregroundStyle(.secondary) }
+                                Spacer()
+                                Button("Opheffen") { Task { await store.run("Blokkade opgeheven") { _ = try await store.post("api/moderation/unblock", ["id": b.id.str]) } } }.buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                }
+                if store.can("settings") {
+                    Section("Moderatie") {
+                        modToggle("Ongepaste woorden herkennen", "filter")
+                        modToggle("Ingebouwde lijst gebruiken", "defaultList")
+                        modToggle("Nieuwe profielen eerst goedkeuren", "profileApproval")
+                        Picker("Bij een scheldwoord", selection: Binding(get: { store.state.settings.moderation.action.str }, set: { v in Task { await store.changeSetting("moderation", "action", v) } })) {
+                            Text("Verbergen en markeren").tag("mask"); Text("Alleen markeren").tag("flag"); Text("Niet doorlaten").tag("block")
+                        }
+                        Stepper("Limiet: \(store.state.settings.moderation.maxPerHour.int ?? 20) per telefoon per uur", value: Binding(get: { store.state.settings.moderation.maxPerHour.int ?? 20 }, set: { v in Task { await store.changeSetting("moderation", "maxPerHour", v) } }), in: 1...500)
+                    }
+                }
                 if store.can("people") {
                     Section("Personen") {
                         NavigationLink { PeopleView(store: store) } label: { Label("\(store.state.people.array.count) personen", systemImage: "person.2.fill") }
@@ -78,6 +112,10 @@ struct ManageView: View {
             .fullScreenCover(isPresented: $showWeb) { WebPanelCover(model: model, close: { showWeb = false }) }
             .sheet(isPresented: $showDoor) { if let base = store.base { DoorPreview(base: base) } }
         }
+    }
+
+    private func modToggle(_ title: String, _ field: String) -> some View {
+        Toggle(title, isOn: Binding(get: { store.state.settings.moderation[field].bool }, set: { v in Task { await store.changeSetting("moderation", field, v) } })).tint(.green)
     }
 
     private func lockdown() { Haptics.heavy(); Task { await store.run("Noodstop actief") { _ = try await store.post("api/system/lockdown") } } }

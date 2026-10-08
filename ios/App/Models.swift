@@ -22,22 +22,26 @@ struct VisitRequest: Identifiable, Equatable {
     let createdAt: Date
     let repliedAt: Date?
     let autoReplied: Bool
+    let phone: String
+    let whenText: String
+    let flagged: [String]
 
     init(_ j: JSON) {
         id = j.id.str; type = j.type.str; name = j.name.str; nr = j.nr.str; topic = j.topic.str
         message = j.message.str; reason = j.reason.str; email = j.email.str; state = j.state.str; reply = j.reply.str
         at = j.at.date; createdAt = j.createdAt.date ?? Date(); repliedAt = j.repliedAt.date; autoReplied = j.autoReplied.bool
+        phone = j.phone.str; whenText = j.when.str; flagged = j.flagged.strings
     }
 
     var typeLabel: String {
-        switch type { case "bell": return "Aangebeld"; case "appointment": return "Tijd boeken"; case "message": return "Vraagje"; default: return "Verzoek" }
+        switch type { case "bell": return "Aangebeld"; case "appointment": return "Tijd boeken"; case "message": return "Vraagje"; case "callback": return "Terugbellen"; default: return "Verzoek" }
     }
     var symbol: String {
-        switch type { case "bell": return "bell.fill"; case "appointment": return "calendar"; case "message": return "bubble.left.fill"; default: return "hand.raised.fill" }
+        switch type { case "bell": return "bell.fill"; case "appointment": return "calendar"; case "message": return "bubble.left.fill"; case "callback": return "phone.fill"; default: return "hand.raised.fill" }
     }
     var isOpen: Bool { state == "new" || state == "seen" }
     var summary: String {
-        [topic.isEmpty ? nil : topic, message.isEmpty ? nil : message, reason.isEmpty ? nil : reason].compactMap { $0 }.joined(separator: " — ")
+        [topic.isEmpty ? nil : topic, message.isEmpty ? nil : message, reason.isEmpty ? nil : reason, whenText.isEmpty ? nil : "terugbellen: \(whenText)"].compactMap { $0 }.joined(separator: " — ")
     }
 }
 

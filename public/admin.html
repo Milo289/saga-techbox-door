@@ -268,6 +268,7 @@
 <div id="alert"><div class="card" id="alertCard"></div></div>
 <div id="toast"></div>
 
+<script src="/tones.js"></script>
 <script>
 (() => {
   'use strict';
@@ -300,9 +301,10 @@
   sysLight.addEventListener?.('change', applyTheme);
   applyTheme();
   const DAYS = ['Zo', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za'];
-  const TYPE = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraak', message: 'Vraagje' };
-  const TYPE_ICON = { bell: 'bell', reason: 'msg', appointment: 'cal', message: 'msg' };
+  const TYPE = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraak', message: 'Vraagje', callback: 'Terugbellen' };
+  const TYPE_ICON = { bell: 'bell', reason: 'msg', appointment: 'cal', message: 'msg', callback: 'phone' };
   const ICONS = {
+    phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>',
     bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
     bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/>',
     cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
@@ -492,9 +494,16 @@
     o.connect(g).connect(actx.destination); o.start(t); o.stop(t + len + 0.05);
   }
   function chime(kind) {
-    if (!prefs.sound || !actx) return;
+    if (!prefs.sound) return;
+    const snd = (S && S.settings && S.settings.sound) || {};
+    if (kind === 'bell' && snd.bell === 'custom') { try { new Audio(`/api/bell-sound?v=${S.bellSoundV || 0}`).play().catch(() => {}); } catch {} return; }
+    if (!actx) return;
     try {
       if (actx.state !== 'running') actx.resume().catch(() => {});
+      if (kind === 'bell' && snd.bell && snd.bell !== 'none' && window.DoorTones) { // the chosen bell sound, twice
+        window.DoorTones.play(actx, snd.bell, 0.4); setTimeout(() => window.DoorTones.play(actx, snd.bell, 0.4), 1100); return;
+      }
+      if (kind !== 'bell' && snd.reply === 'none') return;
       const t0 = actx.currentTime + 0.03;
       const notes = kind === 'bell'
         ? [[659.25, 0], [523.25, 0.45], [659.25, 1.35], [523.25, 1.8]]   // ding-dong, twice
@@ -523,9 +532,25 @@
   $('soundBtn').onclick = () => setSound(!prefs.sound);
   $('banner').onclick = () => { unlockAudio(); setTimeout(() => chime('soft'), 50); };
 
-  const what = (r) => [r.topic, r.reason, r.at && `wil ${fmtWhen(r.at)}`, r.message && `“${r.message}”`].filter(Boolean).join(' · ');
+  const what = (r) => [r.topic, r.reason, r.at && `wil ${fmtWhen(r.at)}`, r.when && `terugbellen: ${r.when}`, r.message && `“${r.message}”`].filter(Boolean).join(' · ');
 
   function closeAlert() { $('alert').classList.remove('open'); alertId = null; }
+  // blocking, deleting: what you can do about one visitor's message
+  function modDialog(r) {
+    const act = async (path, body, msg) => { try { await api(path, body); closeAlert(); toast(msg); } catch {} };
+    const personal = r.via === 'phone' && r.ip && r.ip !== '127.0.0.1' && r.ip !== 'proxied';
+    $('alertCard').className = 'card';
+    $('alertCard').replaceChildren(...[
+      h('div', { class: 'poptitle' }, `Modereren — ${r.name || 'bezoeker'}`),
+      r.flagged && r.flagged.length ? h('p', { class: 'muted' }, `Het filter markeerde: ${r.flagged.join(', ')}`) : null,
+      r.nr || personal
+        ? h('div', { class: 'list', style: 'margin-top:8px' }, h('div', { class: 'muted' }, r.nr ? `Blokkeer profiel “${r.nr}”${personal ? ' en deze telefoon' : ''} voor:` : 'Blokkeer deze telefoon voor:'),
+          h('div', { class: 'row' }, ...[['1 uur', 60], ['1 dag', 1440], ['1 week', 10080], ['Voor altijd', 0]].map(([l, m]) => h('button', { class: 'sm', onclick: () => act('/api/moderation/block', { id: r.id, minutes: m }, 'Geblokkeerd') }, l))))
+        : h('p', { class: 'muted' }, 'Dit bericht komt van het deurscherm zelf, en dat scherm gebruikt iedereen. Daar kun je niemand mee blokkeren. Verwijder het bericht, of laat bezoekers een profiel maken: dan kun je dat profiel blokkeren.'),
+      h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'danger sm', onclick: () => act('/api/requests/delete', { id: r.id }, 'Bericht verwijderd') }, 'Bericht verwijderen'), h('span', { style: 'flex:1' }), h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten')),
+    ].filter(Boolean));
+    $('alert').classList.add('open');
+  }
   function onVisit(r) {
     const bell = r.type === 'bell';
     chime(bell ? 'bell' : 'soft');
@@ -632,6 +657,8 @@
   function reqTags(r) {
     const tags = [];
     if (r.email) tags.push(h('span', { class: 'tag' }, icon('mail'), r.email));
+    if (r.phone) tags.push(h('a', { class: 'tag', href: 'tel:' + r.phone.replace(/[^0-9+]/g, ''), style: 'text-decoration:none' }, icon('phone'), r.phone));
+    if (r.flagged && r.flagged.length) tags.push(h('span', { class: 'tag bad' }, `gemarkeerd: ${r.flagged.join(', ')}`));
     const m = r.mail || {};
     if (m.confirm) tags.push(h('span', { class: 'tag ' + (m.confirm === 'sent' ? 'ok' : 'bad') }, m.confirm === 'sent' ? 'bevestiging gemaild' : 'bevestiging niet verstuurd'));
     if (m.reply) tags.push(h('span', { class: 'tag ' + (m.reply === 'sent' ? 'ok' : 'bad') }, m.reply === 'sent' ? 'antwoord gemaild' : 'antwoord niet gemaild'));
@@ -669,7 +696,7 @@
   }
 
   // ---------- Beheer: accounts, sessions, API keys, log, server ----------
-  const ROLE_NAMES = { beheerder: 'Beheerder', medewerker: 'Medewerker', kijker: 'Kijker', api: 'API' };
+  const ROLE_NAMES = { beheerder: 'Beheerder', medewerker: 'Medewerker', receptionist: 'Receptionist', kijker: 'Kijker', api: 'API' };
   const dt = (t) => (t ? `${new Date(t).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} ${fmt(t)}` : '—');
   const permChips = (list) => h('div', { class: 'chipline' }, ...list.map((x) => h('span', { class: 'tag' }, S.permLabels[x] || x)));
   const permGrid = (draft, key = 'perms') => h('div', { class: 'permgrid' }, ...Object.entries(S.permLabels).map(([perm, label]) => {
@@ -690,7 +717,7 @@
       const pw = h('input', { type: 'password', autocomplete: 'new-password', placeholder: d.id ? 'Leeg laten = wachtwoord niet wijzigen' : 'Minstens 8 tekens', oninput: (e) => { d.password = e.target.value; } });
       const grid = h('div', {}, permGrid(d));
       const role = h('select', { onchange: (e) => { d.role = e.target.value; d.perms = (S.rolePresets[d.role] || []).filter(can); grid.replaceChildren(permGrid(d)); } },
-        ...['beheerder', 'medewerker', 'kijker'].map((r) => h('option', { value: r, selected: d.role === r }, `${ROLE_NAMES[r]} — ${S.rolePresets[r].length} ${S.rolePresets[r].length === 1 ? 'recht' : 'rechten'}`)));
+        ...['beheerder', 'medewerker', 'receptionist', 'kijker'].map((r) => h('option', { value: r, selected: d.role === r }, `${ROLE_NAMES[r]} — ${S.rolePresets[r].length} ${S.rolePresets[r].length === 1 ? 'recht' : 'rechten'}`)));
       editor = h('div', { class: 'editor' }, h('h2', { style: 'margin:0;text-transform:none;letter-spacing:0;font-size:16px;color:var(--fg)' }, d.id ? `Wijzig ${d.name}` : 'Nieuwe gebruiker'),
         h('div', { class: 'form' },
           h('label', {}, 'Gebruikersnaam'), h('input', { value: d.username, autocapitalize: 'none', spellcheck: 'false', placeholder: 'bijv. anna', oninput: (e) => { d.username = e.target.value; } }),
@@ -941,7 +968,7 @@
   // people with only the mail right may only send the mail fields
   const MAIL_KEYS = ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'];
   const payloadFor = (st) => (can('settings') ? st : Object.fromEntries(MAIL_KEYS.map((k) => [k, st[k]])));
-  const CARD_PERM = { 'Deur': 'settings', 'Openingstijden': 'settings', 'Bezoekers': 'settings', 'Automatisch antwoorden': 'settings', 'E-mail': 'mail', 'Personen': 'people', 'Scherm': 'settings', 'Meldingen op je telefoon': 'mail', 'Meer': 'export' };
+  const CARD_PERM = { 'Deur': 'settings', 'Openingstijden': 'settings', 'Bezoekers': 'settings', 'Automatisch antwoorden': 'settings', 'E-mail': 'mail', 'Personen': 'people', 'Scherm': 'settings', 'Meldingen op je telefoon': 'mail', 'Moderatie': 'settings', 'Afwezig': 'settings', 'Meer': 'export' };
 
   // ---------- settings: e-mail ----------
   function mailCard(st, save) {
@@ -963,6 +990,7 @@
         h('label', {}, 'Afzender'), field('from', { placeholder: 'bijv. Saga Techbox <deur@jouwbedrijf.nl>' }),
         h('label', {}, 'Bezoekers krijgen'), h('div', { class: 'row' }, box('confirm', 'een bevestiging'), box('reply', 'jouw antwoord')),
         h('label', {}, 'Jij krijgt'), h('div', { class: 'row' }, box('notifyAdmin', 'een mail bij elk verzoek, op'), field('adminTo', { type: 'email', placeholder: 'jij@jouwbedrijf.nl', class: 'grow' })),
+        h('label', {}, 'Avondsamenvatting'), h('div', { class: 'row' }, box('digest', 'elke dag een samenvatting om'), timePicker(m.digestAt, (x) => { m.digestAt = x; }, 15), h('button', { class: 'sm', onclick: async () => { await api('/api/settings', payloadFor(st)); await api('/api/mail/digest-test', {}); toast('Samenvatting verstuurd — kijk in je inbox'); } }, 'Nu sturen')),
         h('span', {}), h('div', { class: 'row' }, testTo, h('button', { onclick: async () => { await api('/api/settings', payloadFor(st)); await api('/api/mail/test', { to: testTo.value }); toast('Testmail verstuurd — kijk in je inbox'); } }, 'Test versturen'))));
   }
 
@@ -1113,6 +1141,10 @@
         h('button', { class: 'sm' + (inboxFilter === k ? ' on' : ''), onclick: () => { inboxFilter = k; renderAll(true); } }, `${label} (${S.requests.filter(fn).length})`)));
       const appts = S.appointments.filter((a) => a.at > Date.now() - 3600e3);
       return [
+        S.pendingProfiles && S.pendingProfiles.length ? h('div', { class: 'card' }, h('h2', {}, 'Profielen ter goedkeuring'),
+          ...S.pendingProfiles.map((p) => h('div', { class: 'block' }, h('div', {}, h('div', { class: 't' }, p.name), h('div', { class: 'muted' }, `${p.nr}${p.email ? ' · ' + p.email : ''}`)), h('span', { style: 'flex:1' }),
+            h('button', { class: 'sm', onclick: () => api('/api/moderation/profile', { id: p.id, approve: true }).then(() => toast('Goedgekeurd')) }, 'Goedkeuren'),
+            h('button', { class: 'sm ghost danger', onclick: () => api('/api/moderation/profile', { id: p.id, approve: false }).then(() => toast('Afgewezen')) }, 'Afwijzen')))) : null,
         h('div', { class: 'card' },
           h('h2', {}, 'Bezoekers', h('span', { class: 'sp' }),
             h('button', { class: 'sm ghost', onclick: () => api('/api/requests/seen') }, 'Alles gezien'),
@@ -1120,7 +1152,7 @@
           filters,
           reqs.length ? h('div', { class: 'list' }, ...reqs.map((r) => h('div', { class: `req ${r.state}${seenReq.has(r.id) ? '' : ' enter'}` },
             h('div', { class: 'head' }, h('span', { class: 'type' }, icon(TYPE_ICON[r.type]), TYPE[r.type] || 'Verzoek'), h('span', {}, r.name || 'Anoniem', r.nr ? h('span', { class: 'muted' }, ` · nr ${r.nr}`) : null), h('span', { class: 'muted' }, `${ago(r.createdAt)} · status was ${r.statusAtTime}`),
-              h('span', { style: 'flex:1' }), r.state !== 'done' ? h('button', { class: 'sm ghost', onclick: () => api('/api/requests/done', { id: r.id }) }, 'Afgehandeld') : h('span', { class: 'muted' }, 'Afgehandeld')),
+              h('span', { style: 'flex:1' }), h('button', { class: 'sm ghost', onclick: () => modDialog(r) }, 'Modereren'), r.state !== 'done' ? h('button', { class: 'sm ghost', onclick: () => api('/api/requests/done', { id: r.id }) }, 'Afgehandeld') : h('span', { class: 'muted' }, 'Afgehandeld')),
             what(r) ? h('div', { class: 'what' }, what(r)) : null,
             reqTags(r),
             r.reply ? h('div', { class: 'reply' }, `${r.autoReplied ? 'Automatisch antwoord' : 'Jouw antwoord'}: ${r.reply}`) : null,
@@ -1147,6 +1179,7 @@
     // ---------- Ontwerp: change how the door screen looks and what it says ----------
     design() {
       const st = structuredClone(S.settings);
+      const chk = (obj, key, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: obj[key], onchange: (e) => { obj[key] = e.target.checked; } }), label);
       const blocks = structuredClone(S.blocks || []);
       const DEFAULT_COLORS = S.settings.theme === 'light' ? COLORS_LIGHT : COLORS_DARK;
       const groups = {};
@@ -1170,7 +1203,7 @@
         try { blocks.push({ id: newId(), type: 'image', src: await imageToData(f), w: 24, size: 4, color: '', bold: false, text: '' }); S.blocks = blocks; redraw(); }
         catch (e) { toast(e.message || 'Deze afbeelding kan niet gebruikt worden'); }
       };
-      const keepDraft = () => { S.blocks = blocks; S.settings.ui = st.ui; S.settings.colors = st.colors; }; // so a redraw keeps what you typed
+      const keepDraft = () => { S.blocks = blocks; Object.assign(S.settings, { ui: st.ui, colors: st.colors, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr }); }; // so a redraw keeps what you typed
       const textsCard = h('div', { class: 'card' }, h('h2', {}, 'Teksten'),
         h('p', { class: 'muted', style: 'margin-top:0' }, 'Elk woord op het deurscherm kun je zelf bepalen. Laat een veld leeg voor de standaardtekst (staat grijs in het veld). Tekens als {s} of {name} worden door het scherm ingevuld: laat ze staan waar ze horen.'),
         ...Object.entries(groups).map(([g, items], i) => h('details', { open: i === 0, style: 'margin-top:10px' }, h('summary', {}, g),
@@ -1217,11 +1250,49 @@
         frameBox);
       setTimeout(drawPreview, 0);
       const save = async () => {
-        await api('/api/settings', { ui: st.ui, colors: st.colors });
+        await api('/api/settings', { ui: st.ui, colors: st.colors, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr });
         await api('/api/blocks', { blocks });
         S = await api('/api/admin-state'); toast('Opgeslagen — staat nu op de deur'); renderAll(true);
       };
-      return [layoutCard, textsCard, colorsCard, blocksCard, h('div', { class: 'save' }, h('button', { class: 'white', onclick: save }, 'Opslaan'))];
+      // ---- bell sounds ----
+      const NAMES = (window.DoorTones && window.DoorTones.NAMES) || {};
+      const toneSel = (key, list) => h('select', { onchange: (e) => { st.sound[key] = e.target.value; } }, ...list.map((k) => h('option', { value: k, selected: st.sound[key] === k }, NAMES[k] || k)));
+      const preview = (name) => {
+        if (name === 'custom') { new Audio(`/api/bell-sound?v=${S.bellSoundV || 0}`).play().catch(() => {}); return; }
+        if (name === 'none' || !window.DoorTones) return;
+        preview.ctx = preview.ctx || new (window.AudioContext || window.webkitAudioContext)();
+        if (preview.ctx.state !== 'running') preview.ctx.resume();
+        window.DoorTones.play(preview.ctx, name, 0.4);
+      };
+      const soundFile = h('input', { type: 'file', accept: 'audio/*', class: 'hidden' });
+      soundFile.onchange = async () => {
+        const f = soundFile.files[0]; soundFile.value = '';
+        if (!f) return;
+        if (f.size > 400 * 1024) return toast('Dat bestand is te groot (hoogstens 400 kB)');
+        try {
+          const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
+          await api('/api/sound', { mime: f.type, data: b64 });
+          st.sound.custom = true; st.sound.bell = 'custom'; S.bellSoundV = Date.now(); keepDraft(); toast('Eigen beltoon staat klaar'); renderAll(true);
+        } catch {}
+      };
+      const soundCard = h('div', { class: 'card' }, h('h2', {}, 'Beltonen'),
+        h('p', { class: 'muted', style: 'margin-top:0' }, 'Kies hoe de bel en de antwoorden klinken, op het deurscherm en in het bedieningspaneel. Of upload een eigen geluid (mp3, wav, ogg of m4a, hoogstens 400 kB).'),
+        h('div', { class: 'form' },
+          h('label', {}, 'Bel'), h('div', { class: 'row' }, toneSel('bell', ['classic', 'soft', 'double', 'chime', 'digital', ...(st.sound.custom ? ['custom'] : [])]), h('button', { class: 'sm', onclick: () => preview(st.sound.bell) }, '▶ Luister')),
+          h('label', {}, 'Antwoord'), h('div', { class: 'row' }, toneSel('reply', ['soft', 'classic', 'chime', 'none']), h('button', { class: 'sm', onclick: () => preview(st.sound.reply) }, '▶ Luister')),
+          h('label', {}, 'Eigen bestand'), h('div', { class: 'row' }, h('button', { class: 'sm', onclick: () => soundFile.click() }, st.sound.custom ? 'Ander bestand kiezen' : 'Bestand kiezen'), soundFile,
+            st.sound.custom ? h('button', { class: 'sm ghost danger', onclick: async () => { await api('/api/sound/remove', {}); st.sound.custom = false; if (st.sound.bell === 'custom') st.sound.bell = 'classic'; keepDraft(); renderAll(true); toast('Eigen beltoon verwijderd'); } }, 'Verwijderen') : null)));
+      // ---- clock, weather, QR code ----
+      const cityIn = h('input', { value: st.weather.city, placeholder: 'Plaats, bijv. Utrecht', maxlength: 80, oninput: (e) => { st.weather.city = e.target.value; } });
+      const extrasCard = h('div', { class: 'card' }, h('h2', {}, 'Extra’s op het scherm'),
+        h('div', { class: 'form' },
+          h('label', {}, 'Licht en donker'), h('div', { class: 'row' }, chk(st.themeSchedule, 'enabled', 'Volgens de klok'), h('span', { class: 'muted' }, 'licht vanaf'), timePicker(st.themeSchedule.lightFrom, (x) => { st.themeSchedule.lightFrom = x; }, 15), h('span', { class: 'muted' }, 'donker vanaf'), timePicker(st.themeSchedule.darkFrom, (x) => { st.themeSchedule.darkFrom = x; }, 15)),
+          h('span', {}), h('span', { class: 'muted' }, 'Zet je dit aan, dan geldt het niet de vaste keuze licht of donker bij Instellingen → Scherm → Thema.'),
+          h('label', {}, 'Weer'), h('div', {}, h('div', { class: 'row' }, chk(st.weather, 'enabled', 'Toon temperatuur en weer'), cityIn, h('button', { class: 'sm', onclick: async () => { try { const r = await api('/api/weather/lookup', { city: cityIn.value }); st.weather.city = cityIn.value = r.city; st.weather.lat = r.lat; st.weather.lon = r.lon; toast(`Gevonden: ${r.city}`); } catch {} } }, 'Zoek plaats')),
+            h('div', { class: 'muted' }, S.weatherNow ? `Nu: ${S.weatherNow.temp}° (via Open-Meteo, gratis)` : 'Gratis weerdienst (Open-Meteo), geen sleutel nodig. Kies een plaats en sla op.')),
+          h('label', {}, 'QR-code'), h('div', {}, chk(st.qr, 'enabled', 'Toon een QR-code waarmee bezoekers met hun eigen telefoon bellen'),
+            h('input', { value: st.qr.url, placeholder: 'Adres van de bezoekerspagina (leeg = het adres van dit scherm + /visit)', style: 'margin-top:8px', oninput: (e) => { st.qr.url = e.target.value; } }))));
+      return [layoutCard, textsCard, colorsCard, extrasCard, soundCard, blocksCard, h('div', { class: 'save' }, h('button', { class: 'white', onclick: save }, 'Opslaan'))];
     },
 
     settings() {
@@ -1275,7 +1346,7 @@
 
         h('div', { class: 'card' }, h('h2', {}, 'Bezoekers'),
           h('div', { class: 'form' },
-            h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje')),
+            h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje'), chk(st.visitors, 'callback', 'Terugbellen')),
             h('label', {}, 'Bel'), chk(st.visitors, 'bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'),
             h('label', {}, 'Redenen'), h('div', {}, lines('reasons'), h('div', { class: 'muted' }, 'Eén per regel. Houd het kort: 3 tot 4 werkt het rustigst.')),
             h('label', {}, 'Vraag-onderwerpen'), h('div', {}, lines('topics'), h('div', { class: 'muted' }, 'Eén per regel. Bezoekers kiezen er één bij “Vraagje”, zodat ze bijna niets hoeven te typen.')),
@@ -1292,6 +1363,27 @@
         mailCard(st, save),
         peopleCard(),
 
+        h('div', { class: 'card' }, h('h2', {}, 'Moderatie'),
+          h('p', { class: 'muted', style: 'margin-top:0' }, 'Houd het netjes: ongepaste woorden filteren, bezoekers blokkeren en nieuwe profielen eerst goedkeuren.'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Filter'), chk(st.moderation, 'filter', 'Ongepaste woorden herkennen in wat bezoekers typen'),
+            h('label', {}, 'Standaardlijst'), chk(st.moderation, 'defaultList', 'Gebruik de ingebouwde lijst met scheldwoorden'),
+            h('label', {}, 'Eigen woorden'), h('div', {}, text(st.moderation, 'words', { placeholder: 'bijv. woord1, woord2' }), h('div', { class: 'muted' }, 'Gescheiden door komma’s. Voeg toe wat jij ongepast vindt.')),
+            h('label', {}, 'Wat gebeurt er?'), sel(st.moderation, 'action', [['mask', 'Het woord verbergen (***) en het bericht markeren'], ['flag', 'Alleen het bericht markeren'], ['block', 'Het bericht niet doorlaten']]),
+            h('label', {}, 'Limiet'), h('div', { class: 'row' }, text(st.moderation, 'maxPerHour', { type: 'number', min: 1, max: 500, style: 'width:80px' }), h('span', { class: 'muted' }, 'berichten per telefoon per uur. Het deurscherm zelf heeft geen limiet.')),
+            h('label', {}, 'Profielen'), chk(st.moderation, 'profileApproval', 'Nieuwe profielen eerst door mij laten goedkeuren')),
+          h('h2', { style: 'font-size:16px;margin:18px 0 6px' }, 'Geblokkeerd'),
+          (S.blocked || []).length
+            ? h('div', { class: 'list' }, ...S.blocked.map((b) => h('div', { class: 'block' }, h('div', {}, h('div', { class: 't' }, b.kind === 'ip' ? 'Telefoon' : `Profiel ${b.value}`), h('div', { class: 'muted' }, `${b.reason || ''}${b.reason ? ' · ' : ''}${b.until ? 'tot ' + fmtWhen(b.until) : 'voor altijd'}`)), h('span', { style: 'flex:1' }), h('button', { class: 'sm ghost', onclick: () => api('/api/moderation/unblock', { id: b.id }).then(() => toast('Blokkade opgeheven')) }, 'Opheffen'))))
+            : h('p', { class: 'muted', style: 'margin:0' }, 'Niemand geblokkeerd. Blokkeren doe je bij een bericht onder Bezoekers → Modereren.')),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Afwezig'),
+          h('p', { class: 'muted', style: 'margin-top:0' }, 'Zet de deur tot een datum op Gesloten, met je eigen bericht. Daarna gaat alles vanzelf weer door.'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Afwezig'), chk(st.away, 'enabled', 'Ik ben afwezig'),
+            h('label', {}, 'Tot en met'), h('input', { type: 'date', value: st.away.until, oninput: (e) => { st.away.until = e.target.value; } }),
+            h('label', {}, 'Bericht'), text(st.away, 'message', { placeholder: 'bijv. Op vakantie — terug op 3 november', maxlength: 140 }))),
+
         h('div', { class: 'card' }, h('h2', {}, 'Scherm'),
           h('div', { class: 'form' },
             h('label', {}, 'Thema'), sel(st, 'theme', [['dark', 'Donker (zwart)'], ['light', 'Licht (met kleur)']]),
@@ -1307,7 +1399,9 @@
         h('div', { class: 'card' }, h('h2', {}, 'Meldingen op je telefoon'),
           h('p', { class: 'muted', style: 'margin-top:0' }, 'Installeer de gratis app “ntfy”, abonneer je op een moeilijk te raden onderwerpnaam en vul diezelfde naam hier in. Je krijgt dan bij elke bezoeker een melding, ook als deze pagina dicht is.'),
           h('div', { class: 'form' },
-            h('label', {}, 'ntfy-onderwerp'), text(st, 'ntfyTopic', { placeholder: 'bijv. deur-7f3k2q' }),
+            h('label', {}, 'ntfy-onderwerp'), h('div', {}, text(st, 'ntfyTopic', { id: 'ntfyTopicInput', placeholder: 'bijv. deur-7f3k2q' }),
+              h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { const t = 'deur-' + Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 4); st.ntfyTopic = t; $('ntfyTopicInput').value = t; toast('Onderwerp ingevuld. Sla op en abonneer je op dit onderwerp in de ntfy-app.'); } }, 'Maak een onderwerp voor mij'),
+                h('span', { class: 'muted' }, '1. Installeer de gratis app ntfy  2. Klik hier  3. Sla op  4. Abonneer je in de app op dit onderwerp'))),
             h('label', {}, 'ntfy-server'), text(st, 'ntfyServer'),
             h('label', {}, 'Webhook'), text(st, 'webhookUrl', { placeholder: 'Slack / Discord / Home Assistant (optioneel)' }),
             h('span', {}), h('div', {}, h('button', { onclick: async () => { await api('/api/settings', payloadFor(st)); const r = await api('/api/test-notify', {}); toast(r.results.length ? r.results.join(', ') : 'Vul eerst een onderwerp of webhook in'); } }, 'Test versturen')))),

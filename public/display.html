@@ -114,6 +114,13 @@
   #dim.on { pointer-events: auto; }
   #boot { position: fixed; inset: 0; display: grid; place-items: center; color: #5c5c64; font: 500 16px system-ui, sans-serif; background: #000; z-index: 100; }
   .hidden { display: none !important; }
+  .hr { display: flex; align-items: baseline; gap: calc(var(--u)*2.6); }
+  #weather { color: var(--dim); }
+  #weather:empty { display: none; }
+  #qr { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u)*1); margin-top: calc(var(--u)*1.5); }
+  #qr:empty { display: none; }
+  #qr svg { width: calc(var(--u)*17); height: auto; border-radius: calc(var(--u)*1); background: #fff; display: block; }
+  #qr small { color: var(--dim); font-size: calc(var(--u)*1.9); text-align: center; max-width: 24ch; }
 
   /* ---------- layout editor (only with ?edit=1; the normal screen can never be moved) ---------- */
   .blk { max-width: 100%; text-align: center; line-height: 1.2; overflow-wrap: anywhere; }
@@ -212,7 +219,7 @@
 <div id="app">
   <header>
     <div id="hname"><span id="name"></span><span id="subtitle"></span></div>
-    <div id="time"></div>
+    <div class="hr"><div id="weather" class="ph" data-ph="12° bewolkt"></div><div id="time"></div></div>
   </header>
   <main>
     <section class="hero">
@@ -223,6 +230,7 @@
       <div id="message" class="ph" data-ph="Bericht"></div>
       <div id="note" class="ph" data-ph="Jouw bericht aan bezoekers"></div>
       <div id="extra" class="ph" data-ph="Bezet 13:00–14:00 · Vandaag open 09:00–17:00"></div>
+      <div id="qr" class="ph" data-ph="QR-code"></div>
     </section>
     <section class="ask" id="ask">
       <h2 id="askTitle">Niet kloppen</h2>
@@ -236,6 +244,8 @@
   <div id="dim"></div>
 </div>
 
+<script src="/tones.js"></script>
+<script src="/qr.js"></script>
 <script>
 (() => {
   'use strict';
@@ -263,6 +273,7 @@
     cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>',
   };
   const icon = (n) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('class', 'i'); s.innerHTML = ICONS[n]; return s; };
   // every word on the screen comes from the settings (Ontwerp → Teksten); {…} are filled in here
@@ -316,18 +327,16 @@
 
   // ---------- sound ----------
   let actx;
+  // the bell and answer sounds come from the settings (Ontwerp → Beltonen); an own sound file plays through a normal audio element
   function chime(kind) {
     try {
+      const snd = (S && S.settings.sound) || { bell: 'classic', reply: 'soft' };
+      const name = kind === 'reply' ? snd.reply : snd.bell;
+      if (name === 'none') return;
+      if (name === 'custom' && kind !== 'reply') { const a = new Audio(`/api/bell-sound?v=${S.bellSoundV || 0}`); a.play().catch(() => {}); return; }
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
       if (actx.state === 'suspended') actx.resume();
-      const notes = kind === 'reply' ? [523.25, 783.99] : [659.25, 523.25];
-      notes.forEach((f, i) => {
-        const o = actx.createOscillator(), g = actx.createGain();
-        o.type = 'sine'; o.frequency.value = f;
-        const t = actx.currentTime + i * 0.38;
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 1);
-        o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 1.05);
-      });
+      if (!window.DoorTones.play(actx, name, 0.3)) window.DoorTones.play(actx, 'classic', 0.3);
     } catch {}
   }
 
@@ -351,8 +360,8 @@
   }
   // ---------- positions: every part of the screen can sit somewhere else (per screen type) ----------
   const EDIT = params.get('edit') === '1';
-  const MOVABLE_BASE = { name: '#hname', time: '#time', ring: '.ring', label: '#label', until: '#until', untilAt: '#untilAt', message: '#message', note: '#note', extra: '#extra', askTitle: '#askTitle', reasons: '#reasons', actions: '#actions' };
-  const NAMES = { name: 'Naam', time: 'Klok', ring: 'Statuspunt', label: 'Status', until: 'Tot-tekst', untilAt: 'Tijd', message: 'Bericht', note: 'Jouw bericht', extra: 'Extra regel', askTitle: 'Titel boven de knoppen', reasons: 'Redenen', actions: 'Deurbel, Tijd booken, Vraagje' };
+  const MOVABLE_BASE = { weather: '#weather', qr: '#qr', name: '#hname', time: '#time', ring: '.ring', label: '#label', until: '#until', untilAt: '#untilAt', message: '#message', note: '#note', extra: '#extra', askTitle: '#askTitle', reasons: '#reasons', actions: '#actions' };
+  const NAMES = { weather: 'Weer', qr: 'QR-code', name: 'Naam', time: 'Klok', ring: 'Statuspunt', label: 'Status', until: 'Tot-tekst', untilAt: 'Tijd', message: 'Bericht', note: 'Jouw bericht', extra: 'Extra regel', askTitle: 'Titel boven de knoppen', reasons: 'Redenen', actions: 'Deurbel, Tijd booken, Vraagje' };
   const movable = () => ({ ...MOVABLE_BASE, ...Object.fromEntries(((S && S.blocks) || []).map((b) => [`blk_${b.id}`, `#blk_${b.id}`])) });
   const nameOf = (id) => {
     if (NAMES[id]) return NAMES[id];
@@ -404,16 +413,42 @@
   // ---------- render ----------
   const COLORS = { open: '#30d158', closed: '#ff453a', busy: '#ff9f0a' };
   const COLORS_LIGHT = { open: '#1f9d55', closed: '#e0352b', busy: '#e8780c' };
+  // light or dark: fixed in the settings, or by the clock (light by day, dark at night)
+  let lastLight = null;
+  function themeIsLight() {
+    const st = S.settings, sch = st.themeSchedule;
+    if (!sch || !sch.enabled) return st.theme === 'light';
+    const d = new Date(now()), cur = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return sch.lightFrom <= sch.darkFrom ? cur >= sch.lightFrom && cur < sch.darkFrom : cur >= sch.lightFrom || cur < sch.darkFrom;
+  }
+  function applyTheme() {
+    const st = S.settings, v = S.view, light = themeIsLight();
+    lastLight = light;
+    document.body.classList.toggle('light', light);
+    const own = st.colors && /^#[0-9a-f]{6}$/i.test(st.colors[v.mode]) ? st.colors[v.mode] : '';
+    document.documentElement.style.setProperty('--c', own || (light ? COLORS_LIGHT : COLORS)[v.mode]);
+    const meta = document.querySelector('meta[name=theme-color]'); if (meta) meta.content = light ? '#eef0f4' : '#000000';
+  }
+  const WX = (c) => (c === 0 ? 'helder' : c <= 2 ? 'half bewolkt' : c === 3 ? 'bewolkt' : c <= 48 ? 'mist' : c <= 57 ? 'motregen' : c <= 67 ? 'regen' : c <= 77 ? 'sneeuw' : c <= 82 ? 'buien' : c <= 86 ? 'sneeuwbuien' : 'onweer');
+  let qrSig = '';
+  function renderExtras() {
+    const w = S.weather;
+    $('weather').textContent = w ? `${w.temp}° ${WX(w.code)}` : '';
+    const q = S.settings.qr, box = $('qr');
+    const url = q && q.enabled ? (q.url || `${location.origin}/visit`) : '';
+    if (url === qrSig) return;
+    qrSig = url;
+    box.replaceChildren();
+    if (!url || !window.QR) return;
+    try { const holder = h('div'); holder.innerHTML = window.QR.svg(url); box.append(holder.firstChild, h('small', {}, tx('qrHint'))); } catch { /* too long for a code */ }
+  }
+
   function render() {
     const st = S.settings, v = S.view;
     const hero = document.querySelector('.hero');
     if (render.mode && render.mode !== v.mode) { hero.classList.remove('swap'); void hero.offsetWidth; hero.classList.add('swap'); }
     render.mode = v.mode;
-    const light = st.theme === 'light';
-    document.body.classList.toggle('light', light);
-    const own = st.colors && /^#[0-9a-f]{6}$/i.test(st.colors[v.mode]) ? st.colors[v.mode] : '';
-    document.documentElement.style.setProperty('--c', own || (light ? COLORS_LIGHT : COLORS)[v.mode]);
-    document.querySelector('meta[name=theme-color]').content = light ? '#eef0f4' : '#000000';
+    applyTheme();
     document.title = `${v.label} — ${st.name}`;
     renderBlocks();
     layout();
@@ -430,6 +465,7 @@
     const todayHours = hrs.enabled ? (hrs.days.includes(new Date(now()).getDay()) ? tx('todayOpen', { from: hrs.from, to: hrs.to }) : tx('todayClosed')) : '';
     $('extra').textContent = [next && `${st.texts.busy.label} ${fmtTime(next.from)}–${fmtTime(next.to)}`, todayHours].filter(Boolean).join('  ·  ');
     renderVisitors();
+    renderExtras();
     tick();
     checkReply();
   }
@@ -464,6 +500,7 @@
     }
     if (v.appointments) acts.push(h('button', { class: 'tile', onclick: () => openAppointment() }, icon('cal'), tx('book')));
     if (v.messages) acts.push(h('button', { class: 'tile', onclick: openQuestion }, icon('msg'), tx('question')));
+    if (v.callback) acts.push(h('button', { class: 'tile', onclick: openCallback }, icon('phone'), tx('callback')));
     $('actions').style.gridTemplateColumns = `repeat(${Math.max(1, acts.length)}, 1fr)`;
     $('actions').replaceChildren(...acts);
     $('ask').classList.toggle('hidden', !acts.length && !reasons.length);
@@ -474,6 +511,7 @@
     updateBell();
     const t = now(), v = S.view;
     $('time').textContent = fmtTime(t);
+    if (lastLight !== null && themeIsLight() !== lastLight) applyTheme();
     const [line, at] = v.until && v.until > t ? untilText(v, t) : ['', ''];
     $('until').textContent = line;
     $('untilAt').textContent = at;
@@ -527,6 +565,7 @@
         const c = shift ? ch.toUpperCase() : ch;
         return h('button', { onpointerdown: press((el) => { if (el.value.length < (el.maxLength > 0 ? el.maxLength : 500)) el.value += c; if (shift && /[a-z]/i.test(c)) { shift = false; draw(); } }) }, c);
       }))),
+      activeInput?.type === 'tel' ? h('div', { class: 'kr' }, ...['+', '-', '(', ')'].map((x) => h('button', { onpointerdown: press((el) => { el.value += x; }) }, x))) : null,
       activeInput?.type === 'email' ? h('div', { class: 'kr' }, ...['@', '-', '_', '.nl', '.com'].map((x) => h('button', { class: x.length > 1 ? 'w' : '', onpointerdown: press((el) => { el.value += x; }) }, x))) : null,
       h('div', { class: 'kr' },
         h('button', { class: 'w', onpointerdown: (e) => { e.preventDefault(); shift = !shift; draw(); } }, shift ? 'abc' : 'ABC'),
@@ -545,9 +584,9 @@
     if (sending) return;
     sending = true; if (btn) btn.disabled = true;
     try {
-      const res = await fetch('/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const res = await fetch('/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, via: VISIT ? 'phone' : 'door' }) });
       const out = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(out.error || 'Versturen mislukt — probeer opnieuw');
+      if (!res.ok) throw new Error(out.error || (res.status === 429 ? tx('tryLater') : 'Versturen mislukt — probeer opnieuw'));
       pending = { id: out.id, shown: false, instant: out.reply };
       showSent(payload, out.mailTo);
     } catch (e) {
@@ -559,7 +598,7 @@
   function showSent(payload, mailTo) {
     openSheet('done',
       h('div', { class: 'badge pop' }, payload.type === 'bell' ? icon('bell') : icon('check')),
-      h('h3', {}, payload.type === 'bell' ? tx('sentBell') : payload.type === 'appointment' ? tx('sentAppt') : tx('sent')),
+      h('h3', {}, payload.type === 'bell' ? tx('sentBell') : payload.type === 'appointment' ? tx('sentAppt') : payload.type === 'callback' ? tx('callbackSent') : tx('sent')),
       payload.type === 'appointment' ? h('p', { class: 'muted' }, tx('forTime', { at: atText(payload.at) })) : null,
       mailTo ? h('p', { class: 'muted' }, tx('mailNote', { mail: mailTo })) : null,
       h('div', { id: 'replyBox', class: 'wait-line' }, h('div', { class: 'spin' }), tx('waiting')),
@@ -601,6 +640,23 @@
     const err = h('div', { class: 'err' });
     openSheet('', h('h3', {}, reason), name, keyboard(), err,
       formButtons(tx('send'), (b) => sendVisit({ type: 'reason', reason, name: name.value }, err, b)));
+  }
+
+  // Terugbellen: name, phone number, and when it suits
+  function openCallback() {
+    const name = field('input', { placeholder: tx('yourName'), maxlength: 60 });
+    const phone = field('input', { type: 'tel', placeholder: tx('callbackPhone'), maxlength: 20 });
+    const err = h('div', { class: 'err' });
+    let when = '';
+    const chips = ['Zo snel mogelijk', 'Vanmiddag', 'Morgen'].map((o) => h('button', { class: 'topic', onclick: (e) => { when = when === o ? '' : o; chips.forEach((x) => x.classList.toggle('sel', x === e.currentTarget && !!when)); bumpIdle(); } }, o));
+    const go = h('button', { class: 'btn go' }, tx('send'));
+    go.onclick = () => {
+      if (!name.value.trim()) { err.textContent = 'Vul je naam in'; return; }
+      if (!/^[0-9+\-() ]{6,20}$/.test(phone.value.trim())) { err.textContent = 'Dat telefoonnummer klopt niet'; return; }
+      sendVisit({ type: 'callback', name: name.value, phone: phone.value.trim(), when }, err, go);
+    };
+    openSheet('', h('h3', {}, tx('callback')), h('p', { class: 'muted' }, tx('callbackHint')), name, phone, h('div', { class: 'topics' }, ...chips), keyboard(), err,
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), go));
   }
 
   // Vraagje, step 1: what is it about (preset topics, optional own text)
@@ -647,6 +703,7 @@
   async function greet(opt, nr, err, shown) {
     try {
       const res = await lookupPerson(nr);
+      if (res.pending) { err.textContent = tx('profilePending'); return false; }
       if (!res.found) { err.textContent = 'Die gebruikersnaam of dat nummer kennen we niet'; if (shown) { shown.classList.remove('shake'); void shown.offsetWidth; shown.classList.add('shake'); } return false; }
       rememberProfile(nr);
       hello(opt, nr, res);
@@ -682,6 +739,7 @@
         const res = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nr: u, name: name.value, email: em }) });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(out.error || 'Profiel maken mislukt');
+        if (out.pending) { err.textContent = tx('profilePending'); go.disabled = false; return; }
         await greet(opt, u, err);
       } catch (e) { err.textContent = e instanceof TypeError ? 'Geen verbinding — probeer opnieuw' : e.message; }
       go.disabled = false;

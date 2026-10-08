@@ -64,6 +64,7 @@ struct InboxView: View {
                     Text(r.createdAt.ago).font(.caption).foregroundStyle(.secondary)
                 }
                 Text(r.typeLabel + (r.summary.isEmpty ? "" : " — \(r.summary)")).font(.subheadline).foregroundStyle(.secondary).lineLimit(compact ? 1 : 3)
+                if !r.flagged.isEmpty { Label("Gemarkeerd: \(r.flagged.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(Palette.busy) }
                 if !compact, !r.reply.isEmpty { Label(r.reply, systemImage: r.autoReplied ? "sparkles" : "arrowshape.turn.up.left.fill").font(.caption).foregroundStyle(Palette.open).lineLimit(2) }
             }
         }.padding(.vertical, compact ? 2 : 6)
@@ -89,6 +90,11 @@ struct RequestDetail: View {
                         }
                     }
                     if !request.summary.isEmpty { Text(request.summary).font(.title3).card() }
+                    if !request.flagged.isEmpty { Label("Gemarkeerd door het filter: \(request.flagged.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill").font(.subheadline).foregroundStyle(Palette.busy) }
+                    if !request.phone.isEmpty, let url = URL(string: "tel:" + request.phone.filter { "0123456789+".contains($0) }) {
+                        Link(destination: url) { Label("Bel \(request.phone)", systemImage: "phone.fill").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 12) }
+                            .buttonStyle(.borderedProminent).tint(Palette.open).foregroundStyle(.black)
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         if let at = request.at { Label("Gevraagde tijd: \(at.whenText)", systemImage: "calendar") }
                         if !request.nr.isEmpty { Label("Nummer \(request.nr)", systemImage: "number") }
@@ -122,9 +128,24 @@ struct RequestDetail: View {
             }
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Bezoeker").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Sluiten") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button { block(60) } label: { Label("Blokkeer 1 uur", systemImage: "hand.raised") }
+                        Button { block(1440) } label: { Label("Blokkeer 1 dag", systemImage: "hand.raised") }
+                        Button { block(0) } label: { Label("Blokkeer voor altijd", systemImage: "hand.raised.fill") }
+                        Divider()
+                        Button(role: .destructive) { Task { await store.run("Bericht verwijderd") { _ = try await store.post("api/requests/delete", ["id": request.id]) }; dismiss() } } label: { Label("Bericht verwijderen", systemImage: "trash") }
+                    } label: { Label("Modereren", systemImage: "shield.lefthalf.filled") }
+                }
+                ToolbarItem(placement: .topBarTrailing) { Button("Sluiten") { dismiss() } }
+            }
             .onAppear { apptTime = request.at ?? Date().addingTimeInterval(3600) }
         }.preferredColorScheme(.dark).presentationDetents([.large])
+    }
+
+    private func block(_ minutes: Int) {
+        Task { await store.run("Geblokkeerd") { _ = try await store.post("api/moderation/block", ["id": request.id, "minutes": minutes]) } }
     }
 
     private func send(_ text: String) {

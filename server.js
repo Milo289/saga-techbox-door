@@ -30,7 +30,13 @@ const DEFAULT_SETTINGS = {
     busy: { label: 'Bezet', message: 'Er wordt gewerkt — even niet storen' },
   },
   hours: { enabled: false, days: [1, 2, 3, 4, 5], from: '09:00', to: '17:00' },
-  visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true },
+  visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false },
+  moderation: { filter: true, defaultList: true, words: '', action: 'mask', maxPerHour: 20, profileApproval: false }, // action: flag | mask | block
+  themeSchedule: { enabled: false, lightFrom: '07:00', darkFrom: '19:00' }, // the door screen is light by day and dark by night
+  sound: { bell: 'classic', reply: 'soft', custom: false }, // custom = an own bell sound has been uploaded (the file itself is not in the settings)
+  away: { enabled: false, until: '', message: '' }, // absence mode: closed until the end of this date (YYYY-MM-DD)
+  weather: { enabled: false, city: '', lat: 0, lon: 0 },
+  qr: { enabled: false, url: '' }, // a QR code on the door screen that opens the visitor page on the visitor's own phone
   reasons: ['Korte vraag', 'Bezorging', 'Ophalen', 'Handtekening nodig'],
   topics: ['Laptop', 'Wachtwoord / inloggen', 'Printer', 'Wifi / internet', 'Iets anders'],
   quickReplies: ['Kom binnen', 'Momentje', 'Over 5 minuten', 'Ik kom naar je toe', 'Nu even niet — probeer het later', 'Laat een bericht achter'],
@@ -48,7 +54,7 @@ const DEFAULT_SETTINGS = {
   ntfyTopic: '',
   webhookUrl: '',
   // e-mail (optional): confirmation + answer to visitors who leave an address, and/or a mail to you per request
-  mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false },
+  mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false, digest: false, digestAt: '18:00' },
 };
 // System settings: only the main account can change these (see the Systeem tab).
 const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 20, blockMinutes: 10, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
@@ -104,6 +110,9 @@ const freshState = () => ({
   lastVersion: '', // the program version that last used this data (a backup is made before the first start of a new version)
   positions: {}, // door-screen layout per screen type (see cleanPositions)
   blocks: [], // extra texts / logos on the door screen (see cleanBlocks)
+  blocked: [], // blocked visitors { id, kind: 'ip'|'nr', value, until (0 = for ever), reason, at, by }
+  customBell: null, // an own bell sound { mime, b64, at }
+  lastDigestDay: '',
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
   seededAdmin: false,
   users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
@@ -134,6 +143,7 @@ const UI_TEXTS = {
   bellWait: ['Hoofdscherm', 'Knop deurbel tijdens de wachttijd ({s} = seconden)', 'Deurbel · {s}s'],
   book: ['Hoofdscherm', 'Knop om een tijd te boeken', 'Tijd booken'],
   question: ['Hoofdscherm', 'Knop voor een vraagje', 'Vraagje'],
+  callback: ['Hoofdscherm', 'Knop om teruggebeld te worden', 'Terugbellen'],
   todayOpen: ['Hoofdscherm', 'Regel met openingstijden ({from} en {to})', 'Vandaag open {from}–{to}'],
   todayClosed: ['Hoofdscherm', 'Regel als het vandaag dicht is', 'Vandaag gesloten'],
   over: ['Tot-tekst', 'Aftelzin ({time} = bijv. 30 minuten)', 'Over {time}'],
@@ -172,6 +182,12 @@ const UI_TEXTS = {
   forTime: ['Na het versturen', 'Gevraagde tijd ({at})', 'Voor {at}'],
   mailNote: ['Na het versturen', 'Melding antwoord per mail ({mail})', 'Je krijgt het antwoord ook per mail ({mail}).'],
   waiting: ['Na het versturen', 'Wachten op antwoord', 'Even wachten op antwoord…'],
+  profilePending: ['Wie ben je?', 'Profiel moet nog goedgekeurd worden', 'Je profiel is gemaakt en wacht op goedkeuring.'],
+  qrHint: ['Hoofdscherm', 'Tekst onder de QR-code', 'Scan en bel met je eigen telefoon'],
+  callbackHint: ['Terugbellen', 'Uitleg', 'Laat je nummer achter, dan bellen we je terug.'],
+  callbackPhone: ['Terugbellen', 'Telefoonnummerveld', 'Je telefoonnummer'],
+  callbackSent: ['Na het versturen', 'Titel na een terugbelverzoek', 'We bellen je terug'],
+  tryLater: ['Meldingen', 'Als iets even niet kan', 'Dit kan nu even niet — probeer het later nog eens.'],
   toastBellOff: ['Meldingen', 'Als de bel uit staat', 'De deurbel staat nu uit — stel een vraagje'],
   toastRang: ['Meldingen', 'Als er aangebeld is (ook op andere schermen)', 'Er is aangebeld'],
   toastWait: ['Meldingen', 'Als de bel nog wacht ({s} = seconden)', 'Er is net aangebeld — nog {s} s'],
@@ -195,9 +211,17 @@ const cleanBlocks = (raw) => (Array.isArray(raw) ? raw : []).slice(0, 12).map((b
   return out;
 }).filter(Boolean);
 
+// ----- blocked visitors and the own bell sound (cleaned when loaded, so they live up here) -----
+const cleanBlocked = (raw) => (Array.isArray(raw) ? raw : []).slice(0, 500).map((b) => {
+  if (!b || typeof b !== 'object' || !['ip', 'nr'].includes(b.kind) || !str(b.value, 60)) return null;
+  return { id: str(b.id, 20) || newId(), kind: b.kind, value: str(b.value, 60).toLowerCase(), until: Number(b.until) > 0 ? Number(b.until) : 0, reason: str(b.reason, 100), at: Number(b.at) || Date.now(), by: str(b.by, 40) };
+}).filter(Boolean);
+const BELL_TYPES = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'audio/webm'];
+const cleanBell = (b) => (b && typeof b === 'object' && BELL_TYPES.includes(b.mime) && /^[A-Za-z0-9+/=]{20,}$/.test(String(b.b64 || '')) && String(b.b64).length <= 560000 ? { mime: b.mime, b64: String(b.b64), at: Number(b.at) || Date.now() } : null);
+
 // ----- layout: where each part of the door screen sits (moved by hand in "Indeling aanpassen") -----
 const LAYOUT_KEYS = ['portrait', 'landscape', 'phone'];
-const LAYOUT_ITEMS = ['name', 'time', 'ring', 'label', 'until', 'untilAt', 'message', 'note', 'extra', 'askTitle', 'reasons', 'actions'];
+const LAYOUT_ITEMS = ['name', 'time', 'ring', 'label', 'until', 'untilAt', 'message', 'note', 'extra', 'askTitle', 'reasons', 'actions', 'weather', 'qr'];
 const layoutId = (id) => LAYOUT_ITEMS.includes(id) || /^blk_[a-z0-9]{4,12}$/.test(id);
 function cleanPositions(raw) {
   const out = {};
@@ -288,7 +312,7 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), blocked: cleanBlocked(raw.blocked), customBell: cleanBell(raw.customBell), system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
@@ -366,6 +390,11 @@ function computeView(now = Date.now()) {
     for (const b of blocks) if (b.from <= end && b.to > end) end = b.to;
     v = { mode: 'busy', until: end, message: active.note || '', source: 'planned' };
   }
+  const away = state.settings.away;
+  if (away.enabled && /^\d{4}-\d{2}-\d{2}$/.test(away.until)) { // absence mode: closed until the end of that day, whatever else is planned
+    const end = new Date(`${away.until}T23:59:59`).getTime();
+    if (Number.isFinite(end) && now <= end) v = { mode: 'closed', until: end + 1000, message: away.message, source: 'away' };
+  }
   const t = state.settings.texts[v.mode];
   const then = v.until ? baseModeAt(v.until) : null;
   return {
@@ -424,6 +453,8 @@ function publicState() {
     hasPeople: state.people.length > 0,
     positions: state.positions || {},
     blocks: state.blocks || [],
+    weather: state.settings.weather.enabled && weather.ok ? { temp: weather.temp, code: weather.code, city: state.settings.weather.city } : null,
+    bellSoundV: state.customBell ? state.customBell.at : 0,
     serverTime: now,
   };
 }
@@ -439,6 +470,7 @@ const ROLE_PRESETS = {
   root: ALL_PERMS,
   beheerder: ['view', 'status', 'inbox', 'people', 'settings', 'mail', 'export', 'audit'],
   medewerker: ['view', 'status', 'inbox'],
+  receptionist: ['view', 'inbox'], // sees and answers visitors, nothing else
   kijker: ['view'],
 };
 // The main account lives in access.js, sealed. Without a valid file the program does not start (like a protected system file).
@@ -553,6 +585,10 @@ function adminState(id) {
     settings,
     uiTexts: UI_TEXTS,
     blocks: state.blocks || [],
+    bellSoundV: state.customBell ? state.customBell.at : 0,
+    blocked: full('inbox') ? activeBlocks() : [],
+    pendingProfiles: full('inbox') ? state.people.filter((x) => x.pending).map(({ id, nr, name, email }) => ({ id, nr, name, email })) : [],
+    weatherNow: state.settings.weather.enabled && weather.ok ? { temp: weather.temp, code: weather.code } : null,
     people: full('people') ? state.people : [],
     peopleRev: state.peopleRev || 0,
     mailOn: mailOn(),
@@ -591,14 +627,16 @@ function changed() { save(); lastView = JSON.stringify(computeView()); broadcast
 setInterval(() => { for (const c of clients) write(c, 'ping', { t: Date.now() }); }, 20000);
 
 // ---------- outside notifications ----------
-const TYPE_LABEL = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraakverzoek', message: 'Vraagje' };
+const TYPE_LABEL = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraakverzoek', message: 'Vraagje', callback: 'Terugbelverzoek' };
 function describe(r) {
   const parts = [`${TYPE_LABEL[r.type]} — ${r.name || 'Iemand'} bij ${state.settings.name}`];
   if (r.nr) parts.push(`Nummer: ${r.nr}`);
   if (r.topic) parts.push(`Onderwerp: ${r.topic}`);
   if (r.reason) parts.push(`Reden: ${r.reason}`);
   if (r.at) parts.push(`Wil: ${new Date(r.at).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`);
+  if (r.phone) parts.push(`Bel terug: ${r.phone}${r.when ? ` (${r.when})` : ''}`);
   if (r.message) parts.push(`"${r.message}"`);
+  if (r.flagged && r.flagged.length) parts.push(`⚠ Gemarkeerd: ${r.flagged.join(', ')}`);
   return parts.join('\n');
 }
 async function notifyExternal(r, textOverride) {
@@ -719,6 +757,45 @@ async function mailAdmin(r) {
 }
 
 // ---------- timers ----------
+// ----- weather (Open-Meteo: free, no key) -----
+let weather = { ok: false, temp: null, code: null, at: 0 };
+const WEATHER_API = process.env.DOOR_WEATHER_API || 'https://api.open-meteo.com/v1/forecast';
+const GEOCODE_API = process.env.DOOR_GEOCODE_API || 'https://geocoding-api.open-meteo.com/v1/search';
+async function refreshWeather(force) {
+  const w = state.settings.weather;
+  if (!w.enabled || !(w.lat || w.lon)) { weather.ok = false; return; }
+  if (!force && Date.now() - weather.at < 25 * 60e3) return;
+  weather.at = Date.now();
+  try {
+    const r = await fetch(`${WEATHER_API}?latitude=${w.lat}&longitude=${w.lon}&current=temperature_2m,weather_code`, { signal: AbortSignal.timeout(8000) });
+    const c = (await r.json()).current;
+    if (c && Number.isFinite(c.temperature_2m)) { weather = { ok: true, temp: Math.round(c.temperature_2m), code: Number(c.weather_code) || 0, at: Date.now() }; changed(); }
+  } catch { /* offline: keep what we had */ }
+}
+
+// ----- the evening summary by e-mail -----
+function digestText(now = Date.now()) {
+  const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
+  const today = state.requests.filter((r) => r.createdAt >= d0.getTime());
+  const n = (t) => today.filter((r) => r.type === t).length;
+  const open = today.filter((r) => !r.reply && r.state !== 'done').length;
+  const flagged = today.filter((r) => r.flagged && r.flagged.length).length;
+  const next = state.appointments.filter((a) => a.at > now).sort((a, b) => a.at - b.at)[0];
+  const lines = [
+    `Vandaag bij ${state.settings.name}:`, '',
+    `• ${today.length} ${today.length === 1 ? 'bezoek' : 'bezoeken'} in totaal`,
+    `• ${n('bell')} keer aangebeld, ${n('message')} vraagjes, ${n('appointment')} afspraakverzoeken, ${n('callback')} terugbelverzoeken`,
+    `• ${open} nog zonder antwoord of niet afgehandeld`,
+  ];
+  if (flagged) lines.push(`• ${flagged} gemarkeerd door het filter voor ongepaste woorden`);
+  if (next) lines.push(`• Eerstvolgende afspraak: ${new Date(next.at).toLocaleString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false })} met ${next.name}`);
+  return { subject: `Samenvatting van vandaag — ${state.settings.name}`, text: lines.join('\n') + sign() };
+}
+async function sendDigest() {
+  const m = state.settings.mail, d = digestText();
+  await sendMail(m.adminTo, d.subject, d.text);
+}
+
 function tick() {
   const now = Date.now();
   let dirty = false;
@@ -738,6 +815,16 @@ function tick() {
     const n = state.requests.length;
     state.requests = state.requests.filter((r) => r.createdAt > now - state.system.retentionDays * 864e5);
     if (state.requests.length !== n) dirty = true;
+  }
+  refreshWeather(false);
+  state.blocked = state.blocked.filter((b) => !b.until || b.until > now - 864e5); // forget old, expired blocks
+  const dg = state.settings.mail;
+  if (dg.digest && mailOn() && isEmail(dg.adminTo)) {
+    const d = new Date(), day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    if (state.lastDigestDay !== day && `${pad(d.getHours())}:${pad(d.getMinutes())}` >= dg.digestAt) {
+      state.lastDigestDay = day; dirty = true;
+      sendDigest().catch((e) => { log('mail', `Samenvatting mislukt: ${e.message}`, 'systeem'); });
+    }
   }
   if (state.system.autoBackup) {
     const d = new Date(), day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -965,6 +1052,19 @@ const adminRoutes = {
     for (const m of MODES) if (!merged.texts[m].label) merged.texts[m].label = DEFAULT_SETTINGS.texts[m].label;
     for (const k of Object.keys(UI_TEXTS)) merged.ui[k] = str(merged.ui[k], 120).trim();
     for (const m of MODES) if (!/^#[0-9a-f]{6}$/i.test(String(merged.colors[m]))) merged.colors[m] = '';
+    const mo = merged.moderation;
+    if (!['flag', 'mask', 'block'].includes(mo.action)) mo.action = 'mask';
+    mo.maxPerHour = Math.max(1, Math.min(500, Math.round(Number(mo.maxPerHour)) || 20));
+    mo.words = str(mo.words, 500);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(merged.away.until)) merged.away.until = '';
+    merged.away.message = str(merged.away.message, 140);
+    const wx = merged.weather;
+    wx.lat = Math.max(-90, Math.min(90, Number(wx.lat) || 0)); wx.lon = Math.max(-180, Math.min(180, Number(wx.lon) || 0)); wx.city = str(wx.city, 80);
+    if (merged.qr.url && !/^https?:\/\/[^\s"'<>]{3,300}$/.test(merged.qr.url)) merged.qr.url = '';
+    if (!BELL_TONES.includes(merged.sound.bell) || (merged.sound.bell === 'custom' && !state.customBell)) merged.sound.bell = 'classic';
+    if (!REPLY_TONES.includes(merged.sound.reply)) merged.sound.reply = 'soft';
+    merged.sound.custom = !!state.customBell; // set by uploading, never by the browser
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(merged.mail.digestAt)) merged.mail.digestAt = '18:00';
     // tidy the mail settings so a small slip does not break sending
     const mm = merged.mail;
     for (const k of ['host', 'user', 'from', 'adminTo']) mm[k] = String(mm[k] || '').trim();
@@ -973,6 +1073,7 @@ const adminRoutes = {
     if (mm.pass && !mm.user) mm.user = addrOf(mm.from); // almost every provider logs in with the e-mail address
     if (mm.notifyAdmin && !mm.adminTo) mm.adminTo = addrOf(mm.from);
     state.settings = merged;
+    if (merged.weather.enabled) { weather.at = 0; setTimeout(() => refreshWeather(true), 0); }
   },
 
   'POST /api/requests/reply': (b) => {
@@ -996,13 +1097,75 @@ const adminRoutes = {
   'POST /api/requests/done': (b) => { const r = state.requests.find((x) => x.id === b.id); if (r) r.state = 'done'; },
   'POST /api/requests/seen': () => { for (const r of state.requests) if (r.state === 'new') r.state = 'seen'; },
   'POST /api/requests/clear': () => { state.requests = state.requests.filter((r) => r.state !== 'done'); },
+  'POST /api/requests/delete': (b) => { findReq(b.id); state.requests = state.requests.filter((r) => r.id !== b.id); log('moderatie', 'Een bericht verwijderd'); },
+
+  // ----- moderation (permission: inbox) -----
+  'POST /api/moderation/block': (b) => {
+    const mins = Math.max(0, Math.min(525600, Number(b.minutes) || 0)); // 0 = for ever
+    const until = mins ? Date.now() + mins * 60e3 : 0;
+    const targets = [];
+    let who = '';
+    if (b.id) {
+      const r = findReq(b.id);
+      who = r.name || 'bezoeker';
+      if (r.nr) targets.push(['nr', String(r.nr).toLowerCase()]);
+      if (r.via === 'phone' && personalIp(r.ip)) targets.push(['ip', normIp(r.ip)]);
+      if (!targets.length) throw bad('Dit bericht komt van het deurscherm zelf. Daar kun je niemand mee blokkeren, want iedereen gebruikt dat scherm. Je kunt het bericht wel verwijderen, of de bezoeker een profiel laten maken zodat je dat profiel kunt blokkeren.');
+    } else if (b.nr) { who = str(b.nr, 20); targets.push(['nr', who.toLowerCase()]); }
+    else throw bad('Er is niets om te blokkeren');
+    for (const [kind, value] of targets) {
+      state.blocked = state.blocked.filter((x) => !(x.kind === kind && x.value === value));
+      state.blocked.push({ id: newId(), kind, value, until, reason: str(b.reason, 100) || who, at: Date.now(), by: actor });
+    }
+    log('moderatie', `${who} geblokkeerd${until ? ` tot ${hm(until)}` : ' voor altijd'}`);
+  },
+  'POST /api/moderation/unblock': (b) => { state.blocked = state.blocked.filter((x) => x.id !== b.id); log('moderatie', 'Blokkade opgeheven'); },
+  'POST /api/moderation/profile': (b) => {
+    const x = state.people.find((y) => y.id === b.id && y.pending);
+    if (!x) throw bad('Dat profiel wacht niet meer op goedkeuring');
+    if (b.approve) { delete x.pending; log('moderatie', `Profiel van ${x.name} goedgekeurd`); }
+    else { state.people = state.people.filter((y) => y !== x); log('moderatie', `Profiel van ${x.name} afgewezen`); }
+    state.peopleRev = (state.peopleRev || 0) + 1;
+  },
+
+  // ----- weather, own bell sound, evening summary -----
+  'POST /api/weather/lookup': async (b) => {
+    const q = str(b.city, 80);
+    if (!q) throw bad('Vul een plaats in');
+    let hit;
+    try { const r = await fetch(`${GEOCODE_API}?name=${encodeURIComponent(q)}&count=1&language=nl`, { signal: AbortSignal.timeout(8000) }); hit = ((await r.json()).results || [])[0]; }
+    catch { throw bad('Geen verbinding met de weerdienst — probeer het later nog eens'); }
+    if (!hit) throw bad(`“${q}” is niet gevonden`);
+    const w = state.settings.weather;
+    Object.assign(w, { city: str(hit.name, 80), lat: Number(hit.latitude) || 0, lon: Number(hit.longitude) || 0 });
+    weather.at = 0;
+    refreshWeather(true);
+    return { city: w.city, lat: w.lat, lon: w.lon };
+  },
+  'POST /api/sound': (b) => {
+    const bell = cleanBell({ mime: String(b.mime || ''), b64: String(b.data || ''), at: Date.now() });
+    if (!bell) throw bad('Dit geluid kan niet gebruikt worden. Kies een mp3-, wav-, ogg- of m4a-bestand van hooguit 400 kB.');
+    state.customBell = bell;
+    state.settings.sound = { ...state.settings.sound, bell: 'custom', custom: true };
+    log('system', 'Eigen beltoon geüpload');
+  },
+  'POST /api/sound/remove': () => {
+    state.customBell = null;
+    state.settings.sound = { ...state.settings.sound, custom: false, bell: state.settings.sound.bell === 'custom' ? 'classic' : state.settings.sound.bell };
+    log('system', 'Eigen beltoon verwijderd');
+  },
+  'POST /api/mail/digest-test': async () => {
+    if (!mailOn() || !isEmail(state.settings.mail.adminTo)) throw bad('Zet e-mail aan en vul bij “Jij krijgt” je adres in');
+    try { await sendDigest(); } catch (e) { throw bad(e.message); }
+    return { ok: true };
+  },
   'POST /api/appointments/remove': (b) => { state.appointments = state.appointments.filter((a) => a.id !== b.id); },
 
   'POST /api/people': (b) => {
     if (b.rev !== undefined && Number(b.rev) !== (state.peopleRev || 0)) throw bad('Er is net een nieuw profiel bijgekomen — de lijst is bijgewerkt, probeer het nog eens');
     const seen = new Set();
     state.people = (Array.isArray(b.people) ? b.people : []).slice(0, 2000).map((x) => ({
-      id: str(x.id, 20) || newId(), nr: str(x.nr, 20), name: str(x.name, 60), email: isEmail(str(x.email, 120)) ? str(x.email, 120) : '', note: str(x.note, 100), ...(x.self ? { self: true } : {}),
+      id: str(x.id, 20) || newId(), nr: str(x.nr, 20), name: str(x.name, 60), email: isEmail(str(x.email, 120)) ? str(x.email, 120) : '', note: str(x.note, 100), ...(x.self ? { self: true } : {}), ...(x.pending ? { pending: true } : {}),
     })).filter((x) => x.nr && x.name && !seen.has(x.nr.toLowerCase()) && seen.add(x.nr.toLowerCase()));
     log('system', `Personenlijst opgeslagen (${state.people.length})`);
   },
@@ -1019,7 +1182,7 @@ const adminRoutes = {
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
-    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
+    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
   },
 };
@@ -1105,6 +1268,8 @@ const NEED = {
   'POST /api/settings': (b) => { const ks = Object.keys(b); return ks.every((k) => k === 'note') ? 'status' : ks.every((k) => ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'].includes(k)) ? 'mail' : 'settings'; }, // the door message needs only the status right; mail fields only the mail right
   'POST /api/test-notify': 'mail', 'POST /api/mail/test': 'mail',
   'POST /api/requests/reply': 'inbox', 'POST /api/requests/accept': 'inbox', 'POST /api/requests/done': 'inbox', 'POST /api/requests/seen': 'inbox', 'POST /api/requests/clear': 'inbox', 'POST /api/appointments/remove': 'inbox',
+  'POST /api/requests/delete': 'inbox', 'POST /api/moderation/block': 'inbox', 'POST /api/moderation/unblock': 'inbox', 'POST /api/moderation/profile': 'inbox',
+  'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
   'POST /api/users/save': 'users', 'POST /api/users/remove': 'users', 'POST /api/sessions/revoke': 'users',
@@ -1115,6 +1280,42 @@ const NEED = {
   'GET /api/v1/users': 'users', 'POST /api/v1/users': 'users', 'POST /api/v1/users/remove': 'users',
   'GET /api/v1/people': 'people', 'POST /api/v1/people': 'people', 'POST /api/v1/people/upsert': 'people', 'GET /api/v1/audit': 'audit',
 };
+
+// ----- moderation: filter for bad words, blocked visitors, limits -----
+const DEFAULT_BAD = ['kut', 'kanker', 'tering', 'tyfus', 'klootzak', 'hoer', 'lul', 'eikel', 'debiel', 'fuck', 'fucking', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'dick', 'slut', 'whore', 'idiot'];
+const plainText = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[@4]/g, 'a').replace(/0/g, 'o').replace(/1/g, 'i').replace(/3/g, 'e').replace(/[$5]/g, 's').replace(/7/g, 't');
+function badWords() {
+  const m = state.settings.moderation;
+  const own = String(m.words || '').split(/[,;\n]+/).map((w) => plainText(w).trim()).filter((w) => w.length >= 2).slice(0, 200);
+  return [...new Set([...(m.defaultList ? DEFAULT_BAD : []), ...own])].map((w) => w.replace(/[^a-z0-9]/g, '')).filter(Boolean);
+}
+// returns the bad words found and a version with those words hidden behind stars
+// a user name has no spaces, so a bad word can sit inside it ("fuckjoe"); short words only count when they are the whole name
+function badUsername(nr) {
+  const plain = plainText(nr).replace(/[^a-z0-9]/g, '');
+  return !!plain && badWords().some((w) => plain === w || (w.length >= 4 && plain.includes(w)));
+}
+function moderate(text) {
+  text = String(text || '');
+  const list = badWords();
+  if (!text || !list.length) return { hits: [], masked: text };
+  const src = `(^|[^a-z0-9])(${list.join('|')})(s|en|je|jes)?(?=$|[^a-z0-9])`;
+  const hits = [];
+  plainText(text).replace(new RegExp(src, 'gi'), (all, pre, w) => { hits.push(w); return all; });
+  if (!hits.length) return { hits: [], masked: text };
+  // hide the words in the original text; a disguised spelling (k4nker, f u c k) is found above but cannot be located here: then hide it all
+  let masked = text.replace(new RegExp(src, 'gi'), (all, pre, w, suf) => pre + '*'.repeat(w.length + (suf || '').length));
+  if (masked === text) masked = '[bericht verborgen]';
+  return { hits: [...new Set(hits)], masked };
+}
+const activeBlocks = () => { const now = Date.now(); return state.blocked.filter((b) => !b.until || b.until > now); };
+const personalIp = (ip) => !!ip && ip !== 'proxied' && normIp(ip) !== '127.0.0.1'; // the door screen, a tunnel or a proxy shares one address: never block or limit on that
+function isBlocked(ip, nr) {
+  const nrv = nr ? String(nr).toLowerCase() : '';
+  return activeBlocks().some((b) => (b.kind === 'ip' && personalIp(ip) && b.value === normIp(ip)) || (b.kind === 'nr' && nrv && b.value === nrv));
+}
+const BELL_TONES = ['classic', 'soft', 'double', 'chime', 'digital', 'custom'], REPLY_TONES = ['soft', 'classic', 'chime', 'none'];
+const visitLog = new Map();
 
 const lastVisit = new Map();
 const lookups = new Map();
@@ -1127,9 +1328,16 @@ function handleVisit(req, b) {
   // light flood protection (the door screen is one device, so keep this short)
   if (now - (lastVisit.get(ip) || 0) < 1200) throw Object.assign(new Error('Een moment…'), { code: 429 });
 
+  const via = b.via === 'phone' ? 'phone' : 'door'; // the door screen is one shared device; phones are one person each
+  const mod = state.settings.moderation;
+  if (isBlocked(ip, b.nr)) throw Object.assign(new Error('Dit kan nu even niet — probeer het later nog eens.'), { code: 429 });
+  if (via === 'phone' && personalIp(ip)) {
+    const recent = (visitLog.get(ip) || []).filter((t) => now - t < 3600e3);
+    if (recent.length >= mod.maxPerHour) throw Object.assign(new Error('Je hebt het vaak geprobeerd — probeer het over een uurtje nog eens.'), { code: 429 });
+  }
   const v = state.settings.visitors;
   const view = computeView(now);
-  const allowed = { bell: v.doorbell, reason: v.reasons, appointment: v.appointments, message: v.messages };
+  const allowed = { bell: v.doorbell, reason: v.reasons, appointment: v.appointments, message: v.messages, callback: v.callback };
   if (!allowed[b.type]) throw bad('Die optie staat uit');
   if (b.type === 'bell' && view.mode !== 'open' && !v.bellWhenBlocked) throw bad('De bel staat nu uit — kies een reden');
   if (b.type === 'bell' && now - lastBellAt < BELL_COOLDOWN) {
@@ -1138,10 +1346,16 @@ function handleVisit(req, b) {
   }
   if (b.type === 'message' && !str(b.message) && !str(b.topic)) throw bad('Kies een onderwerp of typ je vraag');
   if (b.type === 'appointment' && !(ts(b.at) > now)) throw bad('Kies een tijd');
+  const phone = str(b.phone, 24).replace(/\s+/g, ' ');
+  if (b.type === 'callback') {
+    if (!/^[0-9+\-() ]{6,20}$/.test(phone)) throw bad('Dat telefoonnummer klopt niet');
+    if (!str(b.name, 60) && !(b.nr)) throw bad('Vul je naam in');
+  }
 
   // a known number fills in name and e-mail (looked up here, never trusted from the browser)
   const person = b.nr ? state.people.find((x) => x.nr.toLowerCase() === str(b.nr, 20).toLowerCase()) : null;
   if (b.nr && !person) throw bad('Dat nummer kennen we niet');
+  if (person && person.pending) throw bad('Je profiel wacht nog op goedkeuring.');
   const typedEmail = str(b.email, 120);
   if (typedEmail && !isEmail(typedEmail)) throw bad('Dat e-mailadres klopt niet');
   const r = {
@@ -1149,11 +1363,25 @@ function handleVisit(req, b) {
     topic: str(b.topic, 60), nr: person ? person.nr : '',
     email: b.mail === false ? '' : person ? person.email : typedEmail,
     at: b.type === 'appointment' ? ts(b.at) : null,
+    phone: b.type === 'callback' ? phone : '', when: b.type === 'callback' ? str(b.when, 40) : '',
+    ip, via,
     statusAtTime: view.label, createdAt: now, state: 'new', reply: '', repliedAt: 0,
   };
   if (b.type === 'appointment' && !r.name) throw bad('Vul je naam in');
+  if (mod.filter) { // the bad-word filter looks at everything a visitor typed
+    const flags = [];
+    for (const k of ['name', 'message', 'reason', 'when']) {
+      const m = moderate(r[k]);
+      if (!m.hits.length) continue;
+      flags.push(...m.hits);
+      if (mod.action === 'block') throw bad('Dit bericht kan niet verstuurd worden — zeg het iets vriendelijker.');
+      if (mod.action === 'mask') r[k] = m.masked;
+    }
+    if (flags.length) r.flagged = [...new Set(flags)].slice(0, 10);
+  }
   if (view.mode === 'closed' && state.settings.closedReply) Object.assign(r, { reply: state.settings.closedReply, repliedAt: now, autoReplied: true });
   lastVisit.set(ip, now);
+  visitLog.set(ip, [...(visitLog.get(ip) || []).filter((t) => now - t < 3600e3), now]);
   if (r.type === 'bell') lastBellAt = now;
   state.requests.unshift(r);
   state.requests.length = Math.min(state.requests.length, 300);
@@ -1215,6 +1443,13 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true });
     }
     if (req.method === 'GET' && p === '/api/slots') return send(res, 200, { slots: freeSlots() });
+    if (req.method === 'GET' && p === '/api/bell-sound') {
+      const b = state.customBell;
+      if (!b) return send(res, 404, { error: 'Geen eigen beltoon' });
+      const buf = Buffer.from(b.b64, 'base64');
+      res.writeHead(200, { 'Content-Type': b.mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=3600' });
+      return res.end(buf);
+    }
     if (req.method === 'POST' && p === '/api/lookup') {
       const ip = clientIp(req);
       const hits = (lookups.get(ip) || []).filter((t) => Date.now() - t < 60e3);
@@ -1222,11 +1457,13 @@ const server = http.createServer(async (req, res) => {
       lookups.set(ip, [...hits, Date.now()]);
       const nr = str((await readBody(req)).nr, 20).toLowerCase();
       const x = state.people.find((y) => y.nr.toLowerCase() === nr);
+      if (x && x.pending) return send(res, 200, { found: false, pending: true });
       return send(res, 200, x ? { found: true, name: x.name, email: mailOn() && x.email ? maskEmail(x.email) : '' } : { found: false });
     }
     if (req.method === 'POST' && p === '/api/profile') {
       // visitors make their own profile: username + name + e-mail, so every question can be filled in with one tap
       const ip = clientIp(req);
+      if (isBlocked(ip, '')) return send(res, 429, { error: 'Dit kan nu even niet — probeer het later nog eens.' });
       const hits = (profileHits.get(ip) || []).filter((t) => Date.now() - t < 3600e3);
       if (hits.length >= 5) return send(res, 429, { error: 'Je hebt net al een paar profielen gemaakt — probeer het later nog eens' });
       const b = await readBody(req);
@@ -1234,14 +1471,16 @@ const server = http.createServer(async (req, res) => {
       if (!/^[a-z0-9._-]{3,20}$/.test(nr)) throw bad('Gebruikersnaam: 3 tot 20 tekens (letters, cijfers, punt, streepje)');
       if (!name) throw bad('Vul je naam in');
       if (email && !isEmail(email)) throw bad('Dat e-mailadres klopt niet');
+      if (state.settings.moderation.filter && (badUsername(nr) || moderate(name).hits.length)) throw bad('Kies een andere naam of gebruikersnaam.');
       if (state.people.some((x) => x.nr.toLowerCase() === nr)) throw bad('Die gebruikersnaam is al bezet — kies een andere');
       if (state.people.length >= 2000) throw bad('De lijst met profielen is vol');
-      state.people.push({ id: newId(), nr, name, email, note: 'Zelf aangemaakt', self: true });
+      const pending = !!state.settings.moderation.profileApproval;
+      state.people.push({ id: newId(), nr, name, email, note: 'Zelf aangemaakt', self: true, ...(pending ? { pending: true } : {}) });
       state.peopleRev = (state.peopleRev || 0) + 1;
       profileHits.set(ip, [...hits, Date.now()]);
       log('visit', `Nieuw profiel: ${name} (${nr})`);
       changed();
-      return send(res, 200, { ok: true, nr });
+      return send(res, 200, { ok: true, nr, pending: !!state.settings.moderation.profileApproval });
     }
     if (req.method === 'POST' && p === '/api/visit') return send(res, 200, handleVisit(req, await readBody(req)));
 

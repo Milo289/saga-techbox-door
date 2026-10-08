@@ -123,6 +123,15 @@ Emergency exit from any program: **Ctrl/Cmd + Alt + Shift + M** lets go of the m
 - **Desktop app (Windows, macOS, Linux):** in the control panel click your name → **Account wisselen** or **Server of IP wijzigen…**; the login screen has **Server, IP of account wijzigen**; and while the app is still "Verbinden met de deurserver…" that page has the same button. In *Instellingen* there is **Andere account gebruiken**.
 - **Door screen in the desktop app:** click five times quickly in the top-left corner to open the settings (invisible to visitors); Ctrl/Cmd + Shift + S still works.
 
+## Moderation and more (version 2.4)
+- **Moderation** (*Instellingen → Moderatie*): a filter for bad words (built-in list plus your own words; the word is hidden with stars, only marked, or the message is refused), block a visitor from *Bezoekers → Modereren* (for an hour, a day, a week or for ever, by profile or by phone), a limit per phone per hour, new profiles approved by you first, and deleting messages. The door screen itself is shared by everybody and can never be blocked or limited. Behind a tunnel, set `TRUST_PROXY=1` so the server sees each phone's own address.
+- **Receptionist role:** sees and answers visitors, nothing else.
+- **Callback requests** (*Terugbellen*): an extra button on the door screen (off by default, switch on under *Bezoekers*); visitors leave a name, a number and when it suits.
+- **Absence mode** (*Instellingen → Afwezig*): closed until a date, with your own message.
+- **Own ringtones** (*Ontwerp → Beltonen*): five built-in sounds, or upload your own (mp3/wav/ogg/m4a, up to 400 kB).
+- **Light and dark by the clock**, **weather** (Open-Meteo, free, no key) and a **QR code** that opens the visitor page on the visitor's own phone (*Ontwerp → Extra's op het scherm*).
+- **Evening summary by mail** (*Instellingen → E-mail*), and a one-click topic maker for phone notifications through ntfy.
+
 ## Quality
 `npm test` runs 29 automatic tests (accounts and rights, the screen lock, visitors and profiles, design texts/colours/layout/blocks, safe saving and recovery, the live connection, the updater). They run on Windows, macOS and Linux before every release.
 The server also sends security headers, only lets its own pages be shown in a frame, and saves the very last change even when it is stopped at once.
