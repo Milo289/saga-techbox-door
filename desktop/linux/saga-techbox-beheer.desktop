@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Saga Techbox Beheer
+Comment=Beheer de deur: status, bezoekers, energie
+Exec=SagaTechboxBeheer
+Icon=saga-techbox-beheer
+Categories=Utility;Office;
+Terminal=false

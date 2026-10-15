@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "2.6.1"
+    MARKETING_VERSION: "2.7.0"
     CURRENT_PROJECT_VERSION: "1"
 targetTemplates:
   App:
@@ -82,11 +82,49 @@ targets:
       path: App/Info-Dev.plist
       properties:
         CFBundleDisplayName: Deur Dev
+  # the Mac app: its own window with a sidebar and a menu bar item, sharing the server code with the iPhone app
+  DeurBeheerMac:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Mac
+      - path: App/Api.swift
+      - path: App/Store.swift
+      - path: App/Models.swift
+      - path: App/JSON.swift
+      - path: App/Keychain.swift
+      - path: App/Prefs.swift
+      - path: App/Theme.swift
+      - path: App/Discovery.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: nl.sagatechbox.beheer.mac
+        PRODUCT_NAME: DeurBeheer
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Deur Beheer
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Deur Beheer maakt verbinding met jouw deurserver in het netwerk.
+        INFOPLIST_KEY_NSHumanReadableCopyright: Saga Techbox
+        MARKETING_VERSION: "2.7.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_APP_SANDBOX: NO
+        SWIFT_VERSION: "5.0"
 schemes:
   DeurBeheer:
     build:
       targets:
         DeurBeheer: all
+    run:
+      config: Debug
+  DeurBeheerMac:
+    build:
+      targets:
+        DeurBeheerMac: all
     run:
       config: Debug
   DeurBeheerDev:

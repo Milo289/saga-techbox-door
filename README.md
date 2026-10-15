@@ -236,3 +236,17 @@ Alles hieronder staat standaard **uit** en kost niets.
 - **Opstarten:** kies wat de deur laat zien na een herstart (openingstijden, open, gesloten of bezet), en in de desktop-app: even wachten na het opstarten en het bedieningspaneel alleen in het icoon bij de klok starten.
 - **RFID:** kaartjes en sleutelhangers werken naast NFC (`POST /api/door/rfid`).
 - **ISO uitproberen zonder tweede computer:** zie `linux-iso/README.md` (`test-vm.sh`, VirtualBox, UTM).
+
+## Versie 2.7.0 — eigen beheer-apps (geen webpagina)
+Voor elk systeem is er nu een echt programma dat verbindt met de deurserver. Ze doen hetzelfde (status, bezoekers, beheer met Energie en Controle, account), maar zien eruit en voelen aan als een app van dat systeem.
+
+| Systeem | Bestand bij de release | Wat het is |
+|---|---|---|
+| **Mac** | `Saga-Techbox-Beheer-Mac.dmg` | SwiftUI-app met zijbalk, menubalk-icoon dat de status toont (kleur + rode stip bij nieuwe bezoekers), sneltoetsen ⌥⌘1/2/3 voor Open/Gesloten/Bezet, Instellingen op ⌘, en openen bij inloggen |
+| **Windows** | `Saga-Techbox-Beheer-Windows-x64.zip` (of `-Windows-ARM.zip`) | Een los programma (.exe), blijft in het systeemvak, inlog versleuteld met je Windows-account |
+| **Linux** | `Saga-Techbox-Beheer-Linux-x64.tar.gz` (of `-Linux-ARM64`) | Zelfde programma; uitpakken en `./install.sh` (zet het in je eigen map, met menu-snelkoppeling) |
+| **iPhone en iPad** | `Saga-Techbox-Beheer-iOS-unsigned.ipa` | Bestond al; heeft nu ook de Controle-lijst |
+
+De Electron-app blijft bestaan voor wie de server op die computer wil draaien of een deurscherm wil maken. De beheer-apps zijn alleen het bedieningspaneel.
+
+**Eerste keer starten:** de apps zijn niet door Apple of Microsoft ondertekend (dat kost geld per jaar). Mac: rechtsklik op de app → Open (of `xattr -dr com.apple.quarantine "/Applications/Deur Beheer.app"`). Windows: “Meer info” → “Toch uitvoeren”. Zoek de server met de knop “Zoeken” of typ het adres.

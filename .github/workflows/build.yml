@@ -72,6 +72,16 @@ jobs:
             xcodebuild -project DeurBeheer.xcodeproj -scheme $scheme -configuration Debug -sdk iphonesimulator \
               -derivedDataPath build-sim CODE_SIGNING_ALLOWED=NO build
           done
+      - name: Build the Mac app (own window with a sidebar and a menu bar item)
+        working-directory: ios
+        run: |
+          xcodebuild -project DeurBeheer.xcodeproj -scheme DeurBeheerMac -configuration Release -derivedDataPath build-mac \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          APP=build-mac/Build/Products/Release/DeurBeheer.app
+          codesign --force --deep -s - "$APP"
+          rm -rf dmg && mkdir dmg && cp -R "$APP" "dmg/Deur Beheer.app" && ln -s /Applications dmg/Applications
+          hdiutil create -volname "Saga Techbox Beheer" -srcfolder dmg -ov -format UDZO ../Saga-Techbox-Beheer-Mac.dmg
+          ls -la ../*.dmg
       - name: Make the .ipa files
         working-directory: ios
         run: |
@@ -89,10 +99,46 @@ jobs:
           path: |
             Saga-Techbox-Beheer-iOS-unsigned.ipa
             Saga-Techbox-Dev-iOS-unsigned.ipa
+            Saga-Techbox-Beheer-Mac.dmg
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: win-x64, os: windows-latest, name: Windows-x64 }
+          - { rid: win-arm64, os: windows-latest, name: Windows-ARM }
+          - { rid: linux-x64, os: ubuntu-latest, name: Linux-x64 }
+          - { rid: linux-arm64, os: ubuntu-latest, name: Linux-ARM64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build the app (a real desktop program, not a web page)
+        working-directory: desktop
+        run: dotnet publish SagaTechboxBeheer.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o out
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path desktop/out/SagaTechboxBeheer.exe -DestinationPath Saga-Techbox-Beheer-${{ matrix.name }}.zip
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir pack && cp desktop/out/SagaTechboxBeheer pack/ && cp desktop/linux/* pack/ && cp desktop/Assets/icon.png pack/saga-techbox-beheer.png
+          tar -czf Saga-Techbox-Beheer-${{ matrix.name }}.tar.gz -C pack .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Saga-Techbox-Beheer-${{ matrix.name }}
+          if-no-files-found: error
+          path: |
+            Saga-Techbox-Beheer-${{ matrix.name }}.zip
+            Saga-Techbox-Beheer-${{ matrix.name }}.tar.gz
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, ios]
+    needs: [build, ios, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write

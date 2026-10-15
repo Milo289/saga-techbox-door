@@ -1,5 +1,8 @@
 import SwiftUI
 import AudioToolbox
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+import AppKit
+#endif
 
 /// Everything you can switch on or off in the app itself (Instellingen → Deze app).
 enum Pref {
@@ -44,17 +47,32 @@ extension UserDefaults {
 
 enum Haptics {
     static var enabled: Bool { UserDefaults.standard.bool(forKey: Pref.haptics) }
+    #if os(iOS)
     static func success() { if enabled { UINotificationFeedbackGenerator().notificationOccurred(.success) } }
     static func warning() { if enabled { UINotificationFeedbackGenerator().notificationOccurred(.warning) } }
     static func error() { if enabled { UINotificationFeedbackGenerator().notificationOccurred(.error) } }
     static func tap() { if enabled { UIImpactFeedbackGenerator(style: .light).impactOccurred() } }
     static func heavy() { if enabled { UIImpactFeedbackGenerator(style: .heavy).impactOccurred() } }
+    #else
+    // a Mac trackpad has a light tap feedback of its own
+    private static func buzz() { if enabled { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) } }
+    static func success() { buzz() }
+    static func warning() { buzz() }
+    static func error() { buzz() }
+    static func tap() { buzz() }
+    static func heavy() { buzz() }
+    #endif
 }
 
 enum Sounds {
     static var enabled: Bool { UserDefaults.standard.bool(forKey: Pref.sounds) }
+    #if os(iOS)
     static func bell() { if enabled { AudioServicesPlaySystemSound(1013) } }
     static func message() { if enabled { AudioServicesPlaySystemSound(1007) } }
+    #else
+    static func bell() { if enabled { NSSound(named: "Glass")?.play() } }
+    static func message() { if enabled { NSSound(named: "Pop")?.play() } }
+    #endif
 }
 
 /// The three door colours.
@@ -88,8 +106,12 @@ extension Color {
         self.init(red: Double((v >> 16) & 255) / 255, green: Double((v >> 8) & 255) / 255, blue: Double(v & 255) / 255)
     }
     var hexString: String {
+        #if os(iOS)
         let u = UIColor(self); var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         u.getRed(&r, green: &g, blue: &b, alpha: &a)
+        #else
+        let u = NSColor(self).usingColorSpace(.sRGB) ?? .gray; let r = u.redComponent, g = u.greenComponent, b = u.blueComponent
+        #endif
         return String(format: "#%02x%02x%02x", Int(r * 255), Int(g * 255), Int(b * 255))
     }
 }

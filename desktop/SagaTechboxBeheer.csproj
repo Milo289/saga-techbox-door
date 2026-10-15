@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SagaTechboxBeheer</AssemblyName>
+    <RootNamespace>SagaTechbox</RootNamespace>
+    <Version>2.7.0</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.1.5" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.1.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.5" />
+    <PackageReference Include="Avalonia.Headless" Version="11.1.5" />
+    <PackageReference Include="Avalonia.Skia" Version="11.1.5" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Assets/icon.png" />
+  </ItemGroup>
+</Project>

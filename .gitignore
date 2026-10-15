@@ -12,3 +12,10 @@ ios/DeurBeheer.xcodeproj/
 ios/App/Info.plist
 *.ipa
 ios/App/Info-Dev.plist
+
+desktop/bin/
+desktop/obj/
+desktop/out/
+ios/build-mac/
+iso-build/
+*.iso

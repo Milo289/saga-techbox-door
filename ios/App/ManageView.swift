@@ -31,6 +31,19 @@ struct ManageView: View {
                         }
                     }
                 }
+                if !store.state.health.array.isEmpty {
+                    Section("Controle") {
+                        ForEach(Array(store.state.health.array.enumerated()), id: \.offset) { _, h in
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: h.ok.bool ? "checkmark.circle.fill" : "exclamationmark.circle.fill").foregroundStyle(h.ok.bool ? Palette.open : Palette.busy)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(h.text.str)
+                                    if !h.ok.bool { Text(h.tip.str).font(.caption).foregroundStyle(.secondary) }
+                                }
+                            }
+                        }
+                    }
+                }
                 Section("Openen") {
                     Button { showWeb = true } label: { Label("Volledig webpaneel (Ontwerp, teksten, indeling…)", systemImage: "safari") }
                     Button { showDoor = true } label: { Label("Deurscherm bekijken", systemImage: "rectangle.portrait") }
