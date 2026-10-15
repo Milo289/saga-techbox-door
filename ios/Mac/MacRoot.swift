@@ -17,11 +17,18 @@ struct MacRoot: View {
         #endif
         return .status
     }()
-    @State private var configured = DoorApi.configured() != nil && Keychain.load() != nil
+    /// nil while we look in the Keychain (done off the main thread: macOS may ask permission there, and the window must not freeze meanwhile)
+    @State private var configured: Bool?
 
     var body: some View {
         Group {
-            if !configured {
+            if configured == nil {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("Even laden…").foregroundStyle(.secondary)
+                    Text("Vraagt je Mac toestemming om je inlog uit de Sleutelhanger te lezen? Kies “Altijd toestaan”.").font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if configured == false {
                 MacConnect(store: store) { configured = true; store.restart() }
             } else {
                 NavigationSplitView {
@@ -51,6 +58,7 @@ struct MacRoot: View {
                 .tint(Palette.accent)
             }
         }
+        .task { configured = await Task.detached { DoorApi.configured() != nil && Keychain.load() != nil }.value }
     }
 }
 
@@ -135,6 +143,7 @@ struct MacConnect: View {
         do {
             _ = try await DoorApi(base: url).login(username: name, password: pass)
             guard Keychain.save(username: name, password: pass) else { error = "Opslaan in de Sleutelhanger mislukte."; return }
+            UserDefaults.standard.set(name, forKey: "accountName")
             UserDefaults.standard.set(url.absoluteString, forKey: "serverURL")
             pass = ""; done()
         } catch { self.error = error.localizedDescription }

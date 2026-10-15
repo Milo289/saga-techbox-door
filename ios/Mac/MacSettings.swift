@@ -22,7 +22,7 @@ struct MacSettings: View {
         TabView {
             Form {
                 Section("Nu") {
-                    LabeledContent("Account", value: store.state.me.name.string ?? Keychain.load()?.username ?? "—")
+                    LabeledContent("Account", value: store.state.me.name.string ?? UserDefaults.standard.string(forKey: "accountName") ?? "—")
                     LabeledContent("Server", value: UserDefaults.standard.string(forKey: "serverURL") ?? "—")
                     LabeledContent("Verbinding", value: connection)
                 }
@@ -90,6 +90,7 @@ struct MacSettings: View {
         do {
             _ = try await DoorApi(base: base).login(username: name, password: pass)
             guard Keychain.save(username: name, password: pass) else { message = "Opslaan in de Sleutelhanger mislukte."; return }
+            UserDefaults.standard.set(name, forKey: "accountName")
             UserDefaults.standard.set(base.absoluteString, forKey: "serverURL"); pass = ""; store.restart(); message = "Ingelogd als \(name)"
         } catch { message = error.localizedDescription }
     }

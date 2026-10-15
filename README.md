@@ -237,7 +237,7 @@ Alles hieronder staat standaard **uit** en kost niets.
 - **RFID:** kaartjes en sleutelhangers werken naast NFC (`POST /api/door/rfid`).
 - **ISO uitproberen zonder tweede computer:** zie `linux-iso/README.md` (`test-vm.sh`, VirtualBox, UTM).
 
-## Versie 2.7.0 — eigen beheer-apps (geen webpagina)
+## Versie 2.7.1 — eigen beheer-apps (geen webpagina)
 Voor elk systeem is er nu een echt programma dat verbindt met de deurserver. Ze doen hetzelfde (status, bezoekers, beheer met Energie en Controle, account), maar zien eruit en voelen aan als een app van dat systeem.
 
 | Systeem | Bestand bij de release | Wat het is |
