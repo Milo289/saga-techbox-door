@@ -1392,7 +1392,7 @@
         try { blocks.push({ id: newId(), type: 'image', src: await imageToData(f), w: 24, size: 4, color: '', bold: false, text: '' }); S.blocks = blocks; redraw(); }
         catch (e) { toast(e.message || 'Deze afbeelding kan niet gebruikt worden'); }
       };
-      const keepDraft = () => { S.blocks = blocks; Object.assign(S.settings, { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads, startup: st.startup }); }; // so a redraw keeps what you typed
+      const keepDraft = () => { S.blocks = blocks; Object.assign(S.settings, { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads, startup: st.startup, watch: st.watch }); }; // so a redraw keeps what you typed
       const textsCard = h('div', { class: 'card' }, h('h2', {}, 'Teksten'),
         h('p', { class: 'muted', style: 'margin-top:0' }, 'Elk woord op het deurscherm kun je zelf bepalen. Laat een veld leeg voor de standaardtekst (staat grijs in het veld). Tekens als {s} of {name} worden door het scherm ingevuld: laat ze staan waar ze horen.'),
         ...Object.entries(groups).map(([g, items], i) => h('details', { open: i === 0, style: 'margin-top:10px' }, h('summary', {}, g),
@@ -1446,7 +1446,7 @@
         frameBox);
       setTimeout(drawPreview, 0);
       const save = async () => {
-        await api('/api/settings', { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads, startup: st.startup });
+        await api('/api/settings', { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads, startup: st.startup, watch: st.watch });
         await api('/api/blocks', { blocks });
         S = await api('/api/admin-state'); toast('Opgeslagen — staat nu op de deur'); renderAll(true);
       };
@@ -1596,6 +1596,14 @@
           h('div', { class: 'form' },
             h('label', {}, 'Status bij opstarten'), sel(st.startup, 'status', [['hours', 'Volg de openingstijden'], ['open', 'Open'], ['closed', 'Gesloten'], ['busy', 'Bezet']]),
             h('label', {}, 'Bericht'), text(st.startup, 'message', { placeholder: 'optioneel', maxlength: 140 }))),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Waarschuwingen'),
+          h('p', { class: 'muted', style: 'margin-top:0' }, 'Als er iets stukgaat (opslaan lukt niet, schijf vol, een fout in de server) krijg je een melding op je telefoon of per e-mail, en het staat bovenaan in de Controle-lijst. Dit gebruikt de meldingen die je al hebt ingesteld.'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Deurscherm weg?'), h('div', { class: 'row' }, h('input', { type: 'number', min: 0, max: 1440, value: st.watch.screenMinutes, style: 'width:90px', oninput: (e) => { st.watch.screenMinutes = Number(e.target.value) || 0; } }), h('span', { class: 'muted' }, 'minuten zonder verbonden deurscherm (0 = niet waarschuwen)')),
+            h('label', {}, 'Proberen'), h('div', { class: 'row' },
+              h('button', { class: 'sm', onclick: async () => { try { await api('/api/alerts/test', {}); toast('Testwaarschuwing verstuurd'); } catch {} } }, 'Stuur een testwaarschuwing'),
+              h('button', { class: 'sm ghost', onclick: async () => { try { await api('/api/alerts/clear', {}); toast('Gewist'); } catch {} } }, 'Waarschuwingen wissen')))),
 
         h('div', { class: 'card' }, h('h2', {}, 'Afwezig'),
           h('p', { class: 'muted', style: 'margin-top:0' }, 'Zet de deur tot een datum op Gesloten, met je eigen bericht. Daarna gaat alles vanzelf weer door.'),

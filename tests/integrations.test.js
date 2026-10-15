@@ -86,3 +86,17 @@ test('devices, NFC unlock and camera events work through the API', async (t) => 
     assert.ok(!exp.text.includes('geheim'));
   });
 });
+
+test('the camera picture address only passes on pictures (no reading of other pages)', async (t) => {
+  const srv = await startServer({ patch: true });
+  t.after(() => srv.stop());
+  const tok = await login(srv);
+  await call(srv, 'POST', '/api/integrations/save', { cameras: [{ id: 'c1', name: 'Test', snapshotUrl: `${srv.url}/healthz` }] }, tok);
+  const r = await call(srv, 'GET', '/api/camera/snapshot?id=c1', undefined, tok);
+  assert.equal(r.status, 400, r.text);
+  assert.match(r.text, /geen afbeelding/);
+  await call(srv, 'POST', '/api/integrations/save', { cameras: [{ id: 'c2', name: 'Icoon', snapshotUrl: `${srv.url}/icon-180.png` }] }, tok);
+  const ok = await call(srv, 'GET', '/api/camera/snapshot?id=c2', undefined, tok);
+  assert.equal(ok.status, 200, ok.text);
+  assert.match(ok.json.type, /^image\//);
+});

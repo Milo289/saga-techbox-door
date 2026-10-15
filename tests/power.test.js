@@ -136,3 +136,12 @@ test('Windows: the wake task can really be created and removed', { skip: !isWinA
   } finally { spawnSync('powershell', ['-NoProfile', '-Command', "Unregister-ScheduledTask -TaskName 'SagaTechboxDeur-Wake' -Confirm:$false -ErrorAction SilentlyContinue"]); }
   assert.equal(power.wakeStatus().installed, false);
 });
+
+test('screen-on is still done when the computer woke up a few minutes late, but shutting down is never late', () => {
+  const p = power.clean({ enabled: true, days: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, { screenOff: '17:00', screenOn: '07:30', off: '17:30', on: '07:00' }])) });
+  const at = (h, m) => new Date(2026, 9, 14, h, m, 30).getTime(); // a Wednesday
+  assert.deepEqual(power.dueEvents(p, at(7, 36), {}), ['screenOn'], 'six minutes late: still switched on');
+  assert.deepEqual(power.dueEvents(p, at(8, 5), {}), [], 'half an hour late: too late');
+  assert.deepEqual(power.dueEvents(p, at(17, 33), {}), [], 'a shutdown three minutes late is not done');
+  assert.deepEqual(power.dueEvents(p, at(17, 3), {}), ['screenOff']);
+});

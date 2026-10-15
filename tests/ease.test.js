@@ -58,3 +58,31 @@ test('the start screen: addresses are public and the page is served', async (t) 
   assert.equal(page.status, 200);
   assert.match(page.text, /Bedieningspaneel openen/);
 });
+
+test('warnings: raised, shown in the checklist, cleared; pages are compressed and cached', async (t) => {
+  const srv = await startServer({ patch: true });
+  t.after(() => srv.stop());
+  const tok = await login(srv);
+  const st = async () => (await call(srv, 'GET', '/api/admin-state', undefined, tok)).json;
+  assert.equal((await st()).alerts.length, 0);
+  assert.equal((await call(srv, 'POST', '/api/alerts/test', {}, tok)).status, 200);
+  let s = await st();
+  assert.equal(s.alerts[0].kind, 'test');
+  assert.ok(s.health.some((h) => h.id === 'alert-test' && !h.ok), 'the warning is at the top of the checklist');
+  assert.equal((await call(srv, 'POST', '/api/alerts/clear', {}, tok)).status, 200);
+  s = await st();
+  assert.ok(!s.health.some((h) => h.id === 'alert-test'), 'cleared');
+  // the watch setting is kept
+  await call(srv, 'POST', '/api/settings', { watch: { screenMinutes: 15 } }, tok);
+  assert.equal((await st()).settings.watch.screenMinutes, 15);
+
+  const raw = await fetch(`${srv.url}/admin`, { headers: { 'Accept-Encoding': 'gzip' } });
+  assert.equal(raw.headers.get('content-encoding'), 'gzip');
+  const etag = raw.headers.get('etag');
+  assert.ok(etag);
+  assert.match(await raw.text(), /Bedieningspaneel/); // fetch unpacks it by itself: it really was valid gzip
+  const again = await fetch(`${srv.url}/admin`, { headers: { 'If-None-Match': etag } });
+  assert.equal(again.status, 304);
+  const plain = await fetch(`${srv.url}/admin`, { headers: { 'Accept-Encoding': 'identity' } });
+  assert.equal(plain.headers.get('content-encoding'), null);
+});

@@ -58,7 +58,9 @@ function dueEvents(power, now, fired = {}) {
     if (!cfg[kind]) continue;
     const [h, m] = cfg[kind].split(':').map(Number);
     const at = new Date(d); at.setHours(h, m, 0, 0);
-    if (now >= at.getTime() && now - at.getTime() < 120000 && fired[kind] !== key) out.push(kind);
+    // "screen on" may be late (the computer woke up and the server started a few minutes after the set time); shutting down must never be late
+    const window = kind === 'screenOn' ? 30 * 60000 : kind === 'screenOff' ? 5 * 60000 : 2 * 60000;
+    if (now >= at.getTime() && now - at.getTime() < window && fired[kind] !== key) out.push(kind);
   }
   return out;
 }

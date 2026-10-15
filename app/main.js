@@ -34,6 +34,18 @@ if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 // ---------- settings of this computer ----------
 const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
+// A crash must never leave an error box on a door screen nobody can click. Write it to a file instead (kept small) and carry on.
+const CRASH_LOG = path.join(app.getPath('userData'), 'crash.log');
+function logCrash(kind, e) {
+  try {
+    const line = `${new Date().toISOString()} ${kind}: ${(e && e.stack) || e}\n`;
+    if (fs.existsSync(CRASH_LOG) && fs.statSync(CRASH_LOG).size > 200 * 1024) fs.renameSync(CRASH_LOG, CRASH_LOG + '.old');
+    fs.appendFileSync(CRASH_LOG, line);
+  } catch {}
+}
+process.on('uncaughtException', (e) => logCrash('uncaughtException', e));
+process.on('unhandledRejection', (e) => logCrash('unhandledRejection', e));
+app.on('child-process-gone', (_e, d) => logCrash('child-process-gone', JSON.stringify(d)));
 const DEFAULTS = {
   role: null, serverMode: 'here', url: 'http://localhost:8080', port: 8080, pin: '', autostart: true,
   zoom: 1, alwaysOnTop: false, tray: true, closeToTray: false, hotkeys: false,
@@ -115,7 +127,9 @@ function loadWithRetry(w, url) {
     w.loadURL(waiting).catch(() => {});
     setTimeout(() => { if (!w.isDestroyed()) w.loadURL(url).catch(() => {}); }, 3000);
   });
-  w.webContents.on('render-process-gone', () => setTimeout(() => { if (!w.isDestroyed()) w.loadURL(url).catch(() => {}); }, 1000));
+  w.webContents.on('render-process-gone', (_e, d) => { logCrash('render-process-gone', JSON.stringify(d)); setTimeout(() => { if (!w.isDestroyed()) w.loadURL(url).catch(() => {}); }, 1000); });
+  // a frozen page (the screen shows the same thing for ever): give it 20 seconds, then reload
+  w.on('unresponsive', () => { logCrash('unresponsive', url); setTimeout(() => { if (!w.isDestroyed() && w.webContents.isLoading() === false) w.webContents.reloadIgnoringCache(); }, 20000); });
   w.webContents.on('did-finish-load', () => { if (!w.isDestroyed() && config.zoom !== 1) w.webContents.setZoomFactor(config.zoom); });
   w.loadURL(url).catch(() => {});
 }

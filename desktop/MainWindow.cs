@@ -38,6 +38,10 @@ public sealed class MainWindow : Window
         Content = BuildFrame();
         C.Changed += () => Dispatcher.UIThread.Post(Redraw);
         ActualThemeVariantChanged += (_, _) => Redraw();
+        // warnings for you: the server lost for more than a minute and a half, and warnings the server raises itself
+        var watch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        watch.Tick += (_, _) => CheckWarnings();
+        watch.Start();
         C.Visit += v => Dispatcher.UIThread.Post(() => Toast($"{VisitLabel(v)}: {(DoorClient.Str(v["name"]) is { Length: > 0 } n ? n : "iemand")}"));
         C.Ring += () => Dispatcher.UIThread.Post(() => { Toast("Er is aangebeld"); try { if (!AppSettings.Current.Quiet) Console.Beep(); } catch { } });
         Redraw();
@@ -89,6 +93,23 @@ public sealed class MainWindow : Window
         }
         _content.Content = _page switch { "inbox" => InboxPage(), "manage" => ManagePage(), "settings" => SettingsPage(), "dev" => DevPage(), _ => StatusPage() };
     }
+
+    DateTime? _offlineSince; bool _toldOffline, _firstAlerts = true;
+    readonly HashSet<string> _seenAlerts = new();
+    void CheckWarnings()
+    {
+        if (C.HasState && !C.Live) { _offlineSince ??= DateTime.Now; if (!_toldOffline && DateTime.Now - _offlineSince > TimeSpan.FromSeconds(90)) { _toldOffline = true; Toast("Geen verbinding met de deurserver"); Beep(); } }
+        else { if (_toldOffline && C.Live) Toast("Weer verbonden"); _offlineSince = null; _toldOffline = false; }
+        if (C.State["alerts"] is JsonArray alerts)
+            foreach (var a in alerts)
+            {
+                if (a?["resolvedAt"] != null) continue;
+                var id = DoorClient.Str(a?["id"]);
+                if (_seenAlerts.Add(id) && !_firstAlerts) { Toast("⚠ " + DoorClient.Str(a?["text"])); Beep(); }
+            }
+        if (C.HasState) _firstAlerts = false;
+    }
+    void Beep() { try { if (!AppSettings.Current.Quiet) Console.Beep(); } catch { } }
 
     string VisitLabel(System.Text.Json.Nodes.JsonNode v) => DoorClient.Str(v["type"]) switch { "bell" => "Aangebeld", "appointment" => "Tijd boeken", "message" => "Vraagje", "callback" => "Terugbellen", _ => "Verzoek" };
 

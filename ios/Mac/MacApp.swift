@@ -94,7 +94,45 @@ func statusDot(_ color: Color, badge: Int) -> NSImage {
 }
 
 @MainActor enum MacNotify {
+    private static var bag: [Any] = []
+    private static var offlineTask: Task<Void, Never>?
+    private static var toldOffline = false
+    private static var seenAlerts = Set<String>()
+    private static var firstState = true
+
+    static func post(_ title: String, _ body: String) {
+        let c = UNMutableNotificationContent(); c.title = title; c.body = body; c.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+    }
+
+    /// Warnings for you: the server lost for more than a minute and a half, and warnings the server itself raises (disk full, errors, door screen gone).
+    static func watch(_ store: DoorStore) {
+        bag.append(store.$connection.sink { c in
+            MainActor.assumeIsolated {
+                switch c {
+                case .live:
+                    offlineTask?.cancel(); offlineTask = nil
+                    if toldOffline { toldOffline = false; post("Weer verbonden", "De deurserver is weer bereikbaar.") }
+                case .offline(let m):
+                    guard offlineTask == nil, store.hasState else { return }
+                    offlineTask = Task { try? await Task.sleep(nanoseconds: 90_000_000_000); if !Task.isCancelled { toldOffline = true; post("Geen verbinding met de deurserver", m) } }
+                default: break
+                }
+            }
+        })
+        bag.append(store.$state.sink { s in
+            MainActor.assumeIsolated {
+                for a in s.alerts.array where a.resolvedAt.isNull {
+                    let id = a.id.str
+                    if seenAlerts.insert(id).inserted && !firstState && !Quiet.now { post("Waarschuwing", a.text.str) }
+                }
+                if !s.isNull { firstState = false }
+            }
+        })
+    }
+
     static func setup(_ store: DoorStore) {
+        if bag.isEmpty { watch(store) }
         store.onVisit = { r in
             guard !Quiet.now else { return }
             Sounds.message()

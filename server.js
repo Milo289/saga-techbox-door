@@ -9,6 +9,7 @@ const net = require('net');
 const tls = require('tls');
 const os = require('os');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const integ = require('./integrations.js'); // microcontrollers, door lock + NFC tags, camera events, automations (all opt-in)
 const power = require('./power.js'); // switching the screen / computer off and on by a schedule (opt-in)
 
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS = {
   sound: { bell: 'classic', reply: 'soft', custom: false }, // custom = an own bell sound has been uploaded (the file itself is not in the settings)
   away: { enabled: false, until: '', message: '' }, // absence mode: closed until the end of this date (YYYY-MM-DD)
   weather: { enabled: false, city: '', lat: 0, lon: 0 },
+  watch: { screenMinutes: 0 }, // warn me when no door screen has been connected for this many minutes (0 = off)
   startup: { status: 'hours', message: '' }, // what the door shows after the server (re)starts: follow the opening hours, or open / closed / busy
   downloads: { enabled: false }, // a public page /get where people can download the apps you put in the data/downloads folder
   qr: { enabled: false, url: '' }, // a QR code on the door screen that opens the visitor page on the visitor's own phone
@@ -121,6 +123,7 @@ const freshState = () => ({
   customBell: null, // an own bell sound { mime, b64, at }
   lastDigestDay: '',
   power: power.defaults(), // energy management (see power.js)
+  alerts: [], // warnings: { id, kind, text, at, count, resolvedAt }
   integ: integ.defaults(), devices: [], sightings: [], // see integrations.js
   wakeApplied: 0, // when the wake-up schedule was last put on this computer
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
@@ -334,21 +337,27 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), blocked: cleanBlocked(raw.blocked), customBell: cleanBell(raw.customBell), power: power.clean(raw.power), integ: integ.clean(raw.integ), devices: Array.isArray(raw.devices) ? raw.devices.slice(0, 50) : [], sightings: Array.isArray(raw.sightings) ? raw.sightings.slice(0, 500) : [], system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), blocked: cleanBlocked(raw.blocked), customBell: cleanBell(raw.customBell), power: power.clean(raw.power), alerts: Array.isArray(raw.alerts) ? raw.alerts.slice(0, 30) : [], integ: integ.clean(raw.integ), devices: Array.isArray(raw.devices) ? raw.devices.slice(0, 50) : [], sightings: Array.isArray(raw.sightings) ? raw.sightings.slice(0, 500) : [], system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
 }
 let state = load();
-let saveTimer = null, savePending = false;
+let saveTimer = null, savePending = false, lastBak = 0, saveBroken = false;
 function writeState() {
   savePending = false;
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(state, null, 2));
-    try { if (fs.existsSync(STATE_FILE)) fs.copyFileSync(STATE_FILE, STATE_FILE + '.bak'); } catch {} // the last good copy, in case anything goes wrong
+    fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(state)); // compact: much faster than indented, and nobody reads this file by hand
+    // the last good copy, in case anything goes wrong (at most once a minute: copying the whole file at every change is slow)
+    try { if (fs.existsSync(STATE_FILE) && Date.now() - lastBak > 60e3) { fs.copyFileSync(STATE_FILE, STATE_FILE + '.bak'); lastBak = Date.now(); } } catch {}
     fs.renameSync(STATE_FILE + '.tmp', STATE_FILE);
-  } catch (e) { console.error('save failed:', e.message); }
+    if (saveBroken) { saveBroken = false; setImmediate(() => resolveAlert('save')); }
+  } catch (e) {
+    console.error('save failed:', e.message);
+    saveBroken = true;
+    setImmediate(() => raise('save', `Opslaan lukt niet (${e.message}). Wijzigingen gaan verloren bij een herstart!`, { cooldownMin: 10 }));
+  }
 }
 function save() {
   clearTimeout(saveTimer);
@@ -365,6 +374,44 @@ function log(type, text, by, root) {
   state.history.unshift({ at: Date.now(), type, text: str(text, 300), by: by ?? actor, r: !!(root ?? actorRoot) });
   state.history.length = Math.min(state.history.length, 500);
 }
+
+// ---------- warnings: when something is wrong it is recorded, shown in the control panel and sent to the admin ----------
+const alertCooldown = new Map();
+function raise(kind, text, { cooldownMin = 30, notify = true } = {}) {
+  const now = Date.now();
+  let a = state.alerts.find((x) => x.kind === kind && !x.resolvedAt);
+  if (!a) {
+    a = { id: newId(), kind, text: str(text, 240), at: now, count: 1 };
+    state.alerts.unshift(a); state.alerts.length = Math.min(state.alerts.length, 30);
+    log('waarschuwing', text, 'systeem');
+    save(); setImmediate(broadcast);
+  } else { a.count++; a.text = str(text, 240); }
+  if (notify && now - (alertCooldown.get(kind) || 0) > cooldownMin * 60e3) {
+    alertCooldown.set(kind, now);
+    const msg = `⚠ ${state.settings.name}: ${text}`;
+    notifyExternal(null, msg).catch(() => {});
+    try { if (mailOn() && isEmail(state.settings.mail.adminTo)) sendMail(state.settings.mail.adminTo, `Waarschuwing — ${state.settings.name}`, msg + sign()).catch(() => {}); } catch {}
+  }
+}
+function resolveAlert(kind, quiet) {
+  const a = state.alerts.find((x) => x.kind === kind && !x.resolvedAt);
+  if (!a) return;
+  a.resolvedAt = Date.now();
+  log('waarschuwing', `Opgelost: ${a.text}`, 'systeem');
+  save(); setImmediate(broadcast);
+  if (!quiet) notifyExternal(null, `✔ ${state.settings.name}: opgelost — ${a.text}`).catch(() => {});
+}
+// a crash somewhere must not take the door down: keep running, tell the admin, and only give up when it keeps happening
+const crashes = [];
+function onCrash(label, e) {
+  console.error(label, e && e.stack || e);
+  const now = Date.now(); crashes.push(now);
+  while (crashes.length && now - crashes[0] > 60e3) crashes.shift();
+  try { raise('crash', `Fout in de server: ${(e && e.message) || e}`, { cooldownMin: 15 }); } catch {}
+  if (crashes.length > 15) { console.error('Too many errors in a minute: stopping so that it can restart cleanly.'); flushSave(); process.exit(1); }
+}
+process.on('uncaughtException', (e) => onCrash('uncaughtException', e));
+process.on('unhandledRejection', (e) => onCrash('unhandledRejection', e));
 
 // ---------- what should the door show? ----------
 function hoursState(now) {
@@ -614,6 +661,7 @@ function healthChecks(full) {
   if (full('export')) add('backup', !!state.lastBackupDay, 'Er is een automatische back-up gemaakt', 'Back-ups worden ’s nachts gemaakt; ze verschijnen na de eerste nacht.');
   if (full('power') && state.power.enabled) add('wake', !!state.wakeApplied || !state.power.days || !Object.values(state.power.days).some((d) => d.off && d.on), 'De computer weet wanneer hij weer aan moet', 'Druk bij Energie op “Wekschema zetten”.');
   if (full('unlock') && state.integ.lock.enabled) add('tags', state.integ.lock.tags.length > 0 && !!state.integ.lock.url, 'Het slot heeft een webadres en kaartjes', 'Vul bij Koppelingen het webadres van het slot en minstens één kaartje in.');
+  for (const a of state.alerts.filter((x) => !x.resolvedAt)) out.unshift({ id: 'alert-' + a.kind, ok: false, text: '⚠ ' + a.text, tip: `Sinds ${new Date(a.at).toLocaleString('nl-NL', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}${a.count > 1 ? `, ${a.count}×` : ''}. Verdwijnt vanzelf zodra het weer goed gaat.`, alert: a.id });
   return out;
 }
 function adminState(id) {
@@ -635,6 +683,7 @@ function adminState(id) {
     devices: full('settings') || full('unlock') || full('cameras') ? state.devices : [],
     sightings: full('cameras') ? state.sightings.slice(0, 50) : [],
     health: healthChecks(full),
+    alerts: state.alerts.slice(0, 10),
     people: full('people') ? state.people : [],
     peopleRev: state.peopleRev || 0,
     mailOn: mailOn(),
@@ -656,13 +705,17 @@ function adminState(id) {
     authMode: authMode(),
   };
 }
-function write(c, event, data) {
-  try { c.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch { clients.delete(c); }
+function writeRaw(c, event, json) {
+  try {
+    if (c.res.writableLength > 2 * 1048576) { c.res.destroy(); clients.delete(c); return; } // a client that cannot keep up must not eat the memory of the server
+    c.res.write(`event: ${event}\ndata: ${json}\n\n`);
+  } catch { clients.delete(c); }
 }
+function write(c, event, data) { writeRaw(c, event, JSON.stringify(data)); }
 function broadcast() {
-  const pub = publicState();
+  const pub = JSON.stringify(publicState()); // once, not once per screen
   for (const c of [...clients]) {
-    if (c.role !== 'admin') { write(c, 'state', pub); continue; }
+    if (c.role !== 'admin') { writeRaw(c, 'state', pub); continue; }
     const id = identifyFrom(c.tok, c.pin); // still allowed? (session ended, rights changed, maintenance, network) (session ended, user disabled, rights changed)
     if (!id || gate(id, c.ip)) { try { c.res.end(); } catch {} clients.delete(c); continue; }
     write(c, 'state', adminState(id));
@@ -899,7 +952,12 @@ async function sendDigest() {
 }
 
 function tick() {
+  try { tickInner(); resolveAlert('tick', true); } catch (e) { raise('tick', `De klok van de server liep vast: ${e.message}`, { cooldownMin: 15 }); }
+}
+let tickN = 0, lastScreenSeen = Date.now();
+function tickInner() {
   const now = Date.now();
+  if (tickN++ % 12 === 0) { try { pruneMaps(now); monitors(now); } catch (e) { onCrash('monitors', e); } } // about once a minute
   let dirty = false;
   const m = state.manual;
   if (m && ((m.until && now >= m.until) || (m.expiresAt && now >= m.expiresAt))) {
@@ -955,6 +1013,34 @@ function tick() {
 }
 setInterval(tick, 5000);
 
+// the per-address tables must not grow for ever (one entry per visitor address would be a slow memory leak)
+function pruneMaps(now) {
+  const cut = (m, ms) => { for (const [k, v] of m) { const arr = Array.isArray(v) ? v : [v]; if (!arr.some((t) => now - t < ms)) m.delete(k); } };
+  cut(failures, state.system.blockMinutes * 60e3); cut(visitLog, 3600e3); cut(lastVisit, 3600e3); cut(lookups, 60e3); cut(profileHits, 3600e3);
+  if (alertCooldown.size > 100) alertCooldown.clear();
+}
+// quiet self-checks: disk, memory, event-loop delay, and (if wanted) a door screen that has gone away
+function monitors(now) {
+  try {
+    const st = fs.statfsSync(DATA_DIR);
+    const free = st.bavail * st.bsize, pct = st.blocks ? st.bavail / st.blocks : 1;
+    if (free < 200 * 1048576 || pct < 0.03) raise('disk', `De schijf is bijna vol (${Math.round(free / 1048576)} MB vrij). Opslaan en back-ups kunnen mislukken.`, { cooldownMin: 360 });
+    else if (free > 400 * 1048576 && pct > 0.05) resolveAlert('disk');
+  } catch { /* old Node or no access: skip */ }
+  const rss = process.memoryUsage().rss;
+  if (rss > 900 * 1048576) raise('memory', `De server gebruikt veel geheugen (${Math.round(rss / 1048576)} MB). Een herstart kan helpen.`, { cooldownMin: 360 });
+  else if (rss < 650 * 1048576) resolveAlert('memory', true);
+  if (maxLag > 2000) raise('lag', `De server reageerde ${Math.round(maxLag)} ms te laat. De computer is overbelast.`, { cooldownMin: 120, notify: false });
+  else if (maxLag < 300) resolveAlert('lag', true);
+  maxLag = 0;
+  const screens = [...clients].filter((c) => c.role !== 'admin' && !c.visit).length;
+  if (screens > 0) { lastScreenSeen = now; resolveAlert('screen'); }
+  const mins = Number(state.settings.watch && state.settings.watch.screenMinutes) || 0;
+  if (mins > 0 && now - lastScreenSeen > mins * 60e3) raise('screen', `Er is al ${Math.round((now - lastScreenSeen) / 60e3)} minuten geen deurscherm verbonden. Staat het scherm uit of is het netwerk weg?`, { cooldownMin: 120 });
+}
+let maxLag = 0, lagLast = Date.now();
+setInterval(() => { const n = Date.now(); maxLag = Math.max(maxLag, n - lagLast - 1000); lagLast = n; }, 1000).unref();
+
 // ---------- HTTP ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 function send(res, code, obj) {
@@ -969,14 +1055,27 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
-function serveFile(res, file) {
+// pages are compressed once and kept in memory; the browser asks "has it changed?" and gets a tiny 304 answer (much faster on wifi and on a Pi)
+const fileCache = new Map();
+function serveFile(res, file, req) {
   const full = path.normalize(path.join(PUBLIC_DIR, file));
   if (!full.startsWith(PUBLIC_DIR + path.sep)) return send(res, 404, { error: 'Niet gevonden' });
-  fs.readFile(full, (err, buf) => {
-    if (err) return send(res, 404, { error: 'not found' });
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(full)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-    res.end(buf);
-  });
+  let st; try { st = fs.statSync(full); } catch { return send(res, 404, { error: 'not found' }); }
+  if (!st.isFile()) return send(res, 404, { error: 'not found' });
+  let e = fileCache.get(full);
+  if (!e || e.mtime !== st.mtimeMs) {
+    let buf; try { buf = fs.readFileSync(full); } catch { return send(res, 404, { error: 'not found' }); }
+    const type = MIME[path.extname(full)] || 'application/octet-stream';
+    const compress = /^(text\/|application\/(json|javascript)|image\/svg)/.test(type) && buf.length > 1024;
+    e = { mtime: st.mtimeMs, type, etag: '"' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"', raw: buf, gz: compress ? zlib.gzipSync(buf, { level: 6 }) : null };
+    fileCache.set(full, e);
+  }
+  const headers = { 'Content-Type': e.type, 'Cache-Control': 'no-cache', ETag: e.etag, Vary: 'Accept-Encoding' };
+  if (req && req.headers['if-none-match'] === e.etag) { res.writeHead(304, headers); return res.end(); }
+  const gz = e.gz && req && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''));
+  if (gz) headers['Content-Encoding'] = 'gzip';
+  res.writeHead(200, headers);
+  res.end(gz ? e.gz : e.raw);
 }
 const bad = (msg) => Object.assign(new Error(msg), { code: 400 });
 const findReq = (id) => { const r = state.requests.find((x) => x.id === id); if (!r) throw bad('Dat verzoek bestaat niet meer'); return r; };
@@ -1329,6 +1428,8 @@ const adminRoutes = {
     state.integ = integ.clean(raw);
     log('koppeling', 'Koppelingen opgeslagen');
   },
+  'POST /api/alerts/test': () => { raise('test', 'Dit is een testwaarschuwing. Als je dit leest, werken de waarschuwingen.', { cooldownMin: 0 }); },
+  'POST /api/alerts/clear': () => { for (const a of state.alerts) if (!a.resolvedAt) a.resolvedAt = Date.now(); log('waarschuwing', 'Waarschuwingen gewist', undefined); },
   'POST /api/devices/remove': (b) => { state.devices = state.devices.filter((x) => x.id !== b.id); },
   'POST /api/camera/event': async (b, id) => {
     const f = state.integ.faces;
@@ -1352,6 +1453,8 @@ const adminRoutes = {
     if (!cam || !cam.snapshotUrl) throw bad('Camera niet gevonden');
     const res = await fetch(cam.snapshotUrl, { signal: AbortSignal.timeout(6000) }).catch(() => null);
     if (!res || !res.ok) throw bad('De camera geeft geen beeld');
+    // only pictures are passed on: otherwise this would be a way to read other pages on the internal network (SSRF)
+    if (!/^image\//i.test(res.headers.get('content-type') || '')) throw bad('Dit adres geeft geen afbeelding');
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > 3e6) throw bad('Het beeld is te groot');
     return { type: res.headers.get('content-type') || 'image/jpeg', data: buf.toString('base64') };
@@ -1410,7 +1513,7 @@ const adminRoutes = {
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
-    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), power: power.clean(b.power), integ: state.integ, devices: state.devices, sightings: state.sightings, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
+    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), power: power.clean(b.power), alerts: state.alerts, integ: state.integ, devices: state.devices, sightings: state.sightings, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
   },
 };
@@ -1500,7 +1603,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -1637,7 +1740,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (p === '/healthz') return send(res, 200, { ok: true });
     if (p === '/api/where') return send(res, 200, where()); // for the start screen and for apps that look for the server
-    if (p === '/start') return serveFile(res, 'start.html');
+    if (p === '/start') return serveFile(res, 'start.html', req);
     if (p === '/events') {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;
@@ -1647,7 +1750,7 @@ const server = http.createServer(async (req, res) => {
       if (sgate) return send(res, sgate.code, { error: sgate.error });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 2000\n\n');
-      const c = { res, role, ip: clientIp(req), tok: String(url.searchParams.get('token') || ''), pin: String(url.searchParams.get('pin') || ''), userId: eid?.userId, sessionId: eid?.sessionId };
+      const c = { res, role, visit: url.searchParams.get('visit') === '1', ip: clientIp(req), tok: String(url.searchParams.get('token') || ''), pin: String(url.searchParams.get('pin') || ''), userId: eid?.userId, sessionId: eid?.sessionId };
       clients.add(c);
       write(c, 'state', role === 'admin' ? adminState(eid) : publicState());
       req.on('close', () => clients.delete(c));
@@ -1750,11 +1853,11 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, out || { ok: true });
     }
     if (req.method === 'GET') {
-      if (p === '/' || p === '/display' || p === '/visit') return serveFile(res, 'display.html');
+      if (p === '/' || p === '/display' || p === '/visit') return serveFile(res, 'display.html', req);
       if (p === '/get' || p.startsWith('/get/')) return serveDownloads(req, res, p);
-      if (p === '/admin') return serveFile(res, 'admin.html');
+      if (p === '/admin') return serveFile(res, 'admin.html', req);
       if (p === '/sw.js') res.setHeader('Service-Worker-Allowed', '/admin');
-      return serveFile(res, p.slice(1));
+      return serveFile(res, p.slice(1), req);
     }
     send(res, 404, { error: 'not found' });
   } catch (e) {

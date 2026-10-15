@@ -261,3 +261,14 @@ Alle beheer-apps (Mac, Windows, Linux) hebben dingen die het webpaneel niet heef
 - **Stille uren:** geen geluid of melding in uren die je kiest (Mac en Windows/Linux).
 - **Mac:** menubalk-icoon met kleur en rode stip, sneltoetsen ⌥⌘1/2/3.
 - **Dev-versies** (`Saga-Techbox-Dev-Mac.dmg`, `Saga-Techbox-Dev-Windows-….zip`, `Saga-Techbox-Dev-Linux-….tar.gz`): installeren naast de gewone app en hebben een Ontwikkelaar-pagina met een **API-console**, de ruwe gegevens van de server, een gebeurtenissenlog en verbindingsinformatie.
+
+## Versie 2.9.0 — nagekeken en waarschuwingen
+Het hele programma is doorgelopen op fouten, trage plekken en dingen die kunnen stukgaan. Gevonden en opgelost:
+
+- **Waarschuwingen aan jou:** gaat er iets mis, dan krijg je een melding (telefoon via ntfy, of e-mail, wat je al hebt ingesteld) en het staat bovenaan in de Controle-lijst, ook in de apps. Het gaat om: opslaan lukt niet, schijf bijna vol, veel geheugen, een overbelaste computer, een fout in de server, en (als je dat aanzet) “er is al X minuten geen deurscherm verbonden”. Zodra het weer goed gaat, krijg je een “opgelost”-bericht. Instellingen → Waarschuwingen heeft een knop om het te proberen.
+- **De server stopt niet meer bij één fout.** Voorheen kon één onverwachte fout in een timer de hele deurserver laten stoppen; nu wordt hij gemeld en gaat het door (pas bij vele fouten per minuut stopt hij schoon, zodat hij kan herstarten).
+- **Geheugenlek weggehaald:** de lijsten met bezoek- en inlogpogingen per adres werden nooit opgeruimd en groeiden langzaam; nu wel.
+- **Sneller:** opslaan schrijft compact en maakt de reserve-kopie hooguit eens per minuut; de pagina’s worden één keer gecomprimeerd en daarna alleen opnieuw gestuurd als ze veranderd zijn (veel sneller over wifi); de live-berichten worden één keer klaargemaakt in plaats van per scherm; een scherm dat niet bijblijft kost de server geen geheugen meer.
+- **Schema:** “scherm aan” gebeurt nu ook als de computer een paar minuten te laat wakker werd (tot een half uur); uitzetten blijft nooit te laat.
+- **Veiliger:** het camerabeeld-adres geeft alleen afbeeldingen door, zodat het geen manier is om andere pagina’s in het netwerk te lezen.
+- **Apps:** ze melden een verbinding die langer dan anderhalve minuut weg is, en nieuwe waarschuwingen van de server. De desktop-app (Electron) schrijft crashes naar een logbestand in plaats van een foutvenster te tonen op een deurscherm, en laadt een bevroren pagina na 20 seconden opnieuw.
