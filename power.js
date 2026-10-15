@@ -112,7 +112,7 @@ function run(action) {
 // Windows: a scheduled task that wakes the computer from sleep/hibernate (WakeToRun) and starts the app.
 function winWakeScript(power, exe) {
   const triggers = [];
-  for (const k of DAY_KEYS) { const t = power.days[k].on; if (t) triggers.push(`New-ScheduledTaskTrigger -Weekly -DaysOfWeek ${WIN_DAYS[Number(k)]} -At '${t}'`); }
+  for (const k of DAY_KEYS) { const t = power.days[k].on; if (t) triggers.push(`(New-ScheduledTaskTrigger -Weekly -DaysOfWeek ${WIN_DAYS[Number(k)]} -At '${t}')`); }
   if (!triggers.length) throw new Error('Vul bij minstens één dag een aanzet-tijd in');
   const action = exe ? `New-ScheduledTaskAction -Execute '${String(exe).replace(/'/g, "''")}'` : "New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c exit'";
   return [
