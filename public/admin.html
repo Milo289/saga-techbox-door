@@ -637,6 +637,81 @@
         h('span', {}), h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => { try { await api('/api/power/settings', d); powerDraft = null; S = await api('/api/admin-state'); toast('Energie opgeslagen'); renderAll(true); } catch {} } }, 'Energie opslaan'))));
   }
 
+  // ----- Koppelingen: microcontrollers, slot + NFC, camera's, regels (everything off until switched on) -----
+  let integDraft = null;
+  function integCard() {
+    const I = S.integ;
+    if (!I) return null;
+    if (!integDraft) integDraft = structuredClone({ lock: I.lock, automations: I.automations, cameras: I.cameras, faces: I.faces });
+    const d = integDraft;
+    const field = (obj, key, props = {}) => h('input', { value: obj[key] ?? '', ...props, oninput: (e) => { obj[key] = e.target.value; } });
+    const check = (obj, key, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!obj[key], onchange: (e) => { obj[key] = e.target.checked; } }), label);
+    const sel = (obj, key, opts) => h('select', { onchange: (e) => { obj[key] = e.target.value; } }, ...opts.map(([v, l]) => h('option', { value: v, selected: obj[key] === v }, l)));
+    const save = async (part) => { try { await api('/api/integrations/save', part); integDraft = null; S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true); } catch {} };
+    const actionRow = (a) => h('div', { class: 'row', style: 'flex-wrap:wrap' },
+      sel(a, 'status', [['', 'Status niet veranderen'], ['open', 'Open'], ['closed', 'Gesloten'], ['busy', 'Bezet']]),
+      h('input', { type: 'number', min: 0, max: 1440, placeholder: 'minuten', value: a.minutes || '', style: 'width:90px', oninput: (e) => { a.minutes = Number(e.target.value) || 0; } }),
+      field(a, 'message', { placeholder: 'Bericht (optioneel)' }), check(a, 'notify', 'Melding sturen'));
+    const parts = [];
+
+    if (I.lock) {
+      const L = d.lock, tagRows = h('div', { class: 'list' });
+      const drawTags = () => tagRows.replaceChildren(...L.tags.map((t, i) => h('div', { class: 'row', style: 'flex-wrap:wrap' },
+        field(t, 'name', { placeholder: 'Naam (bijv. Milo)' }), field(t, 'uid', { placeholder: 'Tag-nummer (bijv. 04:A2:3B:9C)' }),
+        h('input', { type: 'time', value: t.from, oninput: (e) => { t.from = e.target.value; } }), h('span', { class: 'muted' }, 't/m'), h('input', { type: 'time', value: t.to, oninput: (e) => { t.to = e.target.value; } }),
+        h('span', { class: 'muted' }, ...[['1', 'ma'], ['2', 'di'], ['3', 'wo'], ['4', 'do'], ['5', 'vr'], ['6', 'za'], ['0', 'zo']].map(([k, n]) => h('label', { class: 'check', style: 'display:inline-flex;margin-right:6px' }, h('input', { type: 'checkbox', checked: t.days.includes(Number(k)), onchange: (e) => { const n2 = Number(k); t.days = e.target.checked ? [...new Set([...t.days, n2])] : t.days.filter((x) => x !== n2); } }), n))),
+        check(t, 'enabled', 'aan'), h('button', { class: 'sm ghost danger', onclick: () => { L.tags.splice(i, 1); drawTags(); } }, '✕'))));
+      drawTags();
+      parts.push(h('div', { class: 'form' },
+        h('label', {}, 'Slot'), h('div', {}, check(L, 'enabled', 'Het slot en de NFC-tags gebruiken'), h('div', { class: 'muted' }, 'Zodra je de API van het slot hebt: vul hieronder het webadres in dat de deur opent. Tot die tijd gebeurt er niets.')),
+        h('label', {}, 'Webadres van het slot'), h('div', { class: 'row' }, sel(L, 'method', [['POST', 'POST'], ['GET', 'GET'], ['PUT', 'PUT']]), field(L, 'url', { placeholder: 'http://192.168.1.50/open', style: 'flex:1' })),
+        h('label', {}, 'Inhoud (optioneel)'), field(L, 'body', { placeholder: '{"open": true}' }),
+        h('label', {}, 'Sleutel in de aanvraag'), h('div', { class: 'row' }, field(L, 'headerName', { placeholder: 'Naam, bijv. Authorization' }), field(L, 'headerValue', { placeholder: 'Waarde (blijft geheim)', type: 'password' })),
+        h('label', {}, 'NFC-tags'), h('div', {}, tagRows, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { L.tags.push({ name: '', uid: '', enabled: true, days: [0, 1, 2, 3, 4, 5, 6], from: '00:00', to: '23:59' }); drawTags(); } }, '+ Tag toevoegen'),
+          h('span', { class: 'muted' }, 'De NFC-lezer meldt een tag aan via POST /api/door/tag met een API-sleutel met het recht “slot”. Zie docs/APPARATEN.md.'))),
+        h('label', {}, 'Proberen'), h('div', { class: 'row' }, h('button', { class: 'sm danger', onclick: async () => { if (!confirm('De deur nu openen?')) return; try { await api('/api/integrations/save', { lock: L }); await api('/api/door/unlock', {}); toast('Deur geopend'); } catch {} } }, 'Deur nu openen'))));
+    }
+
+    if (I.lock) {
+      const A = d.automations, rows = h('div', { class: 'list' });
+      const drawRules = () => rows.replaceChildren(...A.map((a, i) => h('div', { class: 'card', style: 'padding:10px;margin:6px 0' },
+        h('div', { class: 'row', style: 'flex-wrap:wrap' }, field(a, 'name', { placeholder: 'Naam van de regel' }), check(a, 'enabled', 'aan'), h('button', { class: 'sm ghost danger', onclick: () => { A.splice(i, 1); drawRules(); } }, '✕')),
+        h('div', { class: 'row', style: 'flex-wrap:wrap' }, h('span', { class: 'muted' }, 'Als'), sel(a.when, 'source', [['device', 'een apparaat'], ['tag', 'een NFC-tag'], ['camera', 'een persoon op de camera']]),
+          field(a.when, 'key', { placeholder: 'naam (leeg = elke)' }), field(a.when, 'event', { placeholder: 'gebeurtenis (bijv. press)' })),
+        h('div', { class: 'row', style: 'flex-wrap:wrap' }, h('span', { class: 'muted' }, 'dan'), actionRow(a.do), a.when.source === 'camera' ? h('span', { class: 'muted' }, 'Een gezicht opent de deur nooit.') : check(a.do, 'unlock', 'deur openen')))));
+      drawRules();
+      parts.push(h('div', { class: 'form' }, h('label', {}, 'Regels'), h('div', {}, rows, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { A.push({ name: 'Nieuwe regel', enabled: true, when: { source: 'device', key: '', event: '' }, do: {} }); drawRules(); } }, '+ Regel toevoegen'),
+        h('button', { class: 'white', onclick: () => save({ lock: d.lock, automations: d.automations }) }, 'Slot en regels opslaan')))));
+    }
+
+    if (I.faces) {
+      const F = d.faces, camRows = h('div', { class: 'list' }), peopleRows = h('div', { class: 'list' });
+      const drawCams = () => camRows.replaceChildren(...d.cameras.map((c, i) => h('div', { class: 'row', style: 'flex-wrap:wrap' }, field(c, 'name', { placeholder: 'Naam (bijv. Voordeur)' }), field(c, 'snapshotUrl', { placeholder: 'Webadres van een stilstaand beeld (snapshot)', style: 'flex:1' }),
+        h('button', { class: 'sm', onclick: async () => { try { await api('/api/integrations/save', { cameras: d.cameras }); S = await api('/api/admin-state'); const cur = S.integ.cameras[i]; const r = await api('/api/camera/snapshot?id=' + encodeURIComponent(cur.id)); const img = h('img', { src: `data:${r.type};base64,${r.data}`, style: 'max-width:100%;border-radius:10px' }); c._prev = img; drawCams(); } catch {} } }, 'Bekijk'),
+        h('button', { class: 'sm ghost danger', onclick: () => { d.cameras.splice(i, 1); drawCams(); } }, '✕'), c._prev || '')));
+      const drawPeople = () => peopleRows.replaceChildren(...F.people.map((p, i) => h('div', { class: 'row', style: 'flex-wrap:wrap' }, field(p, 'name', { placeholder: 'Naam zoals de camera-AI hem meldt' }), check(p, 'consent', 'heeft toestemming gegeven'),
+        actionRow(p.action = p.action || {}), h('button', { class: 'sm ghost danger', onclick: () => { F.people.splice(i, 1); drawPeople(); } }, '✕'))));
+      drawCams(); drawPeople();
+      const seen = (S.sightings || []).slice(0, 8);
+      parts.push(h('div', { class: 'form' },
+        h('label', {}, 'Camera-herkenning'), h('div', {}, check(F, 'enabled', 'Meldingen van een camera-AI aannemen'),
+          h('div', { class: 'muted' }, 'Let op: gezichten zijn persoonsgegevens (AVG). Gebruik dit alleen met toestemming van de mensen die herkend worden; bij leerlingen onder de 16 van hun ouders. De server bewaart alleen namen en tijden, nooit beelden, en wist ze automatisch.')),
+        h('label', {}, 'Zekerheid en bewaartijd'), h('div', { class: 'row' }, h('input', { type: 'number', min: 30, max: 99, value: Math.round(F.minConfidence * 100), style: 'width:80px', oninput: (e) => { F.minConfidence = (Number(e.target.value) || 80) / 100; } }), h('span', { class: 'muted' }, '% zeker, bewaren'), h('input', { type: 'number', min: 1, max: 90, value: F.retentionDays, style: 'width:80px', oninput: (e) => { F.retentionDays = Number(e.target.value) || 7; } }), h('span', { class: 'muted' }, 'dagen')),
+        h('label', {}, 'Camera’s'), h('div', {}, camRows, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { d.cameras.push({ name: '', snapshotUrl: '' }); drawCams(); } }, '+ Camera toevoegen'))),
+        h('label', {}, 'Personen'), h('div', {}, peopleRows, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { F.people.push({ name: '', consent: false, action: {} }); drawPeople(); } }, '+ Persoon toevoegen'),
+          h('span', { class: 'muted' }, 'De AI meldt via POST /api/camera/event; zie tools/camera-ai.'))),
+        h('label', {}, 'Laatst gezien'), h('div', { class: 'muted' }, seen.length ? seen.map((x) => `${fmtWhen(x.at)} · ${x.camera || 'camera'} · ${x.name || x.kind}`).join('  |  ') : 'Nog niets gezien.'),
+        h('span', {}), h('div', { class: 'row' }, h('button', { class: 'white', onclick: () => save({ cameras: d.cameras.map(({ _prev, ...c }) => c), faces: d.faces }) }, 'Camera’s opslaan'))));
+    }
+
+    const devs = S.devices || [];
+    parts.push(h('div', { class: 'form' }, h('label', {}, 'Apparaten'), h('div', { class: 'list' }, devs.length ? devs.map((x) => h('div', { class: 'row' }, h('b', {}, x.name), h('span', { class: 'muted' }, `laatst gezien ${fmtWhen(x.lastSeen)}${x.last && x.last.event ? ' · ' + x.last.event : ''}${x.battery ? ' · accu ' + x.battery + '%' : ''}`), h('span', { class: 'sp' }),
+      h('button', { class: 'sm ghost danger', onclick: async () => { try { await api('/api/devices/remove', { id: x.id }); S = await api('/api/admin-state'); renderAll(true); } catch {} } }, '✕'))) : h('span', { class: 'muted' }, 'Nog geen apparaten. Een ESP32 of Raspberry Pi Pico W meldt zich vanzelf zodra hij een bericht stuurt (zie docs/APPARATEN.md).'))));
+
+    return h('div', { class: 'card' }, h('h2', {}, 'Koppelingen'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Microcontrollers (ESP32, Pico), het slot met NFC, camera’s en regels die ze met de deurstatus verbinden. Alles staat uit tot je het zelf aanzet.'), ...parts);
+  }
+
   function closeAlert() { $('alert').classList.remove('open'); alertId = null; }
   // blocking, deleting: what you can do about one visitor's message
   function modDialog(r) {
@@ -1490,6 +1565,7 @@
         peopleCard(),
 
         powerCard(),
+        integCard(),
 
         h('div', { class: 'card' }, h('h2', {}, 'Moderatie'),
           h('p', { class: 'muted', style: 'margin-top:0' }, 'Houd het netjes: ongepaste woorden filteren, bezoekers blokkeren en nieuwe profielen eerst goedkeuren.'),
