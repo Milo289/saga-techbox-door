@@ -6,8 +6,13 @@ struct InboxView: View {
     @AppStorage(Pref.autoSeen) private var autoSeen = true
     @State private var showAll = false
     @State private var selected: VisitRequest?
+    @State private var query = ""
 
-    private var list: [VisitRequest] { showAll ? store.requests : store.openRequests }
+    private var list: [VisitRequest] {
+        let base = showAll ? store.requests : store.openRequests
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return q.isEmpty ? base : base.filter { ($0.name + " " + $0.summary + " " + $0.nr + " " + $0.typeLabel).lowercased().contains(q) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -41,6 +46,7 @@ struct InboxView: View {
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
+            .searchable(text: $query, prompt: "Zoeken in bezoekers")
             .refreshable { try? await store.refresh() }
             .sheet(item: $selected) { r in RequestDetail(store: store, request: store.requests.first { $0.id == r.id } ?? r) }
             .onAppear { markSeen() }

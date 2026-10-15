@@ -13,6 +13,7 @@ struct StatusView: View {
     @AppStorage(Pref.confirmStatus) private var confirmStatus = false
     @AppStorage(Pref.presets) private var presetsText = "15,30,60,120"
     @AppStorage(Pref.recentMessages) private var recentText = ""
+    @State private var quick = QuickStore.load()
 
     enum Duration: Equatable { case none, minutes(Int), until(Date) }
     @State private var duration: Duration = .none
@@ -39,6 +40,8 @@ struct StatusView: View {
             VStack(spacing: 18) {
                 hero
                 modeButtons
+                if store.hasState { todayCard }
+                if canChange, !quick.isEmpty { quickCard }
                 if store.hasState && !canChange { Label("Je hebt geen recht om de status te wijzigen.", systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary) }
                 if showDuration { durationCard }
                 if showExtend { extendCard }
@@ -52,6 +55,7 @@ struct StatusView: View {
             .frame(maxWidth: .infinity)
         }
         .refreshable { try? await store.refresh() }
+        .onAppear { quick = QuickStore.load() }
         .background(background)
         .sheet(isPresented: $showCustom) { customSheet }
         .sheet(isPresented: $showAccount) { AccountSheet(store: store, model: AppModel.shared) }
@@ -75,6 +79,27 @@ struct StatusView: View {
     }
 
     // MARK: status card
+    private var todayCard: some View {
+        let t = TodayStats(store.requests)
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            StatTile(value: "\(t.visitors)", label: "bezoekers vandaag", symbol: "person.2.fill")
+            StatTile(value: "\(t.waiting)", label: "wachten op antwoord", symbol: "bell.badge.fill")
+            StatTile(value: "\(t.bells)", label: "keer aangebeld", symbol: "bell.fill")
+            StatTile(value: t.averageReplyMinutes.map { "\($0) min" } ?? "—", label: "gemiddeld antwoord", symbol: "timer")
+        }
+    }
+
+    private var quickCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle("Snelle acties", symbol: "bolt.fill")
+            Flow(spacing: 8) {
+                ForEach(quick) { q in
+                    Chip(text: q.name + (q.minutes > 0 ? " · \(q.minutes) min" : ""), symbol: q.symbol, tint: Palette.color(q.mode)) { Task { await store.run(q) } }
+                }
+            }
+        }.card()
+    }
+
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {

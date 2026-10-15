@@ -48,7 +48,7 @@ struct MainTabView: View {
         .onAppear {
             tab = startTab
             store.onVisit = { r in visit(r) }
-            store.onRing = { Sounds.bell(); Haptics.heavy() }
+            store.onRing = { if !Quiet.now { Sounds.bell(); Haptics.heavy() } }
             store.start()
             UIApplication.shared.isIdleTimerDisabled = keepAwake
         }
@@ -58,11 +58,37 @@ struct MainTabView: View {
         .onChange(of: keepAwake) { _, v in UIApplication.shared.isIdleTimerDisabled = v }
         .onChange(of: store.newCount) { _, n in UNUserNotificationCenter.current().setBadgeCount(badge ? n : 0) }
         .onChange(of: model.pendingTab) { _, t in if let t { tab = t; model.pendingTab = nil } }
+        .onChange(of: alertKey) { _, _ in checkAlerts() }
+        .task(id: offlineKey) { await watchOffline() }
+    }
+
+    // warnings for you: new warnings from the server, and a server that has been gone for more than a minute and a half
+    @State private var seenAlerts = Set<String>()
+    @State private var firstAlerts = true
+    private var alertKey: String { store.state.alerts.array.filter { $0.resolvedAt.isNull }.map { $0.id.str }.joined(separator: ",") }
+    private var offlineKey: String { if case .offline = store.connection { return "offline" } else { return "ok" } }
+
+    private func checkAlerts() {
+        for a in store.state.alerts.array where a.resolvedAt.isNull {
+            if seenAlerts.insert(a.id.str).inserted && !firstAlerts {
+                store.show("⚠ \(a.text.str)"); if !Quiet.now { Haptics.warning() }
+                model.notifyIfInBackground(title: "Waarschuwing", body: a.text.str)
+            }
+        }
+        if store.hasState { firstAlerts = false }
+    }
+
+    private func watchOffline() async {
+        guard offlineKey == "offline", store.hasState else { return }
+        try? await Task.sleep(nanoseconds: 90_000_000_000)
+        guard !Task.isCancelled, case .offline(let m) = store.connection else { return }
+        store.show("Geen verbinding met de deurserver"); if !Quiet.now { Haptics.warning() }
+        model.notifyIfInBackground(title: "Geen verbinding met de deurserver", body: m)
     }
 
     private func visit(_ r: VisitRequest) {
-        Sounds.message(); Haptics.success()
+        if !Quiet.now { Sounds.message(); Haptics.success() }
         store.show("\(r.typeLabel): \(r.name.isEmpty ? "iemand" : r.name)")
-        if notifyVisits { model.notifyIfInBackground(title: r.typeLabel, body: "\(r.name.isEmpty ? "Iemand" : r.name)\(r.summary.isEmpty ? "" : " — \(r.summary)")") }
+        if notifyVisits && !Quiet.now { model.notifyIfInBackground(title: r.typeLabel, body: "\(r.name.isEmpty ? "Iemand" : r.name)\(r.summary.isEmpty ? "" : " — \(r.summary)")") }
     }
 }

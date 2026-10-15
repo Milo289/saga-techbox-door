@@ -11,6 +11,9 @@ struct AppSettingsView: View {
     @AppStorage(Pref.badge) private var badge = true
     @AppStorage(Pref.keepAwake) private var keepAwake = false
     @State private var iconName: String? = UIApplication.shared.alternateIconName
+    @AppStorage(ExtraPref.quietOn) private var quietOn = false
+    @AppStorage(ExtraPref.quietFrom) private var quietFrom = 22 * 60
+    @AppStorage(ExtraPref.quietTo) private var quietTo = 7 * 60
     @AppStorage(Pref.confirmStatus) private var confirmStatus = false
     @AppStorage(Pref.confirmLockdown) private var confirmLockdown = true
     @AppStorage(Pref.showDuration) private var showDuration = true
@@ -43,6 +46,15 @@ struct AppSettingsView: View {
                     Toggle(isOn: $badge) { Label("Aantal op het app-icoon", systemImage: "app.badge.fill") }
                     Button("Test het geluid en het trillen") { Haptics.success(); Sounds.bell(); store.show("Zo klinkt het") }
                 } header: { Text("Meldingen") } footer: { Text("De app krijgt bezoekers live binnen zolang hij open is. Voor meldingen als de app dicht is: vul bij de server een ntfy-onderwerp in (Webpaneel → Instellingen → Meldingen op je telefoon).") }
+
+                Section {
+                    NavigationLink { QuickEditor() } label: { Label("Snelle acties", systemImage: "bolt.fill") }
+                    Toggle(isOn: $quietOn) { Label("Stille uren", systemImage: "moon.zzz.fill") }
+                    if quietOn {
+                        DatePicker("Van", selection: Binding(get: { minutesToDate(quietFrom) }, set: { quietFrom = dateToMinutes($0) }), displayedComponents: .hourAndMinute)
+                        DatePicker("Tot", selection: Binding(get: { minutesToDate(quietTo) }, set: { quietTo = dateToMinutes($0) }), displayedComponents: .hourAndMinute)
+                    }
+                } header: { Text("Handig") } footer: { Text("Snelle acties zijn knoppen als “Lunch · 30 min · Bezet”. In stille uren blijft het geluid en de melding weg; bezoekers staan wel in de lijst.") }
 
                 Section("Beveiliging") {
                     Toggle(isOn: $model.faceID) { Label("Vergrendelen met Face ID", systemImage: "faceid") }
@@ -147,5 +159,34 @@ struct AppSettingsView: View {
                 Button("Annuleren", role: .cancel) {}
             }
         }
+    }
+}
+
+private func minutesToDate(_ m: Int) -> Date { Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) ?? Date() }
+private func dateToMinutes(_ d: Date) -> Int { let c = Calendar.current.dateComponents([.hour, .minute], from: d); return (c.hour ?? 0) * 60 + (c.minute ?? 0) }
+
+/// Make, change and remove your own quick actions.
+struct QuickEditor: View {
+    @State private var list = QuickStore.load()
+    var body: some View {
+        Form {
+            ForEach($list) { $q in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Picker("", selection: $q.symbol) { ForEach(["fork.knife", "person.2.fill", "house.fill", "cup.and.saucer.fill", "phone.fill", "car.fill", "moon.fill", "clock.fill", "figure.walk", "bolt.fill"], id: \.self) { Image(systemName: $0).tag($0) } }.labelsHidden().frame(width: 70)
+                        TextField("Naam", text: $q.name)
+                    }
+                    Picker("Status", selection: $q.mode) { Text("Open").tag("open"); Text("Gesloten").tag("closed"); Text("Bezet").tag("busy") }.pickerStyle(.segmented)
+                    Stepper(q.minutes == 0 ? "Geen tijdslimiet" : "\(q.minutes) minuten", value: $q.minutes, in: 0...600, step: 5)
+                    TextField("Bericht op de deur", text: $q.message)
+                }.padding(.vertical, 4)
+            }
+            .onDelete { list.remove(atOffsets: $0) }
+            Button { list.append(QuickPreset(name: "Nieuw", mode: "busy", minutes: 15, message: "", symbol: "clock.fill")) } label: { Label("Actie toevoegen", systemImage: "plus") }
+            Button("Standaard herstellen") { list = QuickStore.defaults }
+        }
+        .navigationTitle("Snelle acties").navigationBarTitleDisplayMode(.inline)
+        .onChange(of: list) { _, new in QuickStore.save(new) }
+        .toolbar { EditButton() }
     }
 }

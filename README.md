@@ -275,3 +275,6 @@ Het hele programma is doorgelopen op fouten, trage plekken en dingen die kunnen 
 
 ## Versie 3.0.0 — beveiliging
 Zie [SECURITY.md](SECURITY.md): bekende aanvallen zijn op de eigen server losgelaten en worden nu tegengehouden, met aanvalsbeveiliging (overspoelen, trage aanvallen, wachtwoorden raden, te veel verbindingen), een strenge Content-Security-Policy, een willekeurig startwachtwoord per installatie (het bekende standaardwachtwoord is weg), controlesommen op updates en een test voor alle routes. Je krijgt een waarschuwing als iemand de server probeert te overspoelen.
+
+## Versie 3.1.0 — iPhone en iPad op hetzelfde niveau
+De iPhone- en iPad-app hebben nu ook: **snelle acties** (eigen knoppen als “Lunch · 30 min · Bezet”, te maken in Instellingen), **vandaag in cijfers** op de Status-pagina, **zoeken in bezoekers**, **stille uren**, en **waarschuwingen**: een nieuwe waarschuwing van de server of een server die langer dan anderhalve minuut weg is, verschijnt als bericht (en als melding als de app op de achtergrond nog leeft). Verder is de map met bouwbestanden van de iPhone-app uit de opslagplaats gehaald (die maakte hem onnodig groot).

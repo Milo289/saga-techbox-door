@@ -1,2 +1,0 @@
-Target dependency graph (1 target)
-Target 'DeurBeheer' in project 'DeurBeheer' (no dependencies)

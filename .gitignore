@@ -19,3 +19,7 @@ desktop/out/
 ios/build-mac/
 iso-build/
 *.iso
+
+ios/build-sim/
+ios/build-mac/
+ios/build-*/

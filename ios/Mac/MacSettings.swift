@@ -100,7 +100,7 @@ struct MacSettings: View {
                         }
                     }
                     HStack {
-                        Button("Actie toevoegen") { quick.append(QuickAction(name: "Nieuw", mode: "busy", minutes: 15, message: "", symbol: "clock.fill")) }
+                        Button("Actie toevoegen") { quick.append(QuickPreset(name: "Nieuw", mode: "busy", minutes: 15, message: "", symbol: "clock.fill")) }
                         Button("Standaard herstellen") { quick = QuickStore.defaults }
                     }
                 } header: { Text("Snelle acties") } footer: { Text("Eén klik zet de deur op een status, voor een tijd, met een bericht. Je ziet ze op de Status-pagina en onder het icoon in de menubalk. Ze staan alleen op deze Mac.") }
