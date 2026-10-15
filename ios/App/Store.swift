@@ -137,7 +137,7 @@ final class DoorStore: ObservableObject {
 
     func refresh() async throws {
         let json = try await call("GET", "api/admin-state")
-        state = json; hasState = true
+        state = json; hasState = true; Palette.apply(json.settings)
         if connection != .live { connection = .live }
     }
 
@@ -174,7 +174,7 @@ final class DoorStore: ObservableObject {
     private func handle(event: String, data: String) {
         let json = JSON(try? JSONSerialization.jsonObject(with: Data(data.utf8)))
         switch event {
-        case "state": state = json; hasState = true; if UserDefaults.standard.bool(forKey: Pref.verboseLog) { log("state", "Bijgewerkt") }
+        case "state": state = json; hasState = true; Palette.apply(json.settings); if UserDefaults.standard.bool(forKey: Pref.verboseLog) { log("state", "Bijgewerkt") }
         case "visit": log("bezoek", VisitRequest(json).summary); onVisit?(VisitRequest(json))
         case "ring": log("bel", "Er is aangebeld"); onRing?()
         case "ping": break

@@ -15,10 +15,10 @@ async function startServer({ patch = false, dir, env = {} } = {}) {
   if (patch) {
     root = path.join(dir, 'app');
     fs.mkdirSync(root, { recursive: true });
-    for (const f of ['server.js', 'seal.js', 'access.js', 'package.json']) fs.copyFileSync(path.join(ROOT, f), path.join(root, f));
+    for (const f of ['server.js', 'power.js', 'discover.js', 'seal.js', 'access.js', 'package.json']) fs.copyFileSync(path.join(ROOT, f), path.join(root, f));
     fs.cpSync(path.join(ROOT, 'public'), path.join(root, 'public'), { recursive: true });
     const src = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
-    const out = src.replace("START_PERMS = ['view', 'status', 'inbox', 'users']", "START_PERMS = ['view', 'status', 'inbox', 'users', 'settings', 'people', 'audit', 'mail', 'export', 'api']");
+    const out = src.replace("START_PERMS = ['view', 'status', 'inbox', 'users']", "START_PERMS = ['view', 'status', 'inbox', 'users', 'settings', 'people', 'audit', 'mail', 'export', 'api', 'power']");
     if (out === src) throw new Error('the test patch no longer matches server.js');
     fs.writeFileSync(path.join(root, 'server.js'), out);
   }

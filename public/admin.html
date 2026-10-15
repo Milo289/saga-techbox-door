@@ -31,14 +31,22 @@
   button:hover { border-color: #3a3a40; }
   button:active { transform: scale(.98); }
   button.ghost { background: transparent; }
-  button.white { background: var(--fg); color: var(--on); border-color: transparent; }
+  button.white { background: var(--accent, var(--fg)); color: var(--on-accent, var(--on)); border-color: transparent; }
+  html.compact .card { padding: 12px 14px; } html.compact .block { padding: 7px 0; } html.compact .form { row-gap: 6px; }
+  html.sharp .card, html.sharp button, html.sharp input, html.sharp select { border-radius: 7px; }
   button.sm { padding: 5px 11px; font-size: 13px; border-radius: 8px; }
   button.danger { color: var(--closed); }
-  button.on { background: var(--fg); color: var(--on); border-color: transparent; }
+  button.on { background: var(--accent, var(--fg)); color: var(--on-accent, var(--on)); border-color: transparent; }
   input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; outline: none; }
   input:focus, select:focus, textarea:focus { border-color: #4a4a52; }
-  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--fg); padding: 0; }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent, var(--fg)); padding: 0; }
   textarea { width: 100%; min-height: 120px; resize: vertical; }
+  #powerBar { position: sticky; top: 0; z-index: 40; display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; padding: calc(8px + env(safe-area-inset-top)) 16px 8px; background: var(--busy); color: #000; font-weight: 650; }
+  #powerBar button { background: #000; color: #fff; border: 0; border-radius: 10px; padding: 6px 14px; font: inherit; font-weight: 650; cursor: pointer; }
+  table.week { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.week th { text-align: left; font-size: 12px; color: var(--dim); font-weight: 600; padding: 4px 4px 6px; }
+  table.week td { padding: 3px 4px; } table.week td:first-child { font-weight: 600; white-space: nowrap; }
+  table.week input[type=time] { width: 100%; min-width: 92px; padding: 6px 6px; }
   .hidden { display: none !important; }
 
   .top { position: sticky; top: 0; z-index: 10; background: var(--topbg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
@@ -50,7 +58,7 @@
   #conn.ok { background: var(--mute); }
   nav { max-width: 960px; margin: 0 auto; padding: 0 10px; display: flex; gap: 4px; }
   nav button { border: 0; background: none; border-radius: 0; padding: 12px 10px 11px; color: var(--mute); border-bottom: 2px solid transparent; font-weight: 600; }
-  nav button.cur { color: var(--fg); border-bottom-color: var(--fg); }
+  nav button.cur { color: var(--fg); border-bottom-color: var(--accent, var(--fg)); }
   .badge { background: var(--closed); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 12px; margin-left: 5px; }
 
   main { max-width: 960px; margin: 0 auto; padding: 18px 16px 60px; display: grid; gap: 14px; }
@@ -250,6 +258,7 @@
 </div>
 
 <div id="shell" class="hidden">
+  <div id="powerBar" class="hidden"></div>
   <div class="top">
     <div class="bar">
       <h1 id="hName">Deur</h1>
@@ -300,6 +309,26 @@
   }
   sysLight.addEventListener?.('change', applyTheme);
   applyTheme();
+  // colours: the status colours and the accent come from the colour theme in the settings; this device may have its own look
+  const hexOk = (c) => /^#[0-9a-f]{6}$/i.test(c || '');
+  const lookColor = (mode) => {
+    const st = S && S.settings, light = document.documentElement.classList.contains('light');
+    if (st) { const own = light && hexOk(st.colorsLight && st.colorsLight[mode]) ? st.colorsLight[mode] : hexOk(st.colors && st.colors[mode]) ? st.colors[mode] : ''; if (own) return own; }
+    return COLORS[mode];
+  };
+  const myLook = () => { try { return JSON.parse(store.get('doorLook', '{}')) || {}; } catch { return {}; } };
+  function applyLook() {
+    const root = document.documentElement, look = myLook();
+    for (const m of ['open', 'closed', 'busy']) root.style.setProperty('--' + m, lookColor(m));
+    const accent = hexOk(look.accent) ? look.accent : hexOk(S && S.settings && S.settings.accent) ? S.settings.accent : '';
+    if (accent) {
+      const n = parseInt(accent.slice(1), 16), lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+      root.style.setProperty('--accent', accent); root.style.setProperty('--on-accent', lum > 0.55 ? '#000' : '#fff');
+    } else { root.style.removeProperty('--accent'); root.style.removeProperty('--on-accent'); }
+    root.classList.toggle('compact', look.density === 'compact');
+    root.classList.toggle('sharp', look.corners === 'sharp');
+    document.body.style.zoom = String({ s: 0.92, m: 1, l: 1.12, xl: 1.25 }[look.size || 'm'] || 1);
+  }
   const DAYS = ['Zo', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za'];
   const TYPE = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraak', message: 'Vraagje', callback: 'Terugbellen' };
   const TYPE_ICON = { bell: 'bell', reason: 'msg', appointment: 'cal', message: 'msg', callback: 'phone' };
@@ -534,6 +563,80 @@
 
   const what = (r) => [r.topic, r.reason, r.at && `wil ${fmtWhen(r.at)}`, r.when && `terugbellen: ${r.when}`, r.message && `“${r.message}”`].filter(Boolean).join(' · ');
 
+  // ----- energy: the countdown bar (always visible for people who may stop it) and the Energie card -----
+  const PWR_TEXT = { computer: 'De computer gaat uit', hibernate: 'De computer gaat in slaapstand', restart: 'De computer herstart' };
+  function paintPowerBar() {
+    const bar = $('powerBar'), pend = S && S.power && S.power.pending;
+    if (!pend) { bar.classList.add('hidden'); return; }
+    const left = Math.max(0, Math.round((pend.at - Date.now()) / 1000));
+    bar.replaceChildren(h('span', {}, `${PWR_TEXT[pend.action] || 'Energie'} over ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`), h('button', { onclick: async () => { try { await api('/api/power/cancel', {}); toast('Afgebroken'); } catch {} } }, 'Afbreken'));
+    bar.classList.remove('hidden');
+  }
+  setInterval(paintPowerBar, 1000);
+  let powerDraft = null, wakeInfo = null;
+  const DAYS_NL = [['1', 'Maandag'], ['2', 'Dinsdag'], ['3', 'Woensdag'], ['4', 'Donderdag'], ['5', 'Vrijdag'], ['6', 'Zaterdag'], ['0', 'Zondag']];
+  const offHours = (p) => { let t = 0; for (let i = 0; i < 7; i++) { const off = p.days[i].off; if (!off) continue; const [oh, om] = off.split(':').map(Number); for (let st = 1; st <= 7; st++) { const on = p.days[(i + st) % 7].on; if (!on) continue; const [nh, nm] = on.split(':').map(Number); t += (st * 1440 + nh * 60 + nm - (oh * 60 + om)) / 60; break; } } return Math.round(t * 10) / 10; };
+  function powerConfirm(action, label, warn) {
+    $('alertCard').className = 'card';
+    $('alertCard').replaceChildren(
+      h('div', { class: 'poptitle' }, label),
+      h('p', { class: 'muted' }, warn > 0 ? `De computer waarschuwt eerst ${warn} ${warn === 1 ? 'minuut' : 'minuten'} lang op het deurscherm. Je kunt het tot dan afbreken.` : 'Dit gebeurt meteen.'),
+      h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: 'ghost', onclick: closeAlert }, 'Annuleren'), h('span', { style: 'flex:1' }),
+        h('button', { class: 'danger', onclick: async () => { closeAlert(); try { await api('/api/power/now', { action }); toast(warn > 0 ? 'Afteltijd gestart' : 'Uitgevoerd'); } catch {} } }, label)));
+    $('alert').classList.add('open');
+  }
+  function powerCard() {
+    const P = S.power;
+    if (!P) return null;
+    if (!powerDraft) powerDraft = structuredClone({ enabled: P.enabled, how: P.how, warnMinutes: P.warnMinutes, skipIfBusy: P.skipIfBusy, pauseUntil: P.pauseUntil, watts: P.watts, days: P.days, wol: P.wol });
+    const d = powerDraft;
+    const est = h('div', { class: 'muted' });
+    const paintEst = () => { const hrs = offHours(d); est.textContent = hrs ? `Zo staat de computer ongeveer ${hrs} uur per week uit: ongeveer ${Math.round(hrs * d.watts / 10) / 100} kWh minder stroom.` : 'Vul een uit- en een aanzet-tijd in om te zien hoeveel stroom je bespaart.'; };
+    const timeIn = (k, key) => h('input', { type: 'time', value: d.days[k][key], oninput: (e) => { d.days[k][key] = e.target.value; paintEst(); } });
+    const week = h('table', { class: 'week' }, h('thead', {}, h('tr', {}, ...['Dag', 'Scherm uit', 'Scherm aan', 'Computer uit', 'Computer aan'].map((t) => h('th', {}, t)))),
+      h('tbody', {}, ...DAYS_NL.map(([k, name]) => h('tr', {}, h('td', {}, name), ...['screenOff', 'screenOn', 'off', 'on'].map((key) => h('td', {}, timeIn(k, key)))))));
+    const copyWork = () => { for (const k of ['2', '3', '4', '5']) d.days[k] = { ...d.days['1'] }; powerDraft = d; renderAll(true); toast('Maandag is naar dinsdag t/m vrijdag gekopieerd'); };
+    const how = h('select', { onchange: (e) => { d.how = e.target.value; } }, ...[['computer', 'Helemaal uitzetten'], ['hibernate', 'Slaapstand (kan zichzelf wakker maken)']].map(([v, l]) => h('option', { value: v, selected: d.how === v }, l)));
+    const plat = P.platform;
+    const wakeHint = plat === 'win32' ? 'Windows: de wektaak maakt de computer wakker uit slaapstand of hibernate. Vanuit “helemaal uit” kan alleen de BIOS (zoek “Power on by RTC alarm” of “Wake on RTC”) of een stekkerdoos met timer.'
+      : plat === 'darwin' ? 'Mac: dit werkt ook vanuit helemaal uit, via het ingebouwde schema van de Mac. Het vraagt eenmalig je wachtwoord.'
+        : P.pi ? 'Raspberry Pi: heeft geen klok om zichzelf aan te zetten. Gebruik een stekkerdoos met timer, of een RTC-module (bijv. DS3231).' : 'Linux: zet de wekker met rtcwake (het commando verschijnt na het klikken). Een Raspberry Pi kan dit niet.';
+    const status = h('div', { class: 'muted' }, P.wakeApplied ? `Wekschema gezet op ${fmtWhen(P.wakeApplied)}.` : 'Er is nog geen wekschema op deze computer gezet.');
+    const wolRows = h('div', { class: 'list' });
+    const drawWol = () => wolRows.replaceChildren(...d.wol.map((t, i) => h('div', { class: 'row' },
+      h('input', { value: t.name, placeholder: 'Naam (bijv. Deurscherm-Pi)', oninput: (e) => { t.name = e.target.value; } }),
+      h('input', { value: t.mac, placeholder: 'MAC-adres aa:bb:cc:dd:ee:ff', oninput: (e) => { t.mac = e.target.value; } }),
+      h('button', { class: 'sm', onclick: async () => { try { await api('/api/power/settings', d); await api('/api/power/wol', { index: i }); toast('Wekpakket verstuurd'); } catch {} } }, 'Maak wakker'),
+      h('button', { class: 'sm ghost danger', onclick: () => { d.wol.splice(i, 1); drawWol(); } }, '✕'))));
+    drawWol(); paintEst();
+    return h('div', { class: 'card' }, h('h2', {}, 'Energie', h('span', { class: 'sp' }), h('span', { class: 'tag ' + (d.enabled ? 'ok' : '') }, d.enabled ? 'aan' : 'uit')),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Zet het scherm of de hele computer op vaste tijden uit en weer aan, en schakel hem hier ook handmatig uit. Alles staat uit tot je het zelf aanzet. Handig als er buiten schooltijd geen stroom hoeft te zijn.'),
+      !P.available ? h('p', { class: 'muted' }, 'Op deze server kan dit niet (bijvoorbeeld omdat hij in Docker draait).') : null,
+      P.dry ? h('p', { class: 'muted' }, 'Proefdraaien: er wordt niets echt uitgezet.') : null,
+      h('div', { class: 'form' },
+        h('label', {}, 'Energiebeheer'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: d.enabled, onchange: (e) => { d.enabled = e.target.checked; } }), 'Schema en knoppen gebruiken'),
+        h('label', {}, 'Nu'), h('div', { class: 'row' },
+          h('button', { class: 'sm', onclick: async () => { try { await api('/api/power/settings', d); await api('/api/power/now', { action: 'screenOff' }); toast('Scherm uit'); } catch {} } }, 'Scherm uit'),
+          h('button', { class: 'sm', onclick: async () => { try { await api('/api/power/settings', d); await api('/api/power/now', { action: 'screenOn' }); toast('Scherm aan'); } catch {} } }, 'Scherm aan'),
+          h('button', { class: 'sm danger', onclick: () => api('/api/power/settings', d).then(() => powerConfirm('computer', 'Computer nu uitzetten', d.warnMinutes)).catch(() => {}) }, 'Computer uit…'),
+          h('button', { class: 'sm', onclick: () => api('/api/power/settings', d).then(() => powerConfirm('hibernate', 'Slaapstand nu', d.warnMinutes)).catch(() => {}) }, 'Slaapstand…'),
+          h('button', { class: 'sm', onclick: () => api('/api/power/settings', d).then(() => powerConfirm('restart', 'Computer herstarten', d.warnMinutes)).catch(() => {}) }, 'Herstart…')),
+        h('label', {}, 'Schema'), h('div', {}, week, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm ghost', onclick: copyWork }, 'Maandag kopiëren naar dinsdag t/m vrijdag'), h('span', { class: 'muted' }, 'Leeg laten = niets op dat moment.'))),
+        h('label', {}, 'Computer uit via'), how,
+        h('label', {}, 'Waarschuwing'), h('div', { class: 'row' }, h('input', { type: 'number', min: 0, max: 30, value: d.warnMinutes, style: 'width:80px', oninput: (e) => { d.warnMinutes = Number(e.target.value); } }), h('span', { class: 'muted' }, 'minuten aftellen op het deurscherm voor de computer uitgaat')),
+        h('label', {}, 'Wachtende bezoekers'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: d.skipIfBusy, onchange: (e) => { d.skipIfBusy = e.target.checked; } }), 'Niet uitzetten als er nog open verzoeken zijn'),
+        h('label', {}, 'Pauzeren'), h('div', { class: 'row' }, h('input', { type: 'date', value: d.pauseUntil, oninput: (e) => { d.pauseUntil = e.target.value; } }), h('span', { class: 'muted' }, 'tot en met deze datum doet het schema niets (vakantie)')),
+        h('label', {}, 'Verbruik'), h('div', {}, h('div', { class: 'row' }, h('input', { type: 'number', min: 1, max: 2000, value: d.watts, style: 'width:90px', oninput: (e) => { d.watts = Number(e.target.value); paintEst(); } }), h('span', { class: 'muted' }, 'watt (voor de schatting)')), est),
+        h('label', {}, 'Weer aanzetten'), h('div', {}, h('div', { class: 'muted', style: 'margin-bottom:8px' }, wakeHint),
+          h('div', { class: 'row' },
+            h('button', { class: 'sm', onclick: async () => { try { await api('/api/power/settings', d); const r = await api('/api/power/wake/apply', {}); if (r.ok) { toast('Wekschema gezet'); S = await api('/api/admin-state'); renderAll(true); } else { $('alertCard').className = 'card'; $('alertCard').replaceChildren(h('div', { class: 'poptitle' }, 'Zelf doen'), h('p', { class: 'muted' }, r.message || ''), r.manual ? h('pre', { class: 'code' }, r.manual) : null, h('div', { class: 'row' }, h('span', { style: 'flex:1' }), h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten'))); $('alert').classList.add('open'); } } catch {} } }, 'Wekschema op deze computer zetten'),
+            h('button', { class: 'sm ghost', onclick: async () => { try { const r = await api('/api/power/wake/remove', {}); toast(r.ok ? 'Wekschema verwijderd' : (r.message || 'Dat lukte niet')); S = await api('/api/admin-state'); renderAll(true); } catch {} } }, 'Verwijderen'),
+            h('button', { class: 'sm ghost', onclick: async () => { try { const r = await api('/api/power/wake-status'); status.textContent = r.installed ? 'Er staat een wekschema op deze computer.' : 'Er staat geen wekschema op deze computer.'; } catch {} } }, 'Controleren')), status),
+        h('label', {}, 'Andere computers wakker maken'), h('div', {}, h('div', { class: 'muted', style: 'margin-bottom:8px' }, 'Wake-on-LAN: deze server stuurt een wekpakket naar een computer in hetzelfde netwerk (die moet dat in zijn BIOS aan hebben staan).'), wolRows,
+          h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { d.wol.push({ name: '', mac: '' }); drawWol(); } }, '+ Computer toevoegen'))),
+        h('span', {}), h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => { try { await api('/api/power/settings', d); powerDraft = null; S = await api('/api/admin-state'); toast('Energie opgeslagen'); renderAll(true); } catch {} } }, 'Energie opslaan'))));
+  }
+
   function closeAlert() { $('alert').classList.remove('open'); alertId = null; }
   // blocking, deleting: what you can do about one visitor's message
   function modDialog(r) {
@@ -606,7 +709,8 @@
     if (!S) return;
     if (!force && pressing) { redrawLater = true; return; }
     const v = S.view;
-    document.documentElement.style.setProperty('--c', COLORS[v.mode]);
+    applyLook();
+    document.documentElement.style.setProperty('--c', lookColor(v.mode));
     $('hName').textContent = S.settings.name;
     $('hStatus').textContent = v.until ? `${v.label} tot ${fmtWhen(v.until)}` : v.label;
     const unread = S.requests.filter((r) => r.state === 'new').length;
@@ -614,6 +718,7 @@
     const ub = $('userBtn'); ub.classList.toggle('hidden', S.me.kind === 'open'); ub.textContent = S.me.name; $('lockBtn').classList.toggle('hidden', !S.me.canLock);
     $('tabs').replaceChildren(...visibleTabs().map(([k, l]) => h('button', { class: tab === k ? 'cur' : '', onclick: () => setTab(k) }, l, k === 'inbox' && unread ? h('span', { class: 'badge' }, unread) : null)));
     updateTitle();
+    paintPowerBar();
     if (window.doorApp) window.doorApp.report({ open: S.requests.filter((r) => r.state === 'new' || r.state === 'seen').length, mode: v.mode, label: v.label });
     if (!force && editing()) return; // never wipe a form you're editing
     // keep what you typed when live updates redraw the page
@@ -968,7 +1073,7 @@
   // people with only the mail right may only send the mail fields
   const MAIL_KEYS = ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'];
   const payloadFor = (st) => (can('settings') ? st : Object.fromEntries(MAIL_KEYS.map((k) => [k, st[k]])));
-  const CARD_PERM = { 'Deur': 'settings', 'Openingstijden': 'settings', 'Bezoekers': 'settings', 'Automatisch antwoorden': 'settings', 'E-mail': 'mail', 'Personen': 'people', 'Scherm': 'settings', 'Meldingen op je telefoon': 'mail', 'Moderatie': 'settings', 'Afwezig': 'settings', 'Meer': 'export' };
+  const CARD_PERM = { 'Deur': 'settings', 'Openingstijden': 'settings', 'Bezoekers': 'settings', 'Automatisch antwoorden': 'settings', 'E-mail': 'mail', 'Personen': 'people', 'Scherm': 'settings', 'Meldingen op je telefoon': 'mail', 'Moderatie': 'settings', 'Afwezig': 'settings', 'Energie': 'power', 'Meer': 'export' };
 
   // ---------- settings: e-mail ----------
   function mailCard(st, save) {
@@ -1203,18 +1308,25 @@
         try { blocks.push({ id: newId(), type: 'image', src: await imageToData(f), w: 24, size: 4, color: '', bold: false, text: '' }); S.blocks = blocks; redraw(); }
         catch (e) { toast(e.message || 'Deze afbeelding kan niet gebruikt worden'); }
       };
-      const keepDraft = () => { S.blocks = blocks; Object.assign(S.settings, { ui: st.ui, colors: st.colors, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr }); }; // so a redraw keeps what you typed
+      const keepDraft = () => { S.blocks = blocks; Object.assign(S.settings, { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads }); }; // so a redraw keeps what you typed
       const textsCard = h('div', { class: 'card' }, h('h2', {}, 'Teksten'),
         h('p', { class: 'muted', style: 'margin-top:0' }, 'Elk woord op het deurscherm kun je zelf bepalen. Laat een veld leeg voor de standaardtekst (staat grijs in het veld). Tekens als {s} of {name} worden door het scherm ingevuld: laat ze staan waar ze horen.'),
         ...Object.entries(groups).map(([g, items], i) => h('details', { open: i === 0, style: 'margin-top:10px' }, h('summary', {}, g),
           h('div', { class: 'form', style: 'margin-top:10px' }, ...items.flatMap(([k, label, def]) => [h('label', {}, label), h('input', { value: st.ui[k] || '', placeholder: def, maxlength: 120, oninput: (e) => { st.ui[k] = e.target.value; } })])))));
       const colorsCard = h('div', { class: 'card' }, h('h2', {}, 'Kleuren'),
-        h('p', { class: 'muted', style: 'margin-top:0' }, 'De kleur van de status op het deurscherm. Zonder eigen kleur gebruikt het scherm de standaardkleur van het gekozen thema.'),
+        h('p', { class: 'muted', style: 'margin-top:0' }, 'Eén klik verandert de kleuren van het deurscherm, het paneel en de apps. Of kies hieronder zelf een kleur per status.'),
+        h('div', { class: 'row', style: 'flex-wrap:wrap;gap:10px;margin-bottom:14px' }, ...(S.palettes || []).map((pl) => h('button', {
+          class: 'sm' + (st.palette === pl.id ? ' on' : ''), title: pl.name, style: 'display:flex;gap:8px;align-items:center;padding:8px 12px',
+          onclick: async () => { try { await api('/api/settings', { palette: pl.id, colors: { open: pl.open, closed: pl.closed, busy: pl.busy }, colorsLight: pl.light, accent: pl.accent }); S = await api('/api/admin-state'); toast(`Kleurthema: ${pl.name}`); renderAll(true); } catch {} },
+        }, h('span', { style: 'display:flex;gap:3px' }, ...[pl.open, pl.closed, pl.busy].map((c) => h('i', { style: `width:12px;height:12px;border-radius:50%;background:${c};display:inline-block` }))), pl.name))),
         h('div', { class: 'form' }, ...['open', 'closed', 'busy'].flatMap((m) => {
-          const color = h('input', { type: 'color', value: st.colors[m] || DEFAULT_COLORS[m], disabled: !st.colors[m], oninput: (e) => { st.colors[m] = e.target.value; } });
-          const own = h('input', { type: 'checkbox', checked: !!st.colors[m], onchange: (e) => { st.colors[m] = e.target.checked ? color.value : ''; color.disabled = !e.target.checked; } });
+          const color = h('input', { type: 'color', value: st.colors[m] || DEFAULT_COLORS[m], disabled: !st.colors[m], oninput: (e) => { st.colors[m] = e.target.value; st.palette = 'custom'; st.colorsLight = { open: '', closed: '', busy: '' }; } });
+          const own = h('input', { type: 'checkbox', checked: !!st.colors[m], onchange: (e) => { st.colors[m] = e.target.checked ? color.value : ''; color.disabled = !e.target.checked; st.palette = 'custom'; st.colorsLight = { open: '', closed: '', busy: '' }; } });
           return [h('label', {}, st.texts[m].label), h('div', { class: 'row' }, h('label', { class: 'check' }, own, 'Eigen kleur'), color)];
-        })));
+        }), h('label', {}, 'Accentkleur'), h('div', { class: 'row' },
+          h('input', { type: 'color', value: st.accent || '#30d158', oninput: (e) => { st.accent = e.target.value; st.palette = 'custom'; } }),
+          h('button', { class: 'sm ghost', onclick: () => { st.accent = ''; keepDraft(); renderAll(true); } }, 'Neutraal'),
+          h('span', { class: 'muted' }, 'Tabs, knoppen en schakelaars in het paneel en de apps.'))));
       const blockRow = (b, i) => h('div', { class: 'block', style: 'flex-wrap:wrap;gap:10px;align-items:center' },
         h('span', { class: 'tag' }, b.type === 'image' ? 'Afbeelding' : 'Tekst'),
         b.type === 'image'
@@ -1250,7 +1362,7 @@
         frameBox);
       setTimeout(drawPreview, 0);
       const save = async () => {
-        await api('/api/settings', { ui: st.ui, colors: st.colors, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr });
+        await api('/api/settings', { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads });
         await api('/api/blocks', { blocks });
         S = await api('/api/admin-state'); toast('Opgeslagen — staat nu op de deur'); renderAll(true);
       };
@@ -1290,6 +1402,7 @@
           h('span', {}), h('span', { class: 'muted' }, 'Zet je dit aan, dan geldt het niet de vaste keuze licht of donker bij Instellingen → Scherm → Thema.'),
           h('label', {}, 'Weer'), h('div', {}, h('div', { class: 'row' }, chk(st.weather, 'enabled', 'Toon temperatuur en weer'), cityIn, h('button', { class: 'sm', onclick: async () => { try { const r = await api('/api/weather/lookup', { city: cityIn.value }); st.weather.city = cityIn.value = r.city; st.weather.lat = r.lat; st.weather.lon = r.lon; toast(`Gevonden: ${r.city}`); } catch {} } }, 'Zoek plaats')),
             h('div', { class: 'muted' }, S.weatherNow ? `Nu: ${S.weatherNow.temp}° (via Open-Meteo, gratis)` : 'Gratis weerdienst (Open-Meteo), geen sleutel nodig. Kies een plaats en sla op.')),
+          h('label', {}, 'Downloadpagina'), h('div', {}, chk(st.downloads, 'enabled', 'Zet een openbare pagina aan op /get waar mensen de apps kunnen downloaden (bestanden in de map data/downloads)')),
           h('label', {}, 'QR-code'), h('div', {}, chk(st.qr, 'enabled', 'Toon een QR-code waarmee bezoekers met hun eigen telefoon bellen'),
             h('input', { value: st.qr.url, placeholder: 'Adres van de bezoekerspagina (leeg = het adres van dit scherm + /visit)', style: 'margin-top:8px', oninput: (e) => { st.qr.url = e.target.value; } }))));
       return [layoutCard, textsCard, colorsCard, extrasCard, soundCard, blocksCard, h('div', { class: 'save' }, h('button', { class: 'white', onclick: save }, 'Opslaan'))];
@@ -1321,6 +1434,19 @@
         h('div', { class: 'card' }, h('h2', {}, 'Meldingen op dit apparaat'),
           h('div', { class: 'form' },
             h('label', {}, 'Weergave'), h('select', { onchange: (e) => { store.set('doorTheme', e.target.value); applyTheme(); toast('Weergave aangepast'); } }, ...[['dark', 'Donker'], ['light', 'Licht'], ['auto', 'Automatisch (zoals je computer)']].map(([v, l]) => h('option', { value: v, selected: store.get('doorTheme', 'dark') === v }, l))),
+            ...(() => {
+              const look = myLook(), setLook = (k, v) => { const l = myLook(); if (v === '' || v == null) delete l[k]; else l[k] = v; store.set('doorLook', JSON.stringify(l)); applyLook(); };
+              const opt = (key, list) => h('select', { onchange: (e) => { setLook(key, e.target.value); toast('Aangepast op dit apparaat'); } }, ...list.map(([v, l]) => h('option', { value: v, selected: (look[key] || list[0][0]) === v }, l)));
+              return [
+                h('label', {}, 'Tekstgrootte'), opt('size', [['m', 'Normaal'], ['s', 'Klein'], ['l', 'Groot'], ['xl', 'Extra groot']]),
+                h('label', {}, 'Dichtheid'), opt('density', [['normal', 'Ruim'], ['compact', 'Compact']]),
+                h('label', {}, 'Hoeken'), opt('corners', [['round', 'Rond'], ['sharp', 'Scherp']]),
+                h('label', {}, 'Accentkleur'), h('div', { class: 'row' },
+                  h('input', { type: 'color', value: hexOk(look.accent) ? look.accent : (S.settings.accent || '#30d158'), oninput: (e) => setLook('accent', e.target.value) }),
+                  h('button', { class: 'sm ghost', onclick: () => { setLook('accent', ''); renderAll(true); toast('Volgt weer het kleurthema van de server'); } }, 'Volg de server'),
+                  h('span', { class: 'muted' }, 'Alleen op dit apparaat.')),
+              ];
+            })(),
             h('label', {}, 'Geluid'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: prefs.sound, onchange: (e) => setSound(e.target.checked) }), 'Geluid bij aanbellen en verzoeken'),
             h('label', {}, 'Pop-up'), h('span', { class: 'muted' }, 'Altijd aan — ook als het geluid uit staat, bijvoorbeeld als je in een andere ruimte of in overleg zit. Snel wisselen kan met de knop bovenaan.'),
             window.doorApp ? h('label', {}, 'Systeemmelding') : canNotify ? h('label', {}, 'Systeemmelding') : null,
@@ -1362,6 +1488,8 @@
 
         mailCard(st, save),
         peopleCard(),
+
+        powerCard(),
 
         h('div', { class: 'card' }, h('h2', {}, 'Moderatie'),
           h('p', { class: 'muted', style: 'margin-top:0' }, 'Houd het netjes: ongepaste woorden filteren, bezoekers blokkeren en nieuwe profielen eerst goedkeuren.'),

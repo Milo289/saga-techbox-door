@@ -9,6 +9,7 @@
 // badge with the number of open requests, choose the monitor, always on top, zoom, daily refresh,
 // native save/open dialogs for backups and start at login.
 const mouselock = require('./mouselock');
+const { discover } = require('../discover.js');
 const { app, BrowserWindow, ipcMain, powerMonitor, clipboard, Menu, Notification, powerSaveBlocker, shell, dialog, Tray, nativeImage, screen, globalShortcut, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -80,6 +81,7 @@ async function startLocalServer() {
   process.env.PORT = String(config.port);
   process.env.DATA_DIR = DATA_DIR;
   process.env.ADMIN_PIN = config.pin || '';
+  if (app.isPackaged) process.env.DOOR_APP_EXE = app.getPath('exe'); // so the wake-up schedule can start this app
   const { ready } = require('../server.js');
   await ready;
   return (localServerUrl = url);
@@ -243,6 +245,20 @@ function sendStatus(mode) {
   win.webContents.send('tray-status', mode); // the page does the change itself, with your own login
 }
 function openServerPage(p) { if (localServerUrl) shell.openExternal(localServerUrl + p); }
+// switch what this computer is, straight from the tray icon (the same four choices as in the settings)
+const currentDevice = () => (config.role === 'server' ? 'server' : config.role === 'door' ? 'door' : config.serverMode === 'remote' ? 'control' : 'all');
+async function switchDevice(d) {
+  const next = { ...config };
+  if (d === 'all') Object.assign(next, { role: 'control', serverMode: 'here' });
+  else if (d === 'server') Object.assign(next, { role: 'server', serverMode: 'here' });
+  else if (d === 'door') next.role = 'door';
+  else next.role = 'control';
+  if (next.serverMode === 'remote' && !/^https?:\/\/[^\s/]+/.test(next.url || '')) { openSetup(); return; } // it needs a server address first
+  const restartServer = localServerUrl && next.serverMode !== 'here';
+  config = next; saveConfig(next);
+  if (restartServer) { app.relaunch(); app.exit(0); return; }
+  await launch();
+}
 function showWindow() { if (win && !win.isDestroyed()) { if (!win.isVisible()) win.show(); if (win.isMinimized()) win.restore(); win.focus(); } }
 function updateTray() {
   if ((!config.tray && config.role !== 'server') || !config.role) { if (tray) { tray.destroy(); tray = null; } return; } // a server has no window, so it always has a tray icon
@@ -270,6 +286,7 @@ function updateTray() {
       { label: report.open ? `${report.open} open verzoek${report.open === 1 ? '' : 'en'} bekijken` : 'Geen open verzoeken', enabled: !!report.open, click: showWindow },
     ] : []),
     ...(serverOnly ? [] : [{ label: control ? 'Venster tonen' : 'Deurscherm tonen', click: showWindow }]),
+    { label: 'Dit apparaat is…', enabled: !hardLocked, submenu: [['all', 'Alles-in-één'], ['door', 'Deurscherm'], ['control', 'Bedieningspaneel'], ['server', 'Alleen de server']].map(([id, label]) => ({ label, type: 'radio', checked: currentDevice() === id, click: () => switchDevice(id) })) },
     { label: 'Instellingen…', enabled: !hardLocked, click: openSetup },
     { type: 'separator' },
     { label: 'Afsluiten', enabled: !hardLocked, click: () => app.quit() },
@@ -431,6 +448,7 @@ ipcMain.handle('setup:forgetLogin', async (e) => {
   }
   return { ok: true };
 });
+ipcMain.handle('setup:discover', async (e) => (fromSetup(e) ? discover({ timeout: 1800 }) : []));
 ipcMain.handle('setup:test', async (e, url) => (fromSetup(e) ? isDoorServer(String(url)) : false));
 ipcMain.handle('setup:reveal', (e) => { if (fromSetup(e) && fs.existsSync(DATA_DIR)) shell.openPath(DATA_DIR); });
 ipcMain.handle('setup:save', async (e, next) => {

@@ -248,3 +248,19 @@ test('safety: headers and the last change survives a stop', async (t) => {
     try { assert.equal((await call(again, 'GET', '/api/state')).json.settings.note, 'net voor het afsluiten'); } finally { await again.stop(); }
   });
 });
+
+test('colour themes', async (t) => {
+  const srv = await startServer({ patch: true });
+  t.after(() => srv.stop());
+  const tok = await login(srv);
+  const adm = async () => (await call(srv, 'GET', '/api/admin-state', undefined, tok)).json;
+  const pal = (await adm()).palettes;
+  assert.ok(pal.length >= 8 && pal.every((p) => /^#[0-9a-f]{6}$/i.test(p.open) && p.light && p.accent));
+  const blue = pal.find((p) => p.id === 'blue');
+  assert.equal((await call(srv, 'POST', '/api/settings', { palette: 'blue', colors: { open: blue.open, closed: blue.closed, busy: blue.busy }, colorsLight: blue.light, accent: blue.accent }, tok)).status, 200);
+  let s = (await call(srv, 'GET', '/api/state')).json.settings;
+  assert.equal(s.colors.open, '#0a84ff'); assert.equal(s.palette, 'blue'); assert.equal(s.accent, '#0a84ff'); assert.equal(s.colorsLight.open, blue.light.open);
+  await call(srv, 'POST', '/api/settings', { palette: 'bananen', accent: 'rood', colorsLight: { open: 'x', closed: '', busy: '' } }, tok);
+  s = (await call(srv, 'GET', '/api/state')).json.settings;
+  assert.equal(s.palette, 'standard'); assert.equal(s.accent, ''); assert.equal(s.colorsLight.open, '');
+});

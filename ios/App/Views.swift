@@ -53,7 +53,7 @@ struct LockView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             VStack(spacing: 18) {
-                Image(systemName: "faceid").font(.system(size: 54)).foregroundStyle(.green)
+                Image(systemName: "faceid").font(.system(size: 54)).foregroundStyle(Palette.accent)
                 Text("Deur Beheer").font(.title2.bold())
                 Text("Vergrendeld").foregroundStyle(.secondary)
                 Button { Task { await model.unlock() } } label: { Text("Ontgrendel").font(.headline).frame(width: 220).padding(.vertical, 14) }
@@ -80,7 +80,7 @@ struct OnboardingView: View {
     private var picker: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Circle().fill(.green).frame(width: 26, height: 26).shadow(color: .green, radius: 14).padding(.top, 60)
+                Circle().fill(Palette.accent).frame(width: 26, height: 26).shadow(color: Palette.accent, radius: 14).padding(.top, 60)
                 Text("Saga Techbox Deur").font(.largeTitle.bold())
                 Text("Wat is dit apparaat?").foregroundStyle(.secondary)
                 choiceCard("Bedieningspaneel", "Jouw werkplek: status zetten, bezoekers beantwoorden, met Face ID, Siri en snelle acties.", "slider.horizontal.3", "control")
@@ -93,7 +93,7 @@ struct OnboardingView: View {
     private func choiceCard(_ title: String, _ text: String, _ symbol: String, _ value: String) -> some View {
         Button { choice = value } label: {
             HStack(spacing: 14) {
-                Image(systemName: symbol).font(.title2).frame(width: 36).foregroundStyle(.green)
+                Image(systemName: symbol).font(.title2).frame(width: 36).foregroundStyle(Palette.accent)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title).font(.headline)
                     Text(text).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.leading)
@@ -108,7 +108,7 @@ struct OnboardingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Button { choice = nil; error = nil } label: { Label("Terug", systemImage: "chevron.left") }.padding(.top, 50)
-                Circle().fill(.green).frame(width: 26, height: 26).shadow(color: .green, radius: 14)
+                Circle().fill(Palette.accent).frame(width: 26, height: 26).shadow(color: Palette.accent, radius: 14)
                 Text(choice == "door" ? "Deurscherm" : "Bedieningspaneel").font(.largeTitle.bold())
                 Text("Jouw eigen beheer-app. Alles wat het hoofdaccount kan, met Face ID, Siri en snelle acties.").foregroundStyle(.secondary)
                 field("Adres van de deurserver", "bijv. 192.168.1.50:8080", $server, url: true)

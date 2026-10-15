@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('setup', {
   save: (config) => ipcRenderer.invoke('setup:save', config),
   reveal: () => ipcRenderer.invoke('setup:reveal'),
   forgetLogin: () => ipcRenderer.invoke('setup:forgetLogin'),
+  discover: () => ipcRenderer.invoke('setup:discover'),
   update: {
     get: () => ipcRenderer.invoke('update:get'),
     check: () => ipcRenderer.invoke('update:check'),

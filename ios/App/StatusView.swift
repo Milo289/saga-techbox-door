@@ -264,7 +264,7 @@ struct StatusView: View {
     private func toggle(_ title: String, _ symbol: String, _ key: String, _ field: String) -> some View {
         Toggle(isOn: Binding(get: { store.state.settings[key][field].bool }, set: { v in Task { await store.changeSetting(key, field, v) } })) {
             Label(title, systemImage: symbol)
-        }.tint(.green)
+        }.tint(Palette.accent)
     }
 
     private var togglesCard: some View {
@@ -287,7 +287,7 @@ struct StatusView: View {
     private var awayCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle("Afwezig", symbol: "airplane")
-            Toggle("Ik ben afwezig (de deur blijft gesloten)", isOn: $awayOn).tint(.green)
+            Toggle("Ik ben afwezig (de deur blijft gesloten)", isOn: $awayOn).tint(Palette.accent)
             DatePicker("Tot en met", selection: $awayDate, displayedComponents: [.date])
             TextField("Bericht, bijv. Op vakantie — terug op 3 november", text: $awayText)
                 .padding(12).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))

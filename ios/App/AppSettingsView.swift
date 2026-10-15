@@ -10,6 +10,7 @@ struct AppSettingsView: View {
     @AppStorage(Pref.notifyVisits) private var notifyVisits = true
     @AppStorage(Pref.badge) private var badge = true
     @AppStorage(Pref.keepAwake) private var keepAwake = false
+    @State private var iconName: String? = UIApplication.shared.alternateIconName
     @AppStorage(Pref.confirmStatus) private var confirmStatus = false
     @AppStorage(Pref.confirmLockdown) private var confirmLockdown = true
     @AppStorage(Pref.showDuration) private var showDuration = true
@@ -26,6 +27,7 @@ struct AppSettingsView: View {
     @AppStorage(Pref.presets) private var presets = "15,30,60,120"
     @AppStorage(Pref.startTab) private var startTab = "status"
     @AppStorage(Pref.devMode) private var devMode = false
+    @AppStorage(Pref.accentHex) private var accentHex = ""
     @State private var server = UserDefaults.standard.string(forKey: "serverURL") ?? ""
     @State private var taps = 0
     @State private var askForget = false
@@ -74,9 +76,41 @@ struct AppSettingsView: View {
                     Toggle("Automatisch als gezien markeren", isOn: $autoSeen)
                 }
 
+                Section {
+                    ForEach(Array(store.state.palettes.array.enumerated()), id: \.offset) { _, p in
+                        Button {
+                            Task { await store.run("Kleurthema: \(p.name.str)") { _ = try await store.post("api/settings", ["palette": p.id.str, "colors": ["open": p.open.str, "closed": p.closed.str, "busy": p.busy.str], "colorsLight": p.light.dict, "accent": p.accent.str]) } }
+                        } label: {
+                            HStack(spacing: 12) {
+                                HStack(spacing: 4) { ForEach(["open", "closed", "busy"], id: \.self) { Circle().fill(Color(hex: p[$0].str) ?? .gray).frame(width: 16, height: 16) } }
+                                Text(p.name.str).foregroundStyle(.primary)
+                                Spacer()
+                                if store.state.settings.palette.str == p.id.str { Image(systemName: "checkmark").foregroundStyle(Palette.accent) }
+                            }
+                        }
+                    }
+                } header: { Text("Kleurthema voor alles") } footer: { Text("Eén tik verandert de kleuren op het deurscherm, in het paneel en in alle apps.") }
+                .disabled(!store.can("settings"))
+
+                Section {
+                    ColorPicker("Accentkleur van deze app", selection: Binding(get: { Palette.accent }, set: { c in accentHex = c.hexString }), supportsOpacity: false)
+                    if !accentHex.isEmpty { Button("Volg de server") { accentHex = "" } }
+                    Picker(selection: Binding(get: { model.role }, set: { model.switchRole(to: $0) })) {
+                        Text("Bedieningspaneel").tag("control"); Text("Deurscherm").tag("door")
+                    } label: { Label("Dit apparaat is", systemImage: "iphone.and.ipad") }
+                } header: { Text("Alleen dit apparaat") } footer: { Text("Wisselen van type vergeet de server niet. Voor een deurscherm heb je geen inlog nodig.") }
+
                 Section("Weergave") {
                     Picker(selection: $appearance) { Text("Donker").tag("dark"); Text("Licht").tag("light"); Text("Zoals de telefoon").tag("system") } label: { Label("Uiterlijk", systemImage: "circle.lefthalf.filled") }
                     Toggle(isOn: $keepAwake) { Label("Scherm aan houden zolang de app open is", systemImage: "sun.max.fill") }
+                    Picker(selection: Binding(get: { iconName ?? "" }, set: { v in
+                        let name = v.isEmpty ? nil : v
+                        UIApplication.shared.setAlternateIconName(name) { err in if err == nil { iconName = name } }
+                    })) {
+                        Text("Donker").tag("")
+                        Text("Licht").tag("AppIconLight")
+                        Text("Blauw").tag("AppIconBlue")
+                    } label: { Label("App-icoon", systemImage: "square.grid.2x2.fill") }
                 }
 
                 Section("Server") {

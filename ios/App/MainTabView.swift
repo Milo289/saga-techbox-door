@@ -30,8 +30,20 @@ struct MainTabView: View {
                         .tabItem { Label("Ontwikkelaar", systemImage: "hammer.fill") }
                 }
             }
-            .tint(.green)
+            .tint(Palette.accent)
             BannerView(store: store)
+            if store.can("power"), let pend = store.state.power.pending.at.date {
+                VStack {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        let left = max(0, Int(pend.timeIntervalSinceNow))
+                        HStack {
+                            Text("Computer gaat uit over \(left / 60):\(String(format: "%02d", left % 60))").font(.subheadline.bold())
+                            Button("Afbreken") { Task { await store.run("Afgebroken") { _ = try await store.post("api/power/cancel") } } }.buttonStyle(.borderedProminent).tint(.black)
+                        }.frame(maxWidth: .infinity).padding(.vertical, 10).background(Palette.busy).foregroundStyle(.black)
+                    }
+                    Spacer()
+                }
+            }
         }
         .onAppear {
             tab = startTab

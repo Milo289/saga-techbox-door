@@ -4,27 +4,63 @@
 <dict>
 	<key>CFBundleIcons</key>
 	<dict>
+		<key>CFBundleAlternateIcons</key>
+		<dict>
+			<key>AppIcon</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>AppIcon</string>
+			</dict>
+			<key>AppIconBlue</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>AppIconBlue</string>
+			</dict>
+			<key>AppIconLight</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>AppIconLight</string>
+			</dict>
+		</dict>
 		<key>CFBundlePrimaryIcon</key>
 		<dict>
 			<key>CFBundleIconFiles</key>
 			<array>
-				<string>AppIcon60x60</string>
+				<string>AppIconDev60x60</string>
 			</array>
 			<key>CFBundleIconName</key>
-			<string>AppIcon</string>
+			<string>AppIconDev</string>
 		</dict>
 	</dict>
 	<key>CFBundleIcons~ipad</key>
 	<dict>
+		<key>CFBundleAlternateIcons</key>
+		<dict>
+			<key>AppIcon</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>AppIcon</string>
+			</dict>
+			<key>AppIconBlue</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>AppIconBlue</string>
+			</dict>
+			<key>AppIconLight</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>AppIconLight</string>
+			</dict>
+		</dict>
 		<key>CFBundlePrimaryIcon</key>
 		<dict>
 			<key>CFBundleIconFiles</key>
 			<array>
-				<string>AppIcon60x60</string>
-				<string>AppIcon76x76</string>
+				<string>AppIconDev60x60</string>
+				<string>AppIconDev76x76</string>
 			</array>
 			<key>CFBundleIconName</key>
-			<string>AppIcon</string>
+			<string>AppIconDev</string>
 		</dict>
 	</dict>
 	<key>NSAccentColorName</key>

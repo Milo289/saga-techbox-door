@@ -6,7 +6,7 @@
 	<integer>13</integer>
 	<key>logs</key>
 	<dict>
-		<key>78C43FFA-455E-4076-B2C8-F45025CA427C</key>
+		<key>848529E8-C8E0-4836-8C84-E46EBE744B34</key>
 		<dict>
 			<key>className</key>
 			<string>IDECommandLineBuildLog</string>
@@ -15,7 +15,49 @@
 			<key>domainType</key>
 			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
 			<key>fileName</key>
-			<string>78C43FFA-455E-4076-B2C8-F45025CA427C.xcactivitylog</string>
+			<string>848529E8-C8E0-4836-8C84-E46EBE744B34.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>W</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>2</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>DeurBeheer project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>DeurBeheer</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project DeurBeheer with scheme DeurBeheer</string>
+			<key>timeStartedRecording</key>
+			<real>813763724.534096</real>
+			<key>timeStoppedRecording</key>
+			<real>813763735.07916701</real>
+			<key>title</key>
+			<string>Building project DeurBeheer with scheme DeurBeheer</string>
+			<key>uniqueIdentifier</key>
+			<string>848529E8-C8E0-4836-8C84-E46EBE744B34</string>
+		</dict>
+		<key>8B417B4A-9EAE-46C1-BBB0-EA23AA22C9D6</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>8B417B4A-9EAE-46C1-BBB0-EA23AA22C9D6.xcactivitylog</string>
 			<key>hasPrimaryLog</key>
 			<true/>
 			<key>primaryObservable</key>
@@ -38,15 +80,15 @@
 			<key>schemeIdentifier-sharedScheme</key>
 			<integer>1</integer>
 			<key>signature</key>
-			<string>Building project DeurBeheer with scheme DeurBeheerDev and configuration Debug</string>
+			<string>Building project DeurBeheer with scheme DeurBeheerDev</string>
 			<key>timeStartedRecording</key>
-			<real>813081825.479738</real>
+			<real>813763711.59457898</real>
 			<key>timeStoppedRecording</key>
-			<real>813081850.64521205</real>
+			<real>813763723.19883597</real>
 			<key>title</key>
-			<string>Building project DeurBeheer with scheme DeurBeheerDev and configuration Debug</string>
+			<string>Building project DeurBeheer with scheme DeurBeheerDev</string>
 			<key>uniqueIdentifier</key>
-			<string>78C43FFA-455E-4076-B2C8-F45025CA427C</string>
+			<string>8B417B4A-9EAE-46C1-BBB0-EA23AA22C9D6</string>
 		</dict>
 	</dict>
 </dict>

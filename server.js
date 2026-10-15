@@ -9,6 +9,7 @@ const net = require('net');
 const tls = require('tls');
 const os = require('os');
 const crypto = require('crypto');
+const power = require('./power.js'); // switching the screen / computer off and on by a schedule (opt-in)
 
 const PORT = Number(process.env.PORT) || 8080;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -36,6 +37,7 @@ const DEFAULT_SETTINGS = {
   sound: { bell: 'classic', reply: 'soft', custom: false }, // custom = an own bell sound has been uploaded (the file itself is not in the settings)
   away: { enabled: false, until: '', message: '' }, // absence mode: closed until the end of this date (YYYY-MM-DD)
   weather: { enabled: false, city: '', lat: 0, lon: 0 },
+  downloads: { enabled: false }, // a public page /get where people can download the apps you put in the data/downloads folder
   qr: { enabled: false, url: '' }, // a QR code on the door screen that opens the visitor page on the visitor's own phone
   reasons: ['Korte vraag', 'Bezorging', 'Ophalen', 'Handtekening nodig'],
   topics: ['Laptop', 'Wachtwoord / inloggen', 'Printer', 'Wifi / internet', 'Iets anders'],
@@ -49,6 +51,9 @@ const DEFAULT_SETTINGS = {
   layout: { orientation: 'auto', rotate: 0, hour12: false, keyboard: true },
   ui: {}, // filled in below from UI_TEXTS (one empty text per key)
   colors: { open: '', closed: '', busy: '' }, // status colours; empty = the standard colour
+  colorsLight: { open: '', closed: '', busy: '' }, // the same for the light theme (empty = use the colours above)
+  accent: '', // colour of the control panel and the apps (tabs, switches, buttons); empty = neutral
+  palette: 'standard', // which colour theme was picked last (or 'custom')
   dim: { enabled: false, from: '22:00', to: '07:00', level: 0.2 },
   ntfyServer: 'https://ntfy.sh',
   ntfyTopic: '',
@@ -113,6 +118,8 @@ const freshState = () => ({
   blocked: [], // blocked visitors { id, kind: 'ip'|'nr', value, until (0 = for ever), reason, at, by }
   customBell: null, // an own bell sound { mime, b64, at }
   lastDigestDay: '',
+  power: power.defaults(), // energy management (see power.js)
+  wakeApplied: 0, // when the wake-up schedule was last put on this computer
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
   seededAdmin: false,
   users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
@@ -192,6 +199,18 @@ const UI_TEXTS = {
   toastRang: ['Meldingen', 'Als er aangebeld is (ook op andere schermen)', 'Er is aangebeld'],
   toastWait: ['Meldingen', 'Als de bel nog wacht ({s} = seconden)', 'Er is net aangebeld — nog {s} s'],
 };
+// one-click colour themes: the three status colours (dark and light) and the accent of the panel and the apps
+const PALETTES = [
+  { id: 'standard', name: 'Standaard', open: '#30d158', closed: '#ff453a', busy: '#ff9f0a', accent: '#30d158', light: { open: '#1f9d55', closed: '#e0352b', busy: '#e8780c' } },
+  { id: 'blue', name: 'Blauw', open: '#0a84ff', closed: '#ff453a', busy: '#ff9f0a', accent: '#0a84ff', light: { open: '#0a6cd8', closed: '#e0352b', busy: '#e8780c' } },
+  { id: 'ocean', name: 'Oceaan', open: '#00c2d1', closed: '#5e5ce6', busy: '#ffd60a', accent: '#00c2d1', light: { open: '#00899a', closed: '#4a48c9', busy: '#c79a00' } },
+  { id: 'purple', name: 'Paars', open: '#bf5af2', closed: '#ff375f', busy: '#ffd60a', accent: '#bf5af2', light: { open: '#9a3fd0', closed: '#e0194a', busy: '#c79a00' } },
+  { id: 'pink', name: 'Roze', open: '#ff6ec7', closed: '#8e8e93', busy: '#ffb340', accent: '#ff6ec7', light: { open: '#e0449f', closed: '#6e6e73', busy: '#e0892a' } },
+  { id: 'sunset', name: 'Zonsondergang', open: '#ffb340', closed: '#ff375f', busy: '#bf5af2', accent: '#ff9f0a', light: { open: '#e08a10', closed: '#e0194a', busy: '#9a3fd0' } },
+  { id: 'mono', name: 'Zwart-wit', open: '#ffffff', closed: '#8e8e93', busy: '#636366', accent: '#ffffff', light: { open: '#1c1c1e', closed: '#8e8e93', busy: '#636366' } },
+  { id: 'contrast', name: 'Hoog contrast', open: '#00ff6a', closed: '#ff2d2d', busy: '#ffe600', accent: '#ffe600', light: { open: '#007a33', closed: '#c40000', busy: '#8a7400' } },
+  { id: 'cb', name: 'Kleurenblind-vriendelijk', open: '#0072b2', closed: '#d55e00', busy: '#f0e442', accent: '#0072b2', light: { open: '#005a8c', closed: '#b34b00', busy: '#a89c00' } },
+];
 const resolveUi = (over) => Object.fromEntries(Object.entries(UI_TEXTS).map(([k, v]) => [k, (over && String(over[k] || '').trim()) || v[2]]));
 const UI_DEFAULTS = Object.fromEntries(Object.keys(UI_TEXTS).map((k) => [k, '']));
 DEFAULT_SETTINGS.ui = UI_DEFAULTS;
@@ -312,7 +331,7 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), blocked: cleanBlocked(raw.blocked), customBell: cleanBell(raw.customBell), system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), blocked: cleanBlocked(raw.blocked), customBell: cleanBell(raw.customBell), power: power.clean(raw.power), system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
@@ -455,6 +474,7 @@ function publicState() {
     blocks: state.blocks || [],
     weather: state.settings.weather.enabled && weather.ok ? { temp: weather.temp, code: weather.code, city: state.settings.weather.city } : null,
     bellSoundV: state.customBell ? state.customBell.at : 0,
+    power: powerPending ? { action: powerPending.action, at: powerPending.at } : null, // a countdown the door screens show
     serverTime: now,
   };
 }
@@ -463,6 +483,7 @@ const PERM_LABELS = {
   view: 'Status zien', status: 'Status, bericht en bezet-tijden wijzigen', inbox: 'Bezoekers zien en beantwoorden', people: 'Personenlijst beheren',
   settings: 'Instellingen wijzigen', mail: 'E-mail en meldingen instellen', export: 'Back-up maken en terugzetten', audit: 'Activiteitenlog zien',
   users: 'Gebruikers en rechten beheren', api: 'API-sleutels beheren', system: 'Systeeminstellingen',
+  power: 'Computer en scherm uit- en aanzetten',
 };
 const PUBLIC_PERM_LABELS = Object.fromEntries(Object.entries(PERM_LABELS).filter(([k]) => k !== 'system')); // 'system' belongs to the main account only
 const ALL_PERMS = Object.keys(PERM_LABELS);
@@ -584,11 +605,13 @@ function adminState(id) {
     build: BUILD,
     settings,
     uiTexts: UI_TEXTS,
+    palettes: PALETTES,
     blocks: state.blocks || [],
     bellSoundV: state.customBell ? state.customBell.at : 0,
     blocked: full('inbox') ? activeBlocks() : [],
     pendingProfiles: full('inbox') ? state.people.filter((x) => x.pending).map(({ id, nr, name, email }) => ({ id, nr, name, email })) : [],
     weatherNow: state.settings.weather.enabled && weather.ok ? { temp: weather.temp, code: weather.code } : null,
+    power: full('power') ? { ...state.power, available: power.available(), dry: power.dryRun(), platform: power.dryRun() && process.env.DOOR_POWER_PLATFORM ? process.env.DOOR_POWER_PLATFORM : process.platform, pi: power.isPi(), pending: powerPending, log: power.log.slice(0, 10), offHours: power.offHoursPerWeek(state.power), kwh: power.kwhPerWeek(state.power), wakeApplied: state.wakeApplied } : undefined,
     people: full('people') ? state.people : [],
     peopleRev: state.peopleRev || 0,
     mailOn: mailOn(),
@@ -756,7 +779,63 @@ async function mailAdmin(r) {
   catch (e) { log('mail', `Mail naar ${m.adminTo} mislukt: ${e.message}`); changed(); }
 }
 
+// ---------- being found: apps on the same network can ask "who is a door server?" (no typing of addresses) ----------
+function startDiscovery() {
+  if (process.env.DOOR_DISCOVERY === 'off') return;
+  try {
+    const sock = require('dgram').createSocket({ type: 'udp4', reuseAddr: true });
+    sock.on('error', () => { try { sock.close(); } catch {} }); // port taken or no network: simply not discoverable
+    sock.on('message', (msg, rinfo) => {
+      if (msg.toString('utf8').trim() !== 'SAGA-DOOR?') return;
+      sock.send(Buffer.from(JSON.stringify({ app: 'saga-techbox-door', name: state.settings.name, port: PORT, version: APP_VERSION })), rinfo.port, rinfo.address);
+    });
+    sock.bind(Number(process.env.DOOR_DISCOVERY_PORT) || 41234);
+    sock.unref();
+  } catch { /* ignore */ }
+}
+startDiscovery();
+
 // ---------- timers ----------
+// ----- energy: the schedule, the countdown, the actions -----
+let powerPending = null, powerTimer = null;
+const firedPower = {};
+function execPower() {
+  const a = powerPending && powerPending.action;
+  powerPending = null; powerTimer = null;
+  if (!a) return;
+  try { power.run(a); log('energie', power.dryRun() ? `(proefdraaien) ${a}` : `Uitgevoerd: ${a}`, 'systeem'); } catch (e) { log('energie', `Mislukt: ${e.message}`, 'systeem'); }
+  changed();
+}
+function startPower(action, by) {
+  const warn = state.power.warnMinutes;
+  clearTimeout(powerTimer);
+  powerPending = { action, at: Date.now() + warn * 60000, by };
+  log('energie', `${{ computer: 'Computer uit', hibernate: 'Slaapstand', restart: 'Herstart' }[action]} over ${warn} min (${by})`, by);
+  if (warn <= 0) { execPower(); return; }
+  powerTimer = setTimeout(execPower, warn * 60000);
+  changed();
+}
+function cancelPower() {
+  if (!powerPending) return false;
+  clearTimeout(powerTimer); powerTimer = null; powerPending = null;
+  log('energie', 'Afgebroken');
+  changed();
+  return true;
+}
+function runPowerSchedule(now) {
+  const p = state.power;
+  if (!p.enabled || !power.available() || powerPending) return;
+  for (const kind of power.dueEvents(p, now, firedPower)) {
+    firedPower[kind] = power.dayKey(new Date(now));
+    if (kind === 'off') {
+      if (p.skipIfBusy && state.requests.some((r) => (r.state === 'new' || r.state === 'seen') && !r.reply)) { log('energie', 'Vandaag niet uitgezet: er staan nog open verzoeken', 'systeem'); continue; }
+      startPower(p.how, 'schema');
+    } else {
+      try { power.run(kind); log('energie', `${kind === 'screenOff' ? 'Scherm uit' : 'Scherm aan'} (schema)`, 'systeem'); } catch (e) { log('energie', `Mislukt: ${e.message}`, 'systeem'); }
+    }
+  }
+}
+
 // ----- weather (Open-Meteo: free, no key) -----
 let weather = { ok: false, temp: null, code: null, at: 0 };
 const WEATHER_API = process.env.DOOR_WEATHER_API || 'https://api.open-meteo.com/v1/forecast';
@@ -817,6 +896,7 @@ function tick() {
     if (state.requests.length !== n) dirty = true;
   }
   refreshWeather(false);
+  runPowerSchedule(now);
   state.blocked = state.blocked.filter((b) => !b.until || b.until > now - 864e5); // forget old, expired blocks
   const dg = state.settings.mail;
   if (dg.digest && mailOn() && isEmail(dg.adminTo)) {
@@ -1052,6 +1132,9 @@ const adminRoutes = {
     for (const m of MODES) if (!merged.texts[m].label) merged.texts[m].label = DEFAULT_SETTINGS.texts[m].label;
     for (const k of Object.keys(UI_TEXTS)) merged.ui[k] = str(merged.ui[k], 120).trim();
     for (const m of MODES) if (!/^#[0-9a-f]{6}$/i.test(String(merged.colors[m]))) merged.colors[m] = '';
+    for (const m of MODES) if (!/^#[0-9a-f]{6}$/i.test(String(merged.colorsLight[m]))) merged.colorsLight[m] = '';
+    if (!/^#[0-9a-f]{6}$/i.test(String(merged.accent))) merged.accent = '';
+    if (merged.palette !== 'custom' && !PALETTES.some((x) => x.id === merged.palette)) merged.palette = 'standard';
     const mo = merged.moderation;
     if (!['flag', 'mask', 'block'].includes(mo.action)) mo.action = 'mask';
     mo.maxPerHour = Math.max(1, Math.min(500, Math.round(Number(mo.maxPerHour)) || 20));
@@ -1129,6 +1212,33 @@ const adminRoutes = {
   },
 
   // ----- weather, own bell sound, evening summary -----
+  // ----- energy (permission: power) -----
+  'POST /api/power/settings': (b) => { state.power = power.clean(b); log('energie', state.power.enabled ? 'Energieschema opgeslagen' : 'Energiebeheer uit'); },
+  'POST /api/power/now': (b) => {
+    if (!state.power.enabled) throw bad('Zet energiebeheer eerst aan');
+    if (!power.available()) throw bad('Energiebeheer staat uit op deze server');
+    if (powerPending) throw bad('Er loopt al een afteltijd. Breek die eerst af.');
+    if (b.action === 'screenOff' || b.action === 'screenOn') { try { power.run(b.action); } catch (e) { throw bad(e.message); } log('energie', b.action === 'screenOff' ? 'Scherm uit (handmatig)' : 'Scherm aan (handmatig)'); return; }
+    if (!['computer', 'hibernate', 'restart'].includes(b.action)) throw bad('Onbekende actie');
+    startPower(b.action, actor || 'beheerder');
+  },
+  'POST /api/power/cancel': () => { if (!cancelPower()) throw bad('Er loopt niets af'); },
+  'POST /api/power/wake/apply': async () => {
+    let r;
+    try { r = power.applyWake(state.power, process.env.DOOR_APP_EXE || ''); } catch (e) { throw bad(e.message); }
+    if (r.ok) { state.wakeApplied = Date.now(); log('energie', 'Wekschema op deze computer gezet'); }
+    return r;
+  },
+  'POST /api/power/wake/remove': async () => { const r = power.removeWake(); if (r.ok) { state.wakeApplied = 0; log('energie', 'Wekschema van deze computer gehaald'); } return r; },
+  'GET /api/power/wake-status': () => power.wakeStatus(),
+  'POST /api/power/wol': async (b) => {
+    const t = state.power.wol[Number(b.index)];
+    if (!t) throw bad('Dat apparaat staat niet in de lijst');
+    try { await power.sendWol(t.mac); } catch (e) { throw bad(`Versturen mislukt: ${e.message}`); }
+    log('energie', `Wakker gemaakt via netwerk: ${t.name || t.mac}`);
+    return { ok: true };
+  },
+
   'POST /api/weather/lookup': async (b) => {
     const q = str(b.city, 80);
     if (!q) throw bad('Vul een plaats in');
@@ -1182,7 +1292,7 @@ const adminRoutes = {
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
-    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
+    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), power: power.clean(b.power), users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
   },
 };
@@ -1269,6 +1379,7 @@ const NEED = {
   'POST /api/test-notify': 'mail', 'POST /api/mail/test': 'mail',
   'POST /api/requests/reply': 'inbox', 'POST /api/requests/accept': 'inbox', 'POST /api/requests/done': 'inbox', 'POST /api/requests/seen': 'inbox', 'POST /api/requests/clear': 'inbox', 'POST /api/appointments/remove': 'inbox',
   'POST /api/requests/delete': 'inbox', 'POST /api/moderation/block': 'inbox', 'POST /api/moderation/unblock': 'inbox', 'POST /api/moderation/profile': 'inbox',
+  'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -1517,6 +1628,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET') {
       if (p === '/' || p === '/display' || p === '/visit') return serveFile(res, 'display.html');
+      if (p === '/get' || p.startsWith('/get/')) return serveDownloads(req, res, p);
       if (p === '/admin') return serveFile(res, 'admin.html');
       if (p === '/sw.js') res.setHeader('Service-Worker-Allowed', '/admin');
       return serveFile(res, p.slice(1));
@@ -1526,6 +1638,24 @@ const server = http.createServer(async (req, res) => {
     send(res, e.logout ? 401 : e.code === 429 ? 429 : 400, { error: e.message });
   }
 });
+
+// Opt-in public download page: lists the files in data/downloads (put installers there yourself). Off unless switched on in Ontwerp.
+function serveDownloads(req, res, p) {
+  if (!state.settings.downloads.enabled) return send(res, 404, { error: 'not found' });
+  const dir = path.join(DATA_DIR, 'downloads');
+  let files = [];
+  try { files = fs.readdirSync(dir).filter((f) => /^[\w.\-]+$/.test(f) && fs.statSync(path.join(dir, f)).isFile()); } catch {}
+  if (p === '/get') {
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const items = files.map((f) => `<a href="/get/${encodeURIComponent(f)}">${esc(f)} <small>${(fs.statSync(path.join(dir, f)).size / 1048576).toFixed(1)} MB</small></a>`).join('') || '<p>Er staat nog niets klaar om te downloaden.</p>';
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Download de app</title><style>body{font:17px system-ui;background:#0e1417;color:#fff;max-width:560px;margin:0 auto;padding:24px 16px}a{display:block;background:#1c9d47;color:#fff;text-decoration:none;padding:16px;border-radius:14px;margin:10px 0}small{opacity:.8;float:right}</style><h1>Download de app</h1>${items}`);
+  }
+  const name = decodeURIComponent(p.slice(5));
+  if (!files.includes(name)) return send(res, 404, { error: 'not found' });
+  res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${name}"` });
+  fs.createReadStream(path.join(dir, name)).pipe(res);
+}
 
 // after an update: take a safe copy of everything first, then carry on
 if (state.lastVersion && state.lastVersion !== APP_VERSION) {

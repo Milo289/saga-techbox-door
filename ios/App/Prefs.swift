@@ -26,6 +26,7 @@ enum Pref {
     static let devMode = "p.devMode"
     static let verboseLog = "p.verboseLog"
     static let recentMessages = "p.recentMessages"
+    static let accentHex = "p.accentHex"   // this device's own accent colour (empty = follow the server)
 }
 
 extension UserDefaults {
@@ -58,10 +59,39 @@ enum Sounds {
 
 /// The three door colours.
 enum Palette {
-    static let open = Color(red: 0.19, green: 0.82, blue: 0.35)
-    static let closed = Color(red: 1.0, green: 0.27, blue: 0.23)
-    static let busy = Color(red: 1.0, green: 0.62, blue: 0.04)
+    /// The colour theme chosen on the server (Ontwerp → Kleuren) overrides these; set whenever new data arrives.
+    nonisolated(unsafe) static var override: [String: Color] = [:]
+    nonisolated(unsafe) static var serverAccent: Color?
+    static var open: Color { override["open"] ?? Color(red: 0.19, green: 0.82, blue: 0.35) }
+    static var closed: Color { override["closed"] ?? Color(red: 1.0, green: 0.27, blue: 0.23) }
+    static var busy: Color { override["busy"] ?? Color(red: 1.0, green: 0.62, blue: 0.04) }
     static func color(_ mode: String) -> Color { mode == "open" ? open : mode == "closed" ? closed : mode == "busy" ? busy : .gray }
+    /// The colour of tabs, switches and buttons: this device's own choice, else the server's, else green.
+    static var accent: Color {
+        if let hex = UserDefaults.standard.string(forKey: Pref.accentHex), let c = Color(hex: hex) { return c }
+        return serverAccent ?? Color(red: 0.19, green: 0.82, blue: 0.35)
+    }
+    static func apply(_ settings: JSON) {
+        var o: [String: Color] = [:]
+        for m in ["open", "closed", "busy"] { if let c = Color(hex: settings.colors[m].str) { o[m] = c } }
+        override = o
+        serverAccent = Color(hex: settings.accent.str)
+    }
+}
+
+extension Color {
+    /// "#0a84ff" → Color (nil when it is not a colour)
+    init?(hex: String) {
+        var h = hex.trimmingCharacters(in: .whitespaces)
+        if h.hasPrefix("#") { h.removeFirst() }
+        guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
+        self.init(red: Double((v >> 16) & 255) / 255, green: Double((v >> 8) & 255) / 255, blue: Double(v & 255) / 255)
+    }
+    var hexString: String {
+        let u = UIColor(self); var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        u.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "#%02x%02x%02x", Int(r * 255), Int(g * 255), Int(b * 255))
+    }
 }
 
 enum Build {

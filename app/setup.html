@@ -82,7 +82,9 @@
     <label class="f">Adres van de deurserver
       <div class="row"><input type="text" id="url" class="grow" placeholder="http://192.168.1.50:8080" spellcheck="false"><button id="test" type="button">Test</button></div>
     </label>
-    <p class="hint" id="testResult">Het adres staat bovenaan in het bedieningspaneel van de server, of vraag het aan wie de server heeft opgezet.</p>
+    <div class="row"><button type="button" id="find">Zoek in dit netwerk</button><span class="hint" id="findState"></span></div>
+    <div id="found" class="row" style="flex-wrap:wrap"></div>
+    <p class="hint" id="testResult">Het adres staat bovenaan in het bedieningspaneel van de server, of vraag het aan wie de server heeft opgezet. Of laat deze computer de server zelf zoeken.</p>
   </div>
 
   <label class="check"><input type="checkbox" id="autostart"> Automatisch starten als de computer opstart</label>
@@ -197,6 +199,20 @@
     $('acctState').textContent = r && r.ok ? 'Vergeten — log opnieuw in' : 'Dat lukte niet';
     $('acctState').className = r && r.ok ? 'hint ok' : 'hint bad';
     setTimeout(() => { $('forgetLogin').disabled = false; }, 1500);
+  };
+
+  // ---- find the server by itself ----
+  $('find').onclick = async () => {
+    $('find').disabled = true; $('findState').textContent = 'Zoeken…'; $('found').replaceChildren();
+    const list = await window.setup.discover();
+    $('find').disabled = false;
+    $('findState').textContent = list.length ? `${list.length} gevonden — tik er een aan` : 'Geen server gevonden. Staat hij aan, en in hetzelfde netwerk?';
+    for (const s of list) {
+      const b = document.createElement('button'); b.type = 'button';
+      b.textContent = `${s.name} (${s.host}:${s.port})`;
+      b.onclick = () => { $('url').value = `http://${s.host}:${s.port}`; $('test').click(); };
+      $('found').append(b);
+    }
   };
 
   // ---- updates ----

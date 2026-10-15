@@ -25,7 +25,7 @@ Download the installer from the **Releases** page of this repository:
 |---|---|
 | Mac with Apple chip (M1 and newer) | `…-mac-arm64.pkg` (or `.dmg`) |
 | Mac with Intel chip | `…-mac-x64.pkg` (or `.dmg`) |
-| Windows | `…-windows-setup.exe` |
+| Windows | `…-windows-setup.exe` (of `…-windows-portable.exe`: zonder installeren, bv. vanaf een usb-stick) |
 | Linux PC | `…-linux-….AppImage` or `.deb` marked x64 / x86_64 / amd64 |
 | Raspberry Pi (64-bit OS) | `…-linux-arm64.AppImage` or `…-linux-arm64.deb` |
 
@@ -212,3 +212,13 @@ npm run dist:mac     # or dist:win / dist:linux — installers end up in dist/
 | `app/` | Desktop app (Electron) |
 | `kiosk/` | Start-up scripts for a plain browser kiosk (Windows, Mac) |
 | `.github/workflows/build.yml` | Builds the app on GitHub |
+
+## Versie 2.5.0 — energie, kleuren, vinden en downloaden
+
+Alles hieronder staat standaard **uit** en kost niets.
+
+- **Energie (Beheer → Energie, recht `power`, standaard alleen de eigenaar):** per dag kiezen wanneer het deurscherm uit/aan gaat en wanneer de computer slaapt, in winterslaap gaat of uitgaat. Het deurscherm toont vooraf een aftelling. Wakker worden: Windows via een geplande taak (WakeToRun, eenmalig “Toepassen” als beheerder) of de BIOS-wekker; macOS via `pmset`; Linux via `rtcwake`; een Raspberry Pi heeft geen klok en kan niet zelf opstarten — gebruik een slimme stekker met timer of een RTC-module. Wake-on-LAN kan andere computers aanzetten.
+- **Kleurthema’s (Ontwerp):** één knop voor het hele uiterlijk (Standaard, Blauw, Oceaan, Paars, Roze, Zonsondergang, Zwart-wit, Hoog contrast, Kleurenblind-vriendelijk) plus een eigen accentkleur. Elk apparaat (web, iPhone, bureaublad) kan daarnaast zijn eigen uiterlijk kiezen.
+- **Server vinden:** apps zoeken servers in het netwerk zelf (UDP 41234; uit te zetten met `DOOR_DISCOVERY=off`).
+- **Downloadpagina:** Ontwerp → “Downloadpagina” zet `/get` aan; zet de bestanden in `data/downloads`.
+- **App-icoon:** dashboard-icoon; op iPhone kiezen tussen donker, licht en blauw (Instellingen → Weergave).

@@ -12,6 +12,8 @@ struct AccountSheet: View {
     @State private var message: String?
     @State private var good = false
     @State private var askForget = false
+    @State private var searching = false
+    @State private var found: [Discovery.Found] = []
 
     var body: some View {
         NavigationStack {
@@ -26,6 +28,13 @@ struct AccountSheet: View {
                 Section {
                     TextField("bijv. 192.168.1.50:8080", text: $server).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     Button { saveServer() } label: { Label("Opslaan en verbinden", systemImage: "network") }
+                    Button {
+                        searching = true
+                        Task { found = await Discovery.find(); searching = false; if found.isEmpty { message = "Geen server gevonden. Staat hij aan, en op hetzelfde wifi?"; good = false } }
+                    } label: { HStack { if searching { ProgressView() }; Label("Zoek in dit netwerk", systemImage: "magnifyingglass") } }.disabled(searching)
+                    ForEach(found) { s in
+                        Button { server = s.url; saveServer() } label: { VStack(alignment: .leading) { Text(s.name).font(.headline); Text("\(s.host):\(s.port)  ·  versie \(s.version)").font(.caption).foregroundStyle(.secondary) } }
+                    }
                 } header: { Text("Server of IP wijzigen") } footer: { Text("Het adres van de computer waarop de deurserver draait. Het staat in de instellingen van de app op die computer.") }
 
                 Section {

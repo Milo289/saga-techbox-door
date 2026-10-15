@@ -8,6 +8,7 @@ struct ManageView: View {
     @State private var showWeb = false
     @State private var showDoor = false
     @State private var askLockdown = false
+    @State private var askPower: String?
 
     var body: some View {
         NavigationStack {
@@ -91,6 +92,24 @@ struct ManageView: View {
                         }
                     }
                 }
+                if store.can("power"), store.state.power.available.bool {
+                    Section {
+                        if let pend = store.state.power.pending.at.date {
+                            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                                let left = max(0, Int(pend.timeIntervalSinceNow))
+                                Label("Computer gaat uit over \(left / 60):\(String(format: "%02d", left % 60))", systemImage: "power").foregroundStyle(Palette.busy)
+                            }
+                            Button("Afbreken") { Task { await store.run("Afgebroken") { _ = try await store.post("api/power/cancel") } } }
+                        }
+                        if !store.state.power.enabled.bool { Label("Energiebeheer staat uit — zet het aan in het webpaneel (Instellingen → Energie).", systemImage: "info.circle").font(.footnote).foregroundStyle(.secondary) }
+                        Button { Task { await store.run("Scherm uit") { _ = try await store.post("api/power/now", ["action": "screenOff"]) } } } label: { Label("Scherm uit", systemImage: "display") }
+                        Button { Task { await store.run("Scherm aan") { _ = try await store.post("api/power/now", ["action": "screenOn"]) } } } label: { Label("Scherm aan", systemImage: "display") }
+                        Button(role: .destructive) { askPower = "computer" } label: { Label("Computer uitzetten…", systemImage: "power") }
+                        Button { askPower = "hibernate" } label: { Label("Slaapstand…", systemImage: "moon.zzz") }
+                        Button { askPower = "restart" } label: { Label("Herstarten…", systemImage: "arrow.clockwise") }
+                    } header: { Text("Energie van de server-computer") } footer: { Text("Het schema en het wekken stel je in het webpaneel in (Instellingen → Energie).") }
+                    .disabled(!store.state.power.enabled.bool)
+                }
                 if store.can("system") {
                     Section("Systeem") {
                         Button { Task { await store.run("Back-up gemaakt") { _ = try await store.post("api/system/backups/create") } } } label: { Label("Back-up maken", systemImage: "externaldrive.badge.plus") }
@@ -105,6 +124,10 @@ struct ManageView: View {
             .scrollContentBackground(.hidden).background(Color.black.ignoresSafeArea())
             .navigationTitle("Beheer")
             .refreshable { try? await store.refresh() }
+            .confirmationDialog("Weet je het zeker? Er is een afteltijd, die je kunt afbreken.", isPresented: Binding(get: { askPower != nil }, set: { if !$0 { askPower = nil } }), titleVisibility: .visible) {
+                Button("Ja, doe het", role: .destructive) { if let a = askPower { Task { await store.run("Afteltijd gestart") { _ = try await store.post("api/power/now", ["action": a]) } } }; askPower = nil }
+                Button("Annuleren", role: .cancel) { askPower = nil }
+            }
             .confirmationDialog("Noodstop: de deur gaat dicht, het paneel wordt vergrendeld en iedereen anders wordt uitgelogd.", isPresented: $askLockdown, titleVisibility: .visible) {
                 Button("Noodstop", role: .destructive) { lockdown() }
                 Button("Annuleren", role: .cancel) {}
@@ -115,7 +138,7 @@ struct ManageView: View {
     }
 
     private func modToggle(_ title: String, _ field: String) -> some View {
-        Toggle(title, isOn: Binding(get: { store.state.settings.moderation[field].bool }, set: { v in Task { await store.changeSetting("moderation", field, v) } })).tint(.green)
+        Toggle(title, isOn: Binding(get: { store.state.settings.moderation[field].bool }, set: { v in Task { await store.changeSetting("moderation", field, v) } })).tint(Palette.accent)
     }
 
     private func lockdown() { Haptics.heavy(); Task { await store.run("Noodstop actief") { _ = try await store.post("api/system/lockdown") } } }

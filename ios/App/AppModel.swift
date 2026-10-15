@@ -132,6 +132,16 @@ final class AppModel: ObservableObject {
     }
 
     /// This device becomes the door screen: only the server address is needed.
+    /// Switch this device between control panel and door screen without forgetting the server.
+    func switchRole(to new: String) {
+        guard new != role else { return }
+        UserDefaults.standard.set(new, forKey: "role")
+        role = new
+        if new == "door" { configured = DoorApi.configured() != nil; locked = false }
+        else { configured = DoorApi.configured() != nil && Keychain.load() != nil; locked = true } // no login saved yet → the first-start screen asks for it
+        DoorStore.shared.restart()
+    }
+
     func finishDoorSetup() {
         UserDefaults.standard.set("door", forKey: "role")
         role = "door"
