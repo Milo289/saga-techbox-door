@@ -1,0 +1,12 @@
+#!/bin/sh
+# The boot menu must start the system by itself (otherwise a PC that boots this stays at the menu for ever).
+set -e
+for f in isolinux/isolinux.cfg isolinux/live.cfg boot/grub/grub.cfg boot/grub/config.cfg; do
+  [ -f "$f" ] || continue
+  sed -i -E 's/^timeout[[:space:]]+[0-9]+/timeout 30/; s/^([[:space:]]*)set timeout=.*/\1set timeout=3/' "$f"
+  grep -q -E '^timeout|set timeout' "$f" || true
+done
+# syslinux: add a timeout line when the file has none
+if [ -f isolinux/isolinux.cfg ] && ! grep -q -E '^timeout' isolinux/isolinux.cfg; then echo "timeout 30" >> isolinux/isolinux.cfg; fi
+# grub: add a timeout when there is none
+if [ -f boot/grub/grub.cfg ] && ! grep -q 'set timeout' boot/grub/grub.cfg; then sed -i '1i set timeout=3' boot/grub/grub.cfg; fi
