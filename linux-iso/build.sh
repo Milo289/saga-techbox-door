@@ -10,6 +10,7 @@ lb config \
   --distribution bookworm --architectures amd64 --binary-images iso-hybrid \
   --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-binary http://deb.debian.org/debian \
   --parent-mirror-bootstrap http://deb.debian.org/debian --parent-mirror-chroot http://deb.debian.org/debian --parent-mirror-binary http://deb.debian.org/debian \
+  --security true --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary-security http://security.debian.org/debian-security \
   --keyring-packages debian-archive-keyring --archive-areas main \
   --debian-installer none --apt-recommends false --memtest none \
   --iso-application "Saga Techbox Deur" --iso-volume "SAGA_DOOR" \
