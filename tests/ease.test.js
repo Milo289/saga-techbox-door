@@ -45,3 +45,16 @@ test('the start-up status is applied when the server starts', async (t) => {
   assert.equal(v.mode, 'closed');
   assert.match(JSON.stringify(v), /Zo terug/);
 });
+
+test('the start screen: addresses are public and the page is served', async (t) => {
+  const srv = await startServer({ patch: true });
+  t.after(() => srv.stop());
+  const w = await call(srv, 'GET', '/api/where');
+  assert.equal(w.status, 200);
+  assert.ok(Array.isArray(w.json.addresses));
+  assert.match(w.json.mdns, /^http:\/\/.+\.local:\d+$/);
+  assert.equal(w.json.port, srv.port);
+  const page = await call(srv, 'GET', '/start');
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Bedieningspaneel openen/);
+});

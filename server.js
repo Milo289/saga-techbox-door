@@ -981,6 +981,12 @@ function serveFile(res, file) {
 const bad = (msg) => Object.assign(new Error(msg), { code: 400 });
 const findReq = (id) => { const r = state.requests.find((x) => x.id === id); if (!r) throw bad('Dat verzoek bestaat niet meer'); return r; };
 
+// the addresses at which this server can be reached (shown on the start screen of the Linux image)
+function where() {
+  const addresses = [];
+  for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) if (a.family === 'IPv4' && !a.internal) addresses.push(`http://${a.address}:${PORT}`);
+  return { name: state.settings.name, hostname: os.hostname(), port: PORT, version: APP_VERSION, addresses, mdns: `http://${os.hostname()}.local:${PORT}` };
+}
 // what a small device needs to know about the door
 function doorBrief() {
   const v = computeView();
@@ -1630,6 +1636,8 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
   try {
     if (p === '/healthz') return send(res, 200, { ok: true });
+    if (p === '/api/where') return send(res, 200, where()); // for the start screen and for apps that look for the server
+    if (p === '/start') return serveFile(res, 'start.html');
     if (p === '/events') {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;

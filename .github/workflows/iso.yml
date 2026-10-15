@@ -31,6 +31,7 @@ jobs:
           path: Saga-Techbox-Deur-OS-${{ matrix.arch }}.iso
       - name: Opstarttest (boots the ISO in a virtual computer, waits for the server, takes a screenshot)
         if: matrix.arch == 'amd64'
+        timeout-minutes: 15
         run: |
           sudo apt-get install -y qemu-system-x86 socat imagemagick
           ACCEL=tcg; [ -w /dev/kvm ] && ACCEL=kvm
@@ -42,9 +43,9 @@ jobs:
             sleep 5
           done
           sleep 20
-          echo "screendump /tmp/screen.ppm" | socat - UNIX-CONNECT:/tmp/qemu.sock || true
+          echo "screendump /tmp/screen.ppm" | timeout 10 socat - UNIX-CONNECT:/tmp/qemu.sock || true
           sleep 2
-          convert /tmp/screen.ppm screen-amd64.png || true
+          timeout 30 convert /tmp/screen.ppm screen-amd64.png || true
           kill $QPID || true
           [ "$ok" = 1 ] || { echo "De server antwoordde niet binnen 6 minuten"; exit 1; }
       - uses: actions/upload-artifact@v4

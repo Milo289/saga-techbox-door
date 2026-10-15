@@ -5,7 +5,7 @@
 let n = 0;
 async function go() {
   n++;
-  try { await fetch('http://localhost:8080/healthz', { mode: 'no-cors' }); location.href = 'http://localhost:8080/'; return; } catch {}
+  try { await fetch('http://localhost:8080/healthz', { mode: 'no-cors' }); location.href = 'http://localhost:8080' + (new URLSearchParams(location.search).get('to') || '/?kiosk=1'); return; } catch {}
   document.getElementById('m').textContent = 'De server start op… (' + n + ' s)' + (n > 60 ? ' — duurt lang: druk Ctrl+Alt+F2 en lees: journalctl -u saga-door' : '');
   setTimeout(go, 1000);
 }

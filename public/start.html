@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Start</title>
+<style>
+  :root{color-scheme:dark}
+  body{margin:0;background:#0e1417;color:#fff;font:20px/1.4 system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
+  main{width:min(920px,94vw);padding:28px}
+  h1{font-size:40px;margin:0 0 4px} .sub{opacity:.7;margin-bottom:24px}
+  .grid{display:grid;grid-template-columns:1fr 240px;gap:24px;align-items:start}
+  .card{background:#18232a;border-radius:20px;padding:20px;margin-bottom:16px}
+  .addr{font:600 26px ui-monospace,monospace;color:#6fe39a;word-break:break-all;margin:4px 0}
+  .btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+  a.btn,button{background:#1c9d47;color:#fff;border:0;border-radius:14px;padding:16px 22px;font:600 20px system-ui;text-decoration:none;cursor:pointer}
+  a.btn.alt,button.alt{background:#2b3a43}
+  #qr svg{width:100%;height:auto;border-radius:12px;background:#fff}
+  .muted{opacity:.7;font-size:17px}
+  @media(max-width:700px){.grid{grid-template-columns:1fr}}
+</style></head><body><main>
+  <h1 id="name">Saga Techbox Deur</h1><div class="sub" id="ver"></div>
+  <div class="grid">
+    <div>
+      <div class="card"><div class="muted">Open op een telefoon of computer in hetzelfde netwerk:</div><div id="addrs"></div>
+        <div class="muted" id="mdns"></div></div>
+      <div class="card"><b>Bedieningspaneel</b> (inloggen en alles instellen)<div class="btns"><a class="btn" href="/admin">Bedieningspaneel openen</a><a class="btn alt" href="/?kiosk=1">Deurscherm tonen</a></div>
+        <div class="muted" id="next" style="margin-top:12px"></div></div>
+      <div class="muted">Terug naar dit scherm vanaf het deurscherm: tik vijf keer snel in de linkerbovenhoek.</div>
+    </div>
+    <div class="card" style="text-align:center"><div id="qr"></div><div class="muted" style="margin-top:8px">Scan voor het bedieningspaneel</div></div>
+  </div>
+</main>
+<script src="/qr.js"></script>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  let w; try { w = await (await fetch('/api/where')).json(); } catch { w = null; }
+  const $ = (id) => document.getElementById(id);
+  if (w) {
+    $('name').textContent = w.name; $('ver').textContent = 'Versie ' + w.version;
+    $('addrs').innerHTML = (w.addresses.length ? w.addresses : ['Geen netwerk gevonden — steek een netwerkkabel in']).map((a) => `<div class="addr">${a.startsWith('http') ? a + '/admin' : a}</div>`).join('');
+    $('mdns').textContent = 'Of: ' + w.mdns + '/admin';
+    if (w.addresses[0]) { try { $('qr').innerHTML = QR.svg(w.addresses[0] + '/admin'); } catch {} }
+  }
+  // one monitor: show this screen for a moment, then the door screen (cancel with the button)
+  if (q.get('next') === 'door') {
+    let s = 45, stop = false;
+    const el = $('next');
+    const tick = () => { if (stop) return; el.innerHTML = `Het deurscherm start over ${s} s. <button class="alt" id="stay" style="padding:8px 14px;font-size:16px">Hier blijven</button>`; $('stay').onclick = () => { stop = true; el.textContent = ''; }; if (s-- <= 0) location.href = '/?kiosk=1'; else setTimeout(tick, 1000); };
+    tick();
+  }
+})();
+</script></body></html>
