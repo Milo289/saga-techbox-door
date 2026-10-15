@@ -5,12 +5,18 @@ struct MacInbox: View {
     @ObservedObject var store: DoorStore
     @State private var selection: String?
     @State private var showDone = false
+    @State private var query = ""
 
-    private var list: [VisitRequest] { showDone ? store.requests : store.openRequests }
+    private var list: [VisitRequest] {
+        let base = showDone ? store.requests : store.openRequests
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return q.isEmpty ? base : base.filter { ($0.name + " " + $0.summary + " " + $0.nr + " " + $0.typeLabel).lowercased().contains(q) }
+    }
 
     var body: some View {
         HSplitView {
             VStack(spacing: 0) {
+                TextField("Zoeken in bezoekers", text: $query).textFieldStyle(.roundedBorder).padding([.horizontal, .top], 10).padding(.bottom, 6)
                 List(list, selection: $selection) { r in row(r).tag(r.id) }
                     .overlay { if list.isEmpty { ContentUnavailableView("Niemand wacht", systemImage: "bell.slash", description: Text("Nieuwe bezoekers verschijnen hier meteen.")) } }
                 Divider()
@@ -18,6 +24,8 @@ struct MacInbox: View {
                     Toggle("Ook afgehandeld", isOn: $showDone).toggleStyle(.checkbox)
                     Spacer()
                     Menu {
+                        Button("Exporteren als CSV…") { CSV.export(store.requests) }
+                        Divider()
                         Button("Alles als gezien") { Task { await store.run("Gezien") { _ = try await store.post("api/requests/seen") } } }
                         Button("Afgehandelde wissen", role: .destructive) { Task { await store.run("Gewist") { _ = try await store.post("api/requests/clear") } } }
                     } label: { Image(systemName: "ellipsis.circle") }.menuStyle(.borderlessButton).fixedSize()

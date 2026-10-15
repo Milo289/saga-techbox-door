@@ -81,6 +81,13 @@ jobs:
           codesign --force --deep -s - "$APP"
           rm -rf dmg && mkdir dmg && cp -R "$APP" "dmg/Deur Beheer.app" && ln -s /Applications dmg/Applications
           hdiutil create -volname "Saga Techbox Beheer" -srcfolder dmg -ov -format UDZO ../Saga-Techbox-Beheer-Mac.dmg
+          # the developer Mac app ("Deur Dev"), installs next to the normal one
+          xcodebuild -project DeurBeheer.xcodeproj -scheme DeurBeheerMacDev -configuration Release -derivedDataPath build-mac \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          DEV=build-mac/Build/Products/Release/DeurBeheerDev.app
+          codesign --force --deep -s - "$DEV"
+          rm -rf dmgdev && mkdir dmgdev && cp -R "$DEV" "dmgdev/Deur Dev.app" && ln -s /Applications dmgdev/Applications
+          hdiutil create -volname "Saga Techbox Dev" -srcfolder dmgdev -ov -format UDZO ../Saga-Techbox-Dev-Mac.dmg
           ls -la ../*.dmg
       - name: Make the .ipa files
         working-directory: ios
@@ -100,6 +107,7 @@ jobs:
             Saga-Techbox-Beheer-iOS-unsigned.ipa
             Saga-Techbox-Dev-iOS-unsigned.ipa
             Saga-Techbox-Beheer-Mac.dmg
+            Saga-Techbox-Dev-Mac.dmg
 
   desktop:
     strategy:
@@ -119,15 +127,25 @@ jobs:
       - name: Build the app (a real desktop program, not a web page)
         working-directory: desktop
         run: dotnet publish SagaTechboxBeheer.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o out
+      - name: Build the developer app (own name and settings, with an Ontwikkelaar page)
+        working-directory: desktop
+        run: dotnet publish SagaTechboxBeheer.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DevBuild=true -o out-dev
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path desktop/out/SagaTechboxBeheer.exe -DestinationPath Saga-Techbox-Beheer-${{ matrix.name }}.zip
+        run: |
+          Compress-Archive -Path desktop/out/SagaTechboxBeheer.exe -DestinationPath Saga-Techbox-Beheer-${{ matrix.name }}.zip
+          Copy-Item desktop/out-dev/SagaTechboxBeheer.exe SagaTechboxDev.exe
+          Compress-Archive -Path SagaTechboxDev.exe -DestinationPath Saga-Techbox-Dev-${{ matrix.name }}.zip
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: |
           mkdir pack && cp desktop/out/SagaTechboxBeheer pack/ && cp desktop/linux/* pack/ && cp desktop/Assets/icon.png pack/saga-techbox-beheer.png
           tar -czf Saga-Techbox-Beheer-${{ matrix.name }}.tar.gz -C pack .
+          mkdir packdev && cp desktop/out-dev/SagaTechboxBeheer packdev/ && cp desktop/Assets/icon.png packdev/saga-techbox-dev.png
+          sed 's/saga-techbox-beheer/saga-techbox-dev/g; s/Saga Techbox Beheer/Saga Techbox Dev/g' desktop/linux/install.sh > packdev/install.sh && chmod +x packdev/install.sh
+          sed 's/saga-techbox-beheer/saga-techbox-dev/g; s/Saga Techbox Beheer/Saga Techbox Dev/g' desktop/linux/saga-techbox-beheer.desktop > packdev/saga-techbox-dev.desktop
+          tar -czf Saga-Techbox-Dev-${{ matrix.name }}.tar.gz -C packdev .
       - uses: actions/upload-artifact@v4
         with:
           name: Saga-Techbox-Beheer-${{ matrix.name }}
@@ -135,6 +153,8 @@ jobs:
           path: |
             Saga-Techbox-Beheer-${{ matrix.name }}.zip
             Saga-Techbox-Beheer-${{ matrix.name }}.tar.gz
+            Saga-Techbox-Dev-${{ matrix.name }}.zip
+            Saga-Techbox-Dev-${{ matrix.name }}.tar.gz
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

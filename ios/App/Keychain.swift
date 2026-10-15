@@ -1,9 +1,9 @@
 import Foundation
-import Security
+import Security 
 
 /// Stores the login in the iOS Keychain (encrypted by the system, only this app can read it, never leaves this device).
 enum Keychain {
-    static let service = "nl.sagatechbox.beheer"
+    static let service = Bundle.main.bundleIdentifier ?? "nl.sagatechbox.beheer" // each app (normal, Dev, Mac) has its own login item, so they never ask each other for permission
 
     static func save(username: String, password: String) -> Bool {
         delete()

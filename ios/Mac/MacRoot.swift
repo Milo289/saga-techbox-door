@@ -2,15 +2,16 @@ import SwiftUI
 import AppKit
 
 enum MacPage: String, CaseIterable, Identifiable {
-    case status, inbox, manage, activity
+    case status, inbox, manage, activity, dev
     var id: String { rawValue }
-    var title: String { switch self { case .status: return "Status"; case .inbox: return "Bezoekers"; case .manage: return "Beheer"; case .activity: return "Activiteit" } }
-    var symbol: String { switch self { case .status: return "door.left.hand.open"; case .inbox: return "bell.fill"; case .manage: return "slider.horizontal.3"; case .activity: return "list.bullet.rectangle" } }
+    var title: String { switch self { case .status: return "Status"; case .inbox: return "Bezoekers"; case .manage: return "Beheer"; case .activity: return "Activiteit"; case .dev: return "Ontwikkelaar" } }
+    var symbol: String { switch self { case .status: return "door.left.hand.open"; case .inbox: return "bell.fill"; case .manage: return "slider.horizontal.3"; case .activity: return "list.bullet.rectangle"; case .dev: return "hammer.fill" } }
 }
 
 /// First the connection screen, then the app: sidebar on the left, the chosen page on the right.
 struct MacRoot: View {
     @ObservedObject var store: DoorStore
+    @AppStorage(MacPref.appearance) private var appearance = "system"
     @State private var page: MacPage? = {
         #if DEBUG
         if let p = ProcessInfo.processInfo.environment["DEUR_PAGE"], let m = MacPage(rawValue: p) { return m }
@@ -32,7 +33,7 @@ struct MacRoot: View {
                 MacConnect(store: store) { configured = true; store.restart() }
             } else {
                 NavigationSplitView {
-                    List(MacPage.allCases, selection: $page) { p in
+                    List(MacPage.allCases.filter { $0 != .dev || Build.isDeveloperApp }, selection: $page) { p in
                         Label(p.title, systemImage: p.symbol)
                             .badge(p == .inbox ? store.newCount : 0)
                             .tag(p)
@@ -46,6 +47,7 @@ struct MacRoot: View {
                         case .inbox: MacInbox(store: store)
                         case .manage: MacManage(store: store)
                         case .activity: MacActivity(store: store)
+                        case .dev: MacDev(store: store)
                         }
                         if let b = store.banner {
                             Text(b).font(.callout.weight(.medium)).padding(.horizontal, 16).padding(.vertical, 10)
@@ -58,6 +60,7 @@ struct MacRoot: View {
                 .tint(Palette.accent)
             }
         }
+        .preferredColorScheme(appearance.colorScheme)
         .task { configured = await Task.detached { DoorApi.configured() != nil && Keychain.load() != nil }.value }
     }
 }

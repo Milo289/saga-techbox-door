@@ -7,7 +7,7 @@ namespace SagaTechbox;
 
 public sealed record Credentials(string Server, string User, string Pass)
 {
-    static string Dir => Environment.GetEnvironmentVariable("SAGA_TECHBOX_DIR") is { Length: > 0 } d ? d : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SagaTechbox");
+    public static string Dir => Environment.GetEnvironmentVariable("SAGA_TECHBOX_DIR") is { Length: > 0 } d ? d : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Program.IsDev ? "SagaTechboxDev" : "SagaTechbox");
     static string FileName => Path.Combine(Dir, "login.bin");
 
     /// Windows: encrypted with the Windows account (DPAPI). Linux: a file only this user can read (mode 600).

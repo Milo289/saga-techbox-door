@@ -22,6 +22,9 @@ public sealed class DoorClient
     public bool Live { get; private set; }
     public int LatencyMs { get; private set; }
 
+    /// The last things that happened (shown in the developer app).
+    public List<string> Log { get; } = new();
+    public void AddLog(string kind, string text) { lock (Log) { Log.Insert(0, $"{DateTime.Now:HH:mm:ss}  {kind,-10} {text}"); if (Log.Count > 300) Log.RemoveAt(Log.Count - 1); } }
     public event Action? Changed;
     public event Action<JsonNode>? Visit;
     public event Action? Ring;
@@ -77,7 +80,7 @@ public sealed class DoorClient
 
     public void Stop() { _cts?.Cancel(); _cts = null; _token = null; Live = false; }
 
-    void Set(string text, bool live) { Connection = text; Live = live; Changed?.Invoke(); }
+    void Set(string text, bool live) { if (text != Connection) AddLog("verbinding", text); Connection = text; Live = live; Changed?.Invoke(); }
 
     async Task Loop(Credentials creds, CancellationToken ct)
     {
@@ -144,8 +147,8 @@ public sealed class DoorClient
         switch (ev)
         {
             case "state": if (j != null) { State = j; HasState = true; Changed?.Invoke(); } break;
-            case "visit": if (j != null) Visit?.Invoke(j); break;
-            case "ring": Ring?.Invoke(); break;
+            case "visit": AddLog("bezoek", data.Length > 100 ? data[..100] : data); if (j != null) Visit?.Invoke(j); break;
+            case "ring": AddLog("bel", "Er is aangebeld"); Ring?.Invoke(); break;
         }
     }
 

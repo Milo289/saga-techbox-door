@@ -38,18 +38,10 @@ public sealed class App : Application
     {
         try
         {
-            var icon = new WindowIcon(AssetLoader.Open(new Uri("avares://SagaTechboxBeheer/Assets/icon.png")));
+            var icon = new WindowIcon(AssetLoader.Open(new Uri($"avares://{typeof(App).Assembly.GetName().Name}/Assets/icon.png")));
             _win!.Icon = icon;
-            var menu = new NativeMenu();
-            NativeMenuItem Item(string t, Action a) { var i = new NativeMenuItem(t); i.Click += (_, _) => a(); return i; }
-            menu.Add(Item("Venster openen", ShowWindow));
-            menu.Add(new NativeMenuItemSeparator());
-            menu.Add(Item("Open", () => Set("open")));
-            menu.Add(Item("Gesloten", () => Set("closed")));
-            menu.Add(Item("Bezet", () => Set("busy")));
-            menu.Add(new NativeMenuItemSeparator());
-            menu.Add(Item("Stop", () => { DoorClient.Shared.Stop(); desktop.Shutdown(); }));
-            _tray = new TrayIcon { Icon = icon, ToolTipText = "Saga Techbox Deur", Menu = menu };
+            _desktop = desktop; _icon = icon;
+            _tray = new TrayIcon { Icon = icon, ToolTipText = "Saga Techbox Deur", Menu = BuildMenu() };
             _tray.Clicked += (_, _) => ShowWindow();
             DoorClient.Shared.Changed += () => Dispatcher.UIThread.Post(() =>
             {
@@ -59,6 +51,31 @@ public sealed class App : Application
         }
         catch { /* no tray on this desktop: the window still works */ }
     }
+
+    IClassicDesktopStyleApplicationLifetime? _desktop;
+    WindowIcon? _icon;
+
+    NativeMenu BuildMenu()
+    {
+        var menu = new NativeMenu();
+        NativeMenuItem Item(string t, Action a) { var i = new NativeMenuItem(t); i.Click += (_, _) => a(); return i; }
+        menu.Add(Item("Venster openen", ShowWindow));
+        menu.Add(new NativeMenuItemSeparator());
+        menu.Add(Item("Open", () => Set("open")));
+        menu.Add(Item("Gesloten", () => Set("closed")));
+        menu.Add(Item("Bezet", () => Set("busy")));
+        if (AppSettings.Current.Quick.Count > 0)
+        {
+            menu.Add(new NativeMenuItemSeparator());
+            foreach (var q in AppSettings.Current.Quick) { var quick = q; menu.Add(Item(q.Name + (q.Minutes > 0 ? $" · {q.Minutes} min" : ""), () => _ = _win?.RunQuick(quick))); }
+        }
+        menu.Add(new NativeMenuItemSeparator());
+        menu.Add(Item("Stop", () => { DoorClient.Shared.Stop(); _desktop?.Shutdown(); }));
+        return menu;
+    }
+
+    /// Called after the quick actions were changed.
+    public void RefreshTray() { if (_tray != null) _tray.Menu = BuildMenu(); }
 
     void Set(string mode) => _ = DoorClient.Shared.SetStatusAsync(mode);
 

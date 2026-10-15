@@ -20,7 +20,7 @@ struct DeurBeheerMacApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Deur Beheer", id: "main") {
+        WindowGroup(Build.isDeveloperApp ? "Deur Dev" : "Deur Beheer", id: "main") {
             MacRoot(store: store)
                 .frame(minWidth: 820, minHeight: 560)
                 .onAppear { MacNotify.setup(store) }
@@ -37,14 +37,19 @@ struct DeurBeheerMacApp: App {
         }
 
         MenuBarExtra {
-            MenuBarContent(store: store)
+            MenuBarContent(store: store).modifier(SchemeModifier())
         } label: {
             Image(nsImage: statusDot(store.hasState ? Palette.color(store.mode) : .gray, badge: store.newCount))
         }
         .menuBarExtraStyle(.window)
 
-        Settings { MacSettings(store: store).frame(width: 560, height: 520) }
+        Settings { MacSettings(store: store).frame(width: 620, height: 600).modifier(SchemeModifier()) }
     }
+}
+
+struct SchemeModifier: ViewModifier {
+    @AppStorage(MacPref.appearance) private var appearance = "system"
+    func body(content: Content) -> some View { content.preferredColorScheme(appearance.colorScheme) }
 }
 
 final class MacDelegate: NSObject, NSApplicationDelegate {
@@ -57,7 +62,13 @@ final class MacDelegate: NSObject, NSApplicationDelegate {
                 if let w = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && $0.title != "" }) ?? NSApp.windows.first, let v = w.contentView,
                    let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
                     v.cacheDisplay(in: v.bounds, to: rep)
-                    try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                    // put the window's own background behind it (dark or light), so the picture looks like the real window
+                    let img = NSImage(size: v.bounds.size)
+                    img.lockFocus()
+                    w.effectiveAppearance.performAsCurrentDrawingAppearance { NSColor.windowBackgroundColor.setFill(); NSRect(origin: .zero, size: v.bounds.size).fill() }
+                    rep.draw(in: NSRect(origin: .zero, size: v.bounds.size))
+                    img.unlockFocus()
+                    if let tiff = img.tiffRepresentation, let out = NSBitmapImageRep(data: tiff) { try? out.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path)) }
                 }
                 NSApp.terminate(nil)
             }
@@ -85,13 +96,14 @@ func statusDot(_ color: Color, badge: Int) -> NSImage {
 @MainActor enum MacNotify {
     static func setup(_ store: DoorStore) {
         store.onVisit = { r in
+            guard !Quiet.now else { return }
             Sounds.message()
             guard UserDefaults.standard.bool(forKey: Pref.notifyVisits) else { return }
             let c = UNMutableNotificationContent()
             c.title = r.typeLabel; c.body = "\(r.name.isEmpty ? "Iemand" : r.name)\(r.summary.isEmpty ? "" : " — \(r.summary)")"; c.sound = .default
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
         }
-        store.onRing = { Sounds.bell() }
+        store.onRing = { if !Quiet.now { Sounds.bell() } }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 }

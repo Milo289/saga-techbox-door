@@ -250,3 +250,14 @@ Voor elk systeem is er nu een echt programma dat verbindt met de deurserver. Ze 
 De Electron-app blijft bestaan voor wie de server op die computer wil draaien of een deurscherm wil maken. De beheer-apps zijn alleen het bedieningspaneel.
 
 **Eerste keer starten:** de apps zijn niet door Apple of Microsoft ondertekend (dat kost geld per jaar). Mac: rechtsklik op de app → Open (of `xattr -dr com.apple.quarantine "/Applications/Deur Beheer.app"`). Windows: “Meer info” → “Toch uitvoeren”. Zoek de server met de knop “Zoeken” of typ het adres.
+
+## Versie 2.8.0 — meer dan het webpaneel
+Alle beheer-apps (Mac, Windows, Linux) hebben dingen die het webpaneel niet heeft, en een eigen Dev-versie:
+
+- **Licht, donker of zoals het systeem**, plus een eigen accentkleur (groen, blauw, paars, roze, oranje, lucht, of volg de server).
+- **Snelle acties:** eigen knoppen zoals “Lunch · 30 min · Bezet · ‘Even lunch’”. Eén klik; ze staan op de Status-pagina en in het menu van het icoon in de menubalk of bij de klok. Je maakt ze zelf in Instellingen.
+- **Vandaag in cijfers:** bezoekers, wachtend, aangebeld, gemiddelde antwoordtijd.
+- **Bezoekers doorzoeken en exporteren** naar CSV.
+- **Stille uren:** geen geluid of melding in uren die je kiest (Mac en Windows/Linux).
+- **Mac:** menubalk-icoon met kleur en rode stip, sneltoetsen ⌥⌘1/2/3.
+- **Dev-versies** (`Saga-Techbox-Dev-Mac.dmg`, `Saga-Techbox-Dev-Windows-….zip`, `Saga-Techbox-Dev-Linux-….tar.gz`): installeren naast de gewone app en hebben een Ontwikkelaar-pagina met een **API-console**, de ruwe gegevens van de server, een gebeurtenissenlog en verbindingsinformatie.

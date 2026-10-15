@@ -6,6 +6,12 @@ namespace SagaTechbox;
 static class Program
 {
     public static string? SnapshotPath, StartPage;
+    /// The developer app: its own name and settings folder, plus an Ontwikkelaar page.
+#if DEVELOPER
+    public const bool IsDev = true;
+#else
+    public const bool IsDev = false;
+#endif
 
     [STAThread]
     public static void Main(string[] args)

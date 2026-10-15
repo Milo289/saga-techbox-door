@@ -9,10 +9,19 @@ namespace SagaTechbox;
 /// Small helpers so the screens read like a description of the screen.
 static class Ui
 {
-    public static readonly Color Bg = Color.Parse("#0e1417"), Panel = Color.Parse("#18232a"), Panel2 = Color.Parse("#22313a");
+    /// Set on every redraw: true when the window is dark.
+    public static bool Dark = true;
+    public static string BgHex => Dark ? "#0e1417" : "#f2f5f7";
+    public static string PanelHex => Dark ? "#18232a" : "#ffffff";
+    public static string SideHex => Dark ? "#111b21" : "#e6ecef";
+    public static string Soft => Dark ? "#22313a" : "#e3eaee";
+    public static string Soft2 => Dark ? "#2b3a43" : "#cfdae0";
+    public static string DangerSoft => Dark ? "#5a2a2a" : "#f3c9c9";
+    public static string FgHex => Dark ? "#e8eef1" : "#14202a";
     public static IBrush Brush(string hex) => new SolidColorBrush(Color.Parse(hex));
-    public static IBrush Muted => Brush("#98a6ad");
-    public static IBrush White => Brushes.White;
+    public static IBrush Muted => Brush(Dark ? "#98a6ad" : "#5d6c75");
+    public static IBrush White => Brush(FgHex);
+    static IBrush Fg => Brush(FgHex);
 
     public static string ModeHex(string mode)
     {
@@ -22,14 +31,14 @@ static class Ui
     }
     public static string Accent
     {
-        get { var a = DoorClient.Str(DoorClient.Shared.State["settings"]?["accent"]); return a.StartsWith("#") && a.Length == 7 ? a : "#30d158"; }
+        get { if (AppSettings.Current.Accent.StartsWith("#") && AppSettings.Current.Accent.Length == 7) return AppSettings.Current.Accent; var a = DoorClient.Str(DoorClient.Shared.State["settings"]?["accent"]); return a.StartsWith("#") && a.Length == 7 ? a : "#30d158"; }
     }
 
     public static TextBlock Text(string t, double size = 14, bool bold = false, IBrush? color = null, bool wrap = true) => new()
-    { Text = t, FontSize = size, FontWeight = bold ? FontWeight.Bold : FontWeight.Normal, Foreground = color ?? White, TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap };
+    { Text = t, FontSize = size, FontWeight = bold ? FontWeight.Bold : FontWeight.Normal, Foreground = color ?? Fg, TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap };
 
     public static Border Card(Control child, double pad = 18, string? bg = null) => new()
-    { Background = bg != null ? Brush(bg) : new SolidColorBrush(Panel), CornerRadius = new CornerRadius(16), Padding = new Thickness(pad), Child = child };
+    { Background = bg != null ? Brush(bg) : Brush(PanelHex), CornerRadius = new CornerRadius(16), Padding = new Thickness(pad), Child = child };
 
     public static StackPanel Stack(double spacing = 10, params Control[] kids)
     {
@@ -52,12 +61,12 @@ static class Ui
         return w;
     }
 
-    public static Button Btn(string text, Action click, string? bg = null, string fg = "#ffffff", double size = 14, double padV = 10, double padH = 18, bool bold = true)
+    public static Button Btn(string text, Action click, string? bg = null, string? fg = null, double size = 14, double padV = 10, double padH = 18, bool bold = true)
     {
         var b = new Button
         {
-            Content = new TextBlock { Text = text, FontSize = size, FontWeight = bold ? FontWeight.SemiBold : FontWeight.Normal, Foreground = Brush(fg), TextWrapping = TextWrapping.Wrap },
-            Background = Brush(bg ?? "#2b3a43"), Foreground = Brush(fg), Padding = new Thickness(padH, padV), CornerRadius = new CornerRadius(12),
+            Content = new TextBlock { Text = text, FontSize = size, FontWeight = bold ? FontWeight.SemiBold : FontWeight.Normal, Foreground = Brush(fg ?? FgHex), TextWrapping = TextWrapping.Wrap },
+            Background = Brush(bg ?? Soft2), Foreground = Brush(fg ?? FgHex), Padding = new Thickness(padH, padV), CornerRadius = new CornerRadius(12),
             HorizontalContentAlignment = HorizontalAlignment.Center,
         };
         b.Click += (_, _) => click();
@@ -88,7 +97,7 @@ static class Ui
         return s;
     }
     public static T Also<T>(this T x, Action<T> a) { a(x); return x; }
-    public static T W<T>(this T c, double width) where T : Control { c.Width = width; return c; }
+    public static T W<T>(this T c, double width) where T : Control { c.Width = width; c.HorizontalAlignment = HorizontalAlignment.Left; return c; }
     public static Control Center(this Control c) { c.HorizontalAlignment = HorizontalAlignment.Center; c.VerticalAlignment = VerticalAlignment.Center; return c; }
 
     public static string When(DateTime t)

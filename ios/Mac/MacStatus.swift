@@ -6,6 +6,7 @@ struct MacStatus: View {
     @State private var message = ""
     @State private var customMinutes = 45
     @AppStorage(Pref.presets) private var presets = "15,30,60,120"
+    @State private var quick = QuickStore.load()
 
     private var durations: [Int] { presets.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }.filter { $0 > 0 } }
 
@@ -13,6 +14,22 @@ struct MacStatus: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
+                let today = TodayStats(store.requests)
+                HStack(spacing: 12) {
+                    StatTile(value: "\(today.visitors)", label: "bezoekers vandaag", symbol: "person.2.fill")
+                    StatTile(value: "\(today.waiting)", label: "wachten op antwoord", symbol: "bell.badge.fill")
+                    StatTile(value: "\(today.bells)", label: "keer aangebeld", symbol: "bell.fill")
+                    StatTile(value: today.averageReplyMinutes.map { "\($0) min" } ?? "—", label: "gemiddeld antwoord", symbol: "timer")
+                }
+                if store.can("status"), !quick.isEmpty {
+                    Text("Snelle acties").font(.headline)
+                    Flow(spacing: 10) {
+                        ForEach(quick) { q in
+                            Button { Task { await store.run(q) } } label: { Label(q.name + (q.minutes > 0 ? " · \(q.minutes) min" : ""), systemImage: q.symbol).padding(.horizontal, 6).padding(.vertical, 4) }
+                                .buttonStyle(.bordered).tint(Palette.color(q.mode))
+                        }
+                    }
+                }
                 Text("Zet de deur op").font(.headline)
                 HStack(spacing: 14) {
                     ForEach(DoorModeKind.allCases) { m in modeButton(m) }
@@ -56,7 +73,7 @@ struct MacStatus: View {
             }.padding(28)
         }
         .navigationTitle("Status")
-        .onAppear { message = store.state.settings.note.str }
+        .onAppear { message = store.state.settings.note.str; quick = QuickStore.load() }
     }
 
     private var header: some View {

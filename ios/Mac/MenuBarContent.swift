@@ -27,6 +27,14 @@ struct MenuBarContent: View {
                         }.buttonStyle(.borderedProminent).tint(Palette.color(m.rawValue)).controlSize(.regular)
                     }
                 }
+                let quick = QuickStore.load()
+                if store.can("status"), !quick.isEmpty {
+                    Divider()
+                    Text("Snelle acties").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(quick) { q in
+                        Button { Task { await store.run(q) } } label: { Label(q.name + (q.minutes > 0 ? " · \(q.minutes) min" : ""), systemImage: q.symbol).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.plain)
+                    }
+                }
                 if !store.openRequests.isEmpty {
                     Divider()
                     Text("Bezoekers").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -55,7 +63,8 @@ struct MenuBarContent: View {
 
     private func show() {
         NSApp.activate(ignoringOtherApps: true)
-        if NSApp.windows.contains(where: { $0.title == "Deur Beheer" }) { NSApp.windows.first { $0.title == "Deur Beheer" }?.makeKeyAndOrderFront(nil) }
+        let title = Build.isDeveloperApp ? "Deur Dev" : "Deur Beheer"
+        if NSApp.windows.contains(where: { $0.title == title }) { NSApp.windows.first { $0.title == title }?.makeKeyAndOrderFront(nil) }
         else { openWindow(id: "main") }
     }
 }

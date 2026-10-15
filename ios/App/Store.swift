@@ -197,8 +197,9 @@ final class DoorStore: ObservableObject {
     }
 
     // MARK: actions
-    func setStatus(_ mode: String, minutes: Int? = nil, until: Date? = nil) async {
+    func setStatus(_ mode: String, minutes: Int? = nil, until: Date? = nil, message: String? = nil) async {
         var body: [String: Any] = ["mode": mode]
+        if let message, !message.isEmpty { body["message"] = message }
         if let minutes { body["minutes"] = minutes }
         if let until { body["until"] = ms(until) }
         await run("De deur staat op \(DoorModeKind(rawValue: mode)?.label ?? mode)") { _ = try await self.post("api/status", body) }
