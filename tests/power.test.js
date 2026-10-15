@@ -127,7 +127,7 @@ const isWinAdmin = process.platform === 'win32' && spawnSync('net', ['session'],
 test('Windows: the wake task can really be created and removed', { skip: !isWinAdmin && 'needs Windows with administrator rights' }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wake-'));
   const file = path.join(dir, 'w.ps1');
-  fs.writeFileSync(file, `${power.winWakeScript(sample(), '')}\n(Get-ScheduledTask -TaskName 'SagaTechboxDeur-Wake').Settings.WakeToRun\n${'Write-Output "triggers:" + (Get-ScheduledTask -TaskName \'SagaTechboxDeur-Wake\').Triggers.Count'}\n`, 'utf8');
+  fs.writeFileSync(file, `${power.winWakeScript(sample(), '')}\n(Get-ScheduledTask -TaskName 'SagaTechboxDeur-Wake').Settings.WakeToRun\n${'Write-Output ("triggers:" + @((Get-ScheduledTask -TaskName \'SagaTechboxDeur-Wake\').Triggers).Count)'}\n`, 'utf8');
   const r = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', file], { encoding: 'utf8' });
   try {
     assert.equal(r.status, 0, r.stdout + r.stderr);

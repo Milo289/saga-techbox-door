@@ -213,7 +213,7 @@ npm run dist:mac     # or dist:win / dist:linux — installers end up in dist/
 | `kiosk/` | Start-up scripts for a plain browser kiosk (Windows, Mac) |
 | `.github/workflows/build.yml` | Builds the app on GitHub |
 
-## Versie 2.5.0 — energie, kleuren, vinden en downloaden
+## Versie 2.5.1 — energie, kleuren, vinden en downloaden
 
 Alles hieronder staat standaard **uit** en kost niets.
 
@@ -222,3 +222,5 @@ Alles hieronder staat standaard **uit** en kost niets.
 - **Server vinden:** apps zoeken servers in het netwerk zelf (UDP 41234; uit te zetten met `DOOR_DISCOVERY=off`).
 - **Downloadpagina:** Ontwerp → “Downloadpagina” zet `/get` aan; zet de bestanden in `data/downloads`.
 - **App-icoon:** dashboard-icoon; op iPhone kiezen tussen donker, licht en blauw (Instellingen → Weergave).
+- **Automatisch updaten bij opstarten:** in de instellingen van de desktop-app staat “Update vanzelf installeren zodra de pc opstart” (uit tot je hem aanzet). Twintig seconden na het starten kijkt de app op GitHub; is er een nieuwere versie dan installeert Windows hem stil en start de app opnieuw, en vervangt een Linux-AppImage zichzelf. Een Mac-`.pkg` en een Linux-`.deb` vragen een beheerderswachtwoord, dus daar blijft het bij de vraag “Installeren?”. Gegevens blijven bewaard.
+- **Eigen Linux (ISO):** zie [linux-iso/README.md](linux-iso/README.md): een usb-stick waarvan een pc opstart met server en deurscherm, zonder installatie.

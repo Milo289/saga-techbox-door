@@ -38,6 +38,7 @@ const DEFAULTS = {
   role: null, serverMode: 'here', url: 'http://localhost:8080', port: 8080, pin: '', autostart: true,
   zoom: 1, alwaysOnTop: false, tray: true, closeToTray: false, hotkeys: false,
   autoUpdate: true,
+  autoInstall: false,                                  // install a found update by itself right after the PC has started (no questions)
   lockMouse: false,                                    // door screen: the mouse cannot leave this monitor, other monitors go black
   display: '', windowed: false, reloadAt: '',          // door screen: which monitor, window instead of kiosk, daily refresh time
 };
@@ -466,6 +467,7 @@ ipcMain.handle('setup:save', async (e, next) => {
     display: String(next.display || ''), windowed: !!next.windowed,
     reloadAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(next.reloadAt) ? next.reloadAt : '',
     autoUpdate: next.autoUpdate !== false,
+    autoInstall: !!next.autoInstall,
     lockMouse: !!next.lockMouse,
   };
   if (c.serverMode === 'remote' && !/^https?:\/\/[^\s/]+/.test(c.url)) return { ok: false, error: 'Vul een geldig adres in, bijv. http://192.168.1.50:8080' };
@@ -511,10 +513,39 @@ async function doUpdate() {
     dialog.showErrorBox('Updaten lukte niet', e.message);
   } finally { updating = false; sendSetup('update:progress', -1); }
 }
+// Installs without asking: Windows runs the installer silently and starts the app again; an AppImage replaces itself.
+// A Mac .pkg and a Linux .deb need an administrator password, so there the normal “Update” question is used instead.
+async function silentInstall() {
+  if (updating || !updateInfo || !updateInfo.asset) return false;
+  const name = updateInfo.asset.name;
+  const canWin = process.platform === 'win32' && /setup\.exe$/.test(name);
+  const canImg = process.platform === 'linux' && process.env.APPIMAGE && /\.AppImage$/.test(name);
+  if (!canWin && !canImg) return false;
+  updating = true;
+  try {
+    const file = await updater.download(updateInfo.asset, updateToken(), path.join(app.getPath('userData'), 'updates'), () => {});
+    if (canWin) {
+      // the app must be closed while the installer runs; a short pause, then silent install, then start the app again
+      const q = (t) => `"${String(t).replace(/"/g, '')}"`;
+      require('child_process').spawn('cmd.exe', ['/c', `ping -n 4 127.0.0.1 >nul & ${q(file)} /S & start "" ${q(process.execPath)}`], { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true }).unref();
+      app.exit(0);
+    } else {
+      const target = process.env.APPIMAGE;
+      fs.chmodSync(file, 0o755);
+      fs.copyFileSync(file, `${target}.new`); fs.chmodSync(`${target}.new`, 0o755);
+      fs.renameSync(`${target}.new`, target);
+      app.relaunch({ execPath: target, args: process.argv.slice(1).filter((a) => !a.startsWith('--appimage-')) });
+      app.exit(0);
+    }
+    return true;
+  } catch { return false; }
+  finally { updating = false; }
+}
 async function backgroundCheck() {
   if (config.autoUpdate === false || !config.role) return;
   try {
     const found = await checkForUpdates();
+    if (!found.upToDate && config.autoInstall && await silentInstall()) return;
     if (!found.upToDate && notifiedVersion !== found.version && Notification.isSupported()) {
       notifiedVersion = found.version;
       const n = new Notification({ title: 'Er is een update', body: `Versie ${found.version} staat klaar. Kies “Update” in het icoon bij de klok, of open Instellingen.` });
@@ -522,7 +553,7 @@ async function backgroundCheck() {
     }
   } catch { /* offline or private: stay quiet, the settings window explains */ }
 }
-setTimeout(backgroundCheck, 45e3);
+setTimeout(backgroundCheck, 20e3); // soon after the PC has started the app
 setInterval(backgroundCheck, 12 * 3600e3);
 
 const fromSetupWin = (e) => setupWin && !setupWin.isDestroyed() && e.sender === setupWin.webContents;

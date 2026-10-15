@@ -1,0 +1,17 @@
+nodejs
+chromium
+xserver-xorg
+xserver-xorg-input-all
+xserver-xorg-video-all
+x11-xserver-utils
+xinit
+openbox
+unclutter
+network-manager
+avahi-daemon
+pulseaudio
+alsa-utils
+fonts-dejavu
+curl
+ca-certificates
+tzdata

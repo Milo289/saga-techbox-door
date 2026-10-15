@@ -1,0 +1,14 @@
+[Unit]
+Description=Saga Techbox Deur server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/saga-door
+Environment=PORT=8080 HOST=0.0.0.0 DATA_DIR=/var/lib/saga-door NODE_ENV=production
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
