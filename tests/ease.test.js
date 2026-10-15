@@ -36,6 +36,7 @@ test('the start-up status is applied when the server starts', async (t) => {
   let tok = await login(srv);
   await call(srv, 'POST', '/api/settings', { startup: { status: 'closed', message: 'Zo terug' } }, tok);
   await call(srv, 'POST', '/api/status', { mode: 'open' }, tok);
+  await sleep(600); // the save is delayed a moment; on Windows stopping is abrupt
   await srv.stop(); await sleep(300);
   srv = await startServer({ patch: true, dir });
   t.after(() => srv.stop());
