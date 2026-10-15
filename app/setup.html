@@ -88,6 +88,10 @@
   </div>
 
   <label class="check"><input type="checkbox" id="autostart"> Automatisch starten als de computer opstart</label>
+  <div class="grid2">
+    <label class="f">Wachten na het opstarten (seconden)<input type="number" id="startDelay" min="0" max="300" step="5"></label>
+    <label class="check" style="align-self:end"><input type="checkbox" id="startHidden"> Bedieningspaneel alleen in het icoon bij de klok starten</label>
+  </div>
 
   <details class="adv" id="advWindow">
     <summary>Venster en sneltoetsen <span class="tag">alleen in de app</span></summary>
@@ -220,6 +224,7 @@
   const upd = window.setup.update;
   $('autoUpdate').checked = c.autoUpdate !== false;
   $('autoInstall').checked = !!c.autoInstall;
+  $('startDelay').value = c.startDelay || 0; $('startHidden').checked = !!c.startHidden;
   const showFound = (f) => {
     $('updGo').classList.toggle('hidden', !f || !f.version || f.upToDate);
     if (f && !f.upToDate && f.version) { $('updState').textContent = `Versie ${f.version} is beschikbaar`; $('updState').className = 'hint ok'; }
@@ -260,7 +265,7 @@
     const res = await window.setup.save({
       role: effective().role, serverMode: effective().mode, url: $('url').value.trim(),
       port: $('port').value, pin: $('pin').value, autostart: $('autostart').checked,
-      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), autoUpdate: $('autoUpdate').checked, autoInstall: $('autoInstall').checked, alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
+      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), autoUpdate: $('autoUpdate').checked, autoInstall: $('autoInstall').checked, startDelay: $('startDelay').value, startHidden: $('startHidden').checked, alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
       closeToTray: $('closeToTray').checked, hotkeys: $('hotkeys').checked, display: $('display').value, windowed: $('windowed').checked, lockMouse: $('lockMouse').checked,
     });
     if (!res || !res.ok) { $('err').textContent = (res && res.error) || 'Opslaan lukte niet.'; $('save').disabled = false; }

@@ -38,6 +38,7 @@ const DEFAULTS = {
   role: null, serverMode: 'here', url: 'http://localhost:8080', port: 8080, pin: '', autostart: true,
   zoom: 1, alwaysOnTop: false, tray: true, closeToTray: false, hotkeys: false,
   autoUpdate: true,
+  startDelay: 0, startHidden: false,                     // seconds to wait after the computer starts (network may not be ready); control panel starts in the tray
   autoInstall: false,                                  // install a found update by itself right after the PC has started (no questions)
   lockMouse: false,                                    // door screen: the mouse cannot leave this monitor, other monitors go black
   display: '', windowed: false, reloadAt: '',          // door screen: which monitor, window instead of kiosk, daily refresh time
@@ -210,6 +211,7 @@ async function launch() {
     if (displayBlocker === null) displayBlocker = powerSaveBlocker.start('prevent-app-suspension');
   } else {
     win = config.role === 'door' ? openDoor(base) : openControl(base);
+    if (config.role === 'control' && config.startHidden && config.tray) { win.hide(); win.once('ready-to-show', () => win && !win.isDestroyed() && win.hide()); }
     if (config.role === 'door') engageMouseLock(); else releaseMouseLock();
     snapshot(win);
     win.on('closed', () => { if (win && win.isDestroyed()) win = null; });
@@ -468,6 +470,7 @@ ipcMain.handle('setup:save', async (e, next) => {
     reloadAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(next.reloadAt) ? next.reloadAt : '',
     autoUpdate: next.autoUpdate !== false,
     autoInstall: !!next.autoInstall,
+    startDelay: Math.max(0, Math.min(300, Math.round(Number(next.startDelay) || 0))), startHidden: !!next.startHidden,
     lockMouse: !!next.lockMouse,
   };
   if (c.serverMode === 'remote' && !/^https?:\/\/[^\s/]+/.test(c.url)) return { ok: false, error: 'Vul een geldig adres in, bijv. http://192.168.1.50:8080' };
@@ -601,5 +604,6 @@ app.whenReady().then(() => {
     return;
   }
   buildMenu();
-  launch();
+  const wait = config.role && config.startDelay > 0 ? config.startDelay * 1000 : 0;
+  if (wait) setTimeout(launch, wait); else launch();
 });

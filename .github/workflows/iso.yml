@@ -25,6 +25,17 @@ jobs:
           sudo dpkg -i --force-depends /tmp/lb.deb
           lb --version
       - run: sudo ARCH=${{ matrix.arch }} ./linux-iso/build.sh
+      - name: Opstarttest (boots the ISO in a virtual computer and waits for the server)
+        if: matrix.arch == 'amd64'
+        run: |
+          sudo apt-get install -y qemu-system-x86
+          ACCEL=tcg; [ -w /dev/kvm ] && ACCEL=kvm
+          qemu-system-x86_64 -accel $ACCEL -m 2048 -smp 2 -cdrom Saga-Techbox-Deur-OS-amd64.iso -boot d -display none -nic user,hostfwd=tcp::8080-:8080 &
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:8080/healthz; then echo " <- de server antwoordt na ongeveer $((i*5)) seconden"; exit 0; fi
+            sleep 5
+          done
+          echo "De server antwoordde niet binnen 5 minuten"; exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: linux-iso-${{ matrix.arch }}

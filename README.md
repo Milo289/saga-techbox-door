@@ -227,8 +227,12 @@ Alles hieronder staat standaard **uit** en kost niets.
 
 ## Versie 2.6.0 — koppelingen
 - **Microcontrollers (ESP32, Raspberry Pi Pico W, …):** melden knoppen en sensoren en lezen de deurstatus (met kleur voor een ledje). Voorbeeldcode in `docs/firmware`.
-- **Slot en NFC:** NFC-tags met naam, dagen en tijden; de server roept het webadres van jullie slot aan zodra dat bekend is. Tot die tijd gebeurt er niets.
+- **Slot en RFID:** RFID-kaartjes met naam, dagen en tijden; de server roept het webadres van jullie slot aan zodra dat bekend is. Tot die tijd gebeurt er niets.
 - **Camera’s en herkenning:** een camera-AI meldt wie er voor de deur staat; alleen mensen met toestemming, zonder beelden te bewaren. Een gezicht opent de deur nooit.
 - **Regels:** “als dit gebeurt, doe dat” tussen apparaten, tags, camera en deurstatus.
 - Alles staat uit tot je het aanzet; zie [docs/APPARATEN.md](docs/APPARATEN.md).
 - **Eigen Linux** nu ook voor 32-bits (i386) en ARM (arm64), naast amd64.
+- **Controle:** een lijstje bovenaan Instellingen dat zegt wat al goed staat en wat je nog kunt doen.
+- **Opstarten:** kies wat de deur laat zien na een herstart (openingstijden, open, gesloten of bezet), en in de desktop-app: even wachten na het opstarten en het bedieningspaneel alleen in het icoon bij de klok starten.
+- **RFID:** kaartjes en sleutelhangers werken naast NFC (`POST /api/door/rfid`).
+- **ISO uitproberen zonder tweede computer:** zie `linux-iso/README.md` (`test-vm.sh`, VirtualBox, UTM).

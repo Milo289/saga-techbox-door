@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS = {
   sound: { bell: 'classic', reply: 'soft', custom: false }, // custom = an own bell sound has been uploaded (the file itself is not in the settings)
   away: { enabled: false, until: '', message: '' }, // absence mode: closed until the end of this date (YYYY-MM-DD)
   weather: { enabled: false, city: '', lat: 0, lon: 0 },
+  startup: { status: 'hours', message: '' }, // what the door shows after the server (re)starts: follow the opening hours, or open / closed / busy
   downloads: { enabled: false }, // a public page /get where people can download the apps you put in the data/downloads folder
   qr: { enabled: false, url: '' }, // a QR code on the door screen that opens the visitor page on the visitor's own phone
   reasons: ['Korte vraag', 'Bezorging', 'Ophalen', 'Handtekening nodig'],
@@ -602,6 +603,19 @@ function newSession(userId, req, remember) {
   return token;
 }
 
+// plain-language checks shown as a checklist in the control panel
+function healthChecks(full) {
+  const s = state.settings, out = [];
+  const add = (id, ok, text, tip) => out.push({ id, ok, text, tip: ok ? '' : tip });
+  add('name', s.name !== 'Saga Techbox', 'De naam van de deur is ingesteld', 'Geef de deur een eigen naam bij “Deur”.');
+  add('hours', !!(s.hours && s.hours.enabled), 'Openingstijden staan aan', 'Zet openingstijden aan, dan wisselt de status zelf.');
+  if (full('mail')) add('notify', !!(s.ntfyTopic || s.webhookUrl || mailOn()), 'Je krijgt een melding als iemand aanbelt', 'Zet meldingen op je telefoon aan (ntfy) of stel e-mail in.');
+  add('screen', [...clients].some((c) => c.role !== 'admin'), 'Er is een deurscherm verbonden', 'Open het adres van de server op het scherm bij de deur.');
+  if (full('export')) add('backup', !!state.lastBackupDay, 'Er is een automatische back-up gemaakt', 'Back-ups worden ’s nachts gemaakt; ze verschijnen na de eerste nacht.');
+  if (full('power') && state.power.enabled) add('wake', !!state.wakeApplied || !state.power.days || !Object.values(state.power.days).some((d) => d.off && d.on), 'De computer weet wanneer hij weer aan moet', 'Druk bij Energie op “Wekschema zetten”.');
+  if (full('unlock') && state.integ.lock.enabled) add('tags', state.integ.lock.tags.length > 0 && !!state.integ.lock.url, 'Het slot heeft een webadres en kaartjes', 'Vul bij Koppelingen het webadres van het slot en minstens één kaartje in.');
+  return out;
+}
 function adminState(id) {
   const full = (perm) => can(id, perm);
   const settings = { ...state.settings, mail: { ...state.settings.mail, pass: state.settings.mail.pass ? PASS_MASK : '' } };
@@ -620,6 +634,7 @@ function adminState(id) {
     integ: full('unlock') || full('cameras') ? { ...(full('unlock') ? { lock: { ...state.integ.lock, headerValue: state.integ.lock.headerValue ? PASS_MASK : '' }, automations: state.integ.automations } : {}), ...(full('cameras') ? { cameras: state.integ.cameras, faces: state.integ.faces } : {}) } : undefined,
     devices: full('settings') || full('unlock') || full('cameras') ? state.devices : [],
     sightings: full('cameras') ? state.sightings.slice(0, 50) : [],
+    health: healthChecks(full),
     people: full('people') ? state.people : [],
     peopleRev: state.peopleRev || 0,
     mailOn: mailOn(),
@@ -1292,6 +1307,7 @@ const adminRoutes = {
     await fireAutomations('tag', v.tag.name || uid, 'scan', id.name);
     return { ok: true, allowed: true, name: v.tag.name };
   },
+  'POST /api/door/rfid': (b, id) => adminRoutes['POST /api/door/tag'](b, id),
   'POST /api/door/unlock': async (b, id) => {
     if (!state.integ.lock.enabled || !state.integ.lock.url) throw bad('Het slot is nog niet ingesteld');
     try { await integ.unlock(state.integ); } catch (e) { throw bad(e.message); }
@@ -1477,7 +1493,7 @@ const NEED = {
   'POST /api/requests/delete': 'inbox', 'POST /api/moderation/block': 'inbox', 'POST /api/moderation/unblock': 'inbox', 'POST /api/moderation/profile': 'inbox',
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
-  'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/unlock': 'unlock',
+  'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
   'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
@@ -1761,6 +1777,10 @@ if (state.lastVersion && state.lastVersion !== APP_VERSION) {
   try { writeBackup('voor-update'); log('systeem', `Bijgewerkt van ${state.lastVersion} naar ${APP_VERSION} — een back-up is gemaakt`, 'systeem'); } catch {}
 }
 if (state.lastVersion !== APP_VERSION) { state.lastVersion = APP_VERSION; save(); }
+if (['open', 'closed', 'busy'].includes(state.settings.startup.status)) { // chosen start-up behaviour
+  state.manual = { mode: state.settings.startup.status, until: null, message: str(state.settings.startup.message, 140), setAt: Date.now(), expiresAt: null };
+  log('status', `Na het opstarten: ${state.settings.texts[state.settings.startup.status].label}`, 'systeem');
+}
 lastView = JSON.stringify(computeView());
 // `ready` lets the desktop app wait for the server (or show why it couldn't start)
 const ready = new Promise((resolve, reject) => {

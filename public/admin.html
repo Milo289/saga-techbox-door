@@ -637,6 +637,15 @@
         h('span', {}), h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => { try { await api('/api/power/settings', d); powerDraft = null; S = await api('/api/admin-state'); toast('Energie opgeslagen'); renderAll(true); } catch {} } }, 'Energie opslaan'))));
   }
 
+  // ----- Controle: a plain checklist of what is set up and what is still missing -----
+  function healthCard() {
+    const list = S.health || [];
+    if (!list.length) return null;
+    const open = list.filter((x) => !x.ok);
+    return h('div', { class: 'card' }, h('h2', {}, 'Controle', h('span', { class: 'sp' }), h('span', { class: 'tag ' + (open.length ? '' : 'ok') }, open.length ? `${open.length} tip${open.length > 1 ? 's' : ''}` : 'alles in orde')),
+      h('div', { class: 'list' }, ...list.map((x) => h('div', { class: 'row' }, h('span', { style: 'width:22px;font-weight:700;color:' + (x.ok ? 'var(--ok,#30d158)' : 'var(--warn,#ff9f0a)') }, x.ok ? '✓' : '!'), h('span', {}, x.text), x.ok ? null : h('span', { class: 'muted' }, '— ' + x.tip)))));
+  }
+
   // ----- Koppelingen: microcontrollers, slot + NFC, camera's, regels (everything off until switched on) -----
   let integDraft = null;
   function integCard() {
@@ -657,18 +666,18 @@
     if (I.lock) {
       const L = d.lock, tagRows = h('div', { class: 'list' });
       const drawTags = () => tagRows.replaceChildren(...L.tags.map((t, i) => h('div', { class: 'row', style: 'flex-wrap:wrap' },
-        field(t, 'name', { placeholder: 'Naam (bijv. Milo)' }), field(t, 'uid', { placeholder: 'Tag-nummer (bijv. 04:A2:3B:9C)' }),
+        field(t, 'name', { placeholder: 'Naam (bijv. Milo)' }), field(t, 'uid', { placeholder: 'Kaartnummer (bijv. 04:A2:3B:9C)' }),
         h('input', { type: 'time', value: t.from, oninput: (e) => { t.from = e.target.value; } }), h('span', { class: 'muted' }, 't/m'), h('input', { type: 'time', value: t.to, oninput: (e) => { t.to = e.target.value; } }),
         h('span', { class: 'muted' }, ...[['1', 'ma'], ['2', 'di'], ['3', 'wo'], ['4', 'do'], ['5', 'vr'], ['6', 'za'], ['0', 'zo']].map(([k, n]) => h('label', { class: 'check', style: 'display:inline-flex;margin-right:6px' }, h('input', { type: 'checkbox', checked: t.days.includes(Number(k)), onchange: (e) => { const n2 = Number(k); t.days = e.target.checked ? [...new Set([...t.days, n2])] : t.days.filter((x) => x !== n2); } }), n))),
         check(t, 'enabled', 'aan'), h('button', { class: 'sm ghost danger', onclick: () => { L.tags.splice(i, 1); drawTags(); } }, '✕'))));
       drawTags();
       parts.push(h('div', { class: 'form' },
-        h('label', {}, 'Slot'), h('div', {}, check(L, 'enabled', 'Het slot en de NFC-tags gebruiken'), h('div', { class: 'muted' }, 'Zodra je de API van het slot hebt: vul hieronder het webadres in dat de deur opent. Tot die tijd gebeurt er niets.')),
+        h('label', {}, 'Slot'), h('div', {}, check(L, 'enabled', 'Het slot en de RFID-kaartjes gebruiken'), h('div', { class: 'muted' }, 'Zodra je de API van het slot hebt: vul hieronder het webadres in dat de deur opent. Tot die tijd gebeurt er niets.')),
         h('label', {}, 'Webadres van het slot'), h('div', { class: 'row' }, sel(L, 'method', [['POST', 'POST'], ['GET', 'GET'], ['PUT', 'PUT']]), field(L, 'url', { placeholder: 'http://192.168.1.50/open', style: 'flex:1' })),
         h('label', {}, 'Inhoud (optioneel)'), field(L, 'body', { placeholder: '{"open": true}' }),
         h('label', {}, 'Sleutel in de aanvraag'), h('div', { class: 'row' }, field(L, 'headerName', { placeholder: 'Naam, bijv. Authorization' }), field(L, 'headerValue', { placeholder: 'Waarde (blijft geheim)', type: 'password' })),
-        h('label', {}, 'NFC-tags'), h('div', {}, tagRows, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { L.tags.push({ name: '', uid: '', enabled: true, days: [0, 1, 2, 3, 4, 5, 6], from: '00:00', to: '23:59' }); drawTags(); } }, '+ Tag toevoegen'),
-          h('span', { class: 'muted' }, 'De NFC-lezer meldt een tag aan via POST /api/door/tag met een API-sleutel met het recht “slot”. Zie docs/APPARATEN.md.'))),
+        h('label', {}, 'RFID-kaartjes'), h('div', {}, tagRows, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { L.tags.push({ name: '', uid: '', enabled: true, days: [0, 1, 2, 3, 4, 5, 6], from: '00:00', to: '23:59' }); drawTags(); } }, '+ Kaartje toevoegen'),
+          h('span', { class: 'muted' }, 'De RFID-lezer (of NFC) meldt een kaartje aan via POST /api/door/rfid met een API-sleutel met het recht “slot”. Zie docs/APPARATEN.md.'))),
         h('label', {}, 'Proberen'), h('div', { class: 'row' }, h('button', { class: 'sm danger', onclick: async () => { if (!confirm('De deur nu openen?')) return; try { await api('/api/integrations/save', { lock: L }); await api('/api/door/unlock', {}); toast('Deur geopend'); } catch {} } }, 'Deur nu openen'))));
     }
 
@@ -676,7 +685,7 @@
       const A = d.automations, rows = h('div', { class: 'list' });
       const drawRules = () => rows.replaceChildren(...A.map((a, i) => h('div', { class: 'card', style: 'padding:10px;margin:6px 0' },
         h('div', { class: 'row', style: 'flex-wrap:wrap' }, field(a, 'name', { placeholder: 'Naam van de regel' }), check(a, 'enabled', 'aan'), h('button', { class: 'sm ghost danger', onclick: () => { A.splice(i, 1); drawRules(); } }, '✕')),
-        h('div', { class: 'row', style: 'flex-wrap:wrap' }, h('span', { class: 'muted' }, 'Als'), sel(a.when, 'source', [['device', 'een apparaat'], ['tag', 'een NFC-tag'], ['camera', 'een persoon op de camera']]),
+        h('div', { class: 'row', style: 'flex-wrap:wrap' }, h('span', { class: 'muted' }, 'Als'), sel(a.when, 'source', [['device', 'een apparaat'], ['tag', 'een RFID-kaartje'], ['camera', 'een persoon op de camera']]),
           field(a.when, 'key', { placeholder: 'naam (leeg = elke)' }), field(a.when, 'event', { placeholder: 'gebeurtenis (bijv. press)' })),
         h('div', { class: 'row', style: 'flex-wrap:wrap' }, h('span', { class: 'muted' }, 'dan'), actionRow(a.do), a.when.source === 'camera' ? h('span', { class: 'muted' }, 'Een gezicht opent de deur nooit.') : check(a.do, 'unlock', 'deur openen')))));
       drawRules();
@@ -709,7 +718,7 @@
       h('button', { class: 'sm ghost danger', onclick: async () => { try { await api('/api/devices/remove', { id: x.id }); S = await api('/api/admin-state'); renderAll(true); } catch {} } }, '✕'))) : h('span', { class: 'muted' }, 'Nog geen apparaten. Een ESP32 of Raspberry Pi Pico W meldt zich vanzelf zodra hij een bericht stuurt (zie docs/APPARATEN.md).'))));
 
     return h('div', { class: 'card' }, h('h2', {}, 'Koppelingen'),
-      h('p', { class: 'muted', style: 'margin-top:0' }, 'Microcontrollers (ESP32, Pico), het slot met NFC, camera’s en regels die ze met de deurstatus verbinden. Alles staat uit tot je het zelf aanzet.'), ...parts);
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Microcontrollers (ESP32, Pico), het slot met RFID, camera’s en regels die ze met de deurstatus verbinden. Alles staat uit tot je het zelf aanzet.'), ...parts);
   }
 
   function closeAlert() { $('alert').classList.remove('open'); alertId = null; }
@@ -1383,7 +1392,7 @@
         try { blocks.push({ id: newId(), type: 'image', src: await imageToData(f), w: 24, size: 4, color: '', bold: false, text: '' }); S.blocks = blocks; redraw(); }
         catch (e) { toast(e.message || 'Deze afbeelding kan niet gebruikt worden'); }
       };
-      const keepDraft = () => { S.blocks = blocks; Object.assign(S.settings, { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads }); }; // so a redraw keeps what you typed
+      const keepDraft = () => { S.blocks = blocks; Object.assign(S.settings, { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads, startup: st.startup }); }; // so a redraw keeps what you typed
       const textsCard = h('div', { class: 'card' }, h('h2', {}, 'Teksten'),
         h('p', { class: 'muted', style: 'margin-top:0' }, 'Elk woord op het deurscherm kun je zelf bepalen. Laat een veld leeg voor de standaardtekst (staat grijs in het veld). Tekens als {s} of {name} worden door het scherm ingevuld: laat ze staan waar ze horen.'),
         ...Object.entries(groups).map(([g, items], i) => h('details', { open: i === 0, style: 'margin-top:10px' }, h('summary', {}, g),
@@ -1437,7 +1446,7 @@
         frameBox);
       setTimeout(drawPreview, 0);
       const save = async () => {
-        await api('/api/settings', { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads });
+        await api('/api/settings', { ui: st.ui, colors: st.colors, colorsLight: st.colorsLight, accent: st.accent, palette: st.palette, sound: st.sound, themeSchedule: st.themeSchedule, weather: st.weather, qr: st.qr, downloads: st.downloads, startup: st.startup });
         await api('/api/blocks', { blocks });
         S = await api('/api/admin-state'); toast('Opgeslagen — staat nu op de deur'); renderAll(true);
       };
@@ -1530,6 +1539,7 @@
 
         appCard(),
 
+        healthCard(),
         h('div', { class: 'card' }, h('h2', {}, 'Deur'),
           h('div', { class: 'form' },
             h('label', {}, 'Naam'), text(st, 'name', { maxlength: 60 }),
@@ -1580,6 +1590,12 @@
           (S.blocked || []).length
             ? h('div', { class: 'list' }, ...S.blocked.map((b) => h('div', { class: 'block' }, h('div', {}, h('div', { class: 't' }, b.kind === 'ip' ? 'Telefoon' : `Profiel ${b.value}`), h('div', { class: 'muted' }, `${b.reason || ''}${b.reason ? ' · ' : ''}${b.until ? 'tot ' + fmtWhen(b.until) : 'voor altijd'}`)), h('span', { style: 'flex:1' }), h('button', { class: 'sm ghost', onclick: () => api('/api/moderation/unblock', { id: b.id }).then(() => toast('Blokkade opgeheven')) }, 'Opheffen'))))
             : h('p', { class: 'muted', style: 'margin:0' }, 'Niemand geblokkeerd. Blokkeren doe je bij een bericht onder Bezoekers → Modereren.')),
+
+        h('div', { class: 'card' }, h('h2', {}, 'Opstarten'),
+          h('p', { class: 'muted', style: 'margin-top:0' }, 'Wat laat de deur zien als de server (opnieuw) opstart, bijvoorbeeld na een stroomstoring of als de computer ’s ochtends aangaat?'),
+          h('div', { class: 'form' },
+            h('label', {}, 'Status bij opstarten'), sel(st.startup, 'status', [['hours', 'Volg de openingstijden'], ['open', 'Open'], ['closed', 'Gesloten'], ['busy', 'Bezet']]),
+            h('label', {}, 'Bericht'), text(st.startup, 'message', { placeholder: 'optioneel', maxlength: 140 }))),
 
         h('div', { class: 'card' }, h('h2', {}, 'Afwezig'),
           h('p', { class: 'muted', style: 'margin-top:0' }, 'Zet de deur tot een datum op Gesloten, met je eigen bericht. Daarna gaat alles vanzelf weer door.'),
