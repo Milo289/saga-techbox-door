@@ -224,3 +224,11 @@ Alles hieronder staat standaard **uit** en kost niets.
 - **App-icoon:** dashboard-icoon; op iPhone kiezen tussen donker, licht en blauw (Instellingen → Weergave).
 - **Automatisch updaten bij opstarten:** in de instellingen van de desktop-app staat “Update vanzelf installeren zodra de pc opstart” (uit tot je hem aanzet). Twintig seconden na het starten kijkt de app op GitHub; is er een nieuwere versie dan installeert Windows hem stil en start de app opnieuw, en vervangt een Linux-AppImage zichzelf. Een Mac-`.pkg` en een Linux-`.deb` vragen een beheerderswachtwoord, dus daar blijft het bij de vraag “Installeren?”. Gegevens blijven bewaard.
 - **Eigen Linux (ISO):** zie [linux-iso/README.md](linux-iso/README.md): een usb-stick waarvan een pc opstart met server en deurscherm, zonder installatie.
+
+## Versie 2.6.0 — koppelingen
+- **Microcontrollers (ESP32, Raspberry Pi Pico W, …):** melden knoppen en sensoren en lezen de deurstatus (met kleur voor een ledje). Voorbeeldcode in `docs/firmware`.
+- **Slot en NFC:** NFC-tags met naam, dagen en tijden; de server roept het webadres van jullie slot aan zodra dat bekend is. Tot die tijd gebeurt er niets.
+- **Camera’s en herkenning:** een camera-AI meldt wie er voor de deur staat; alleen mensen met toestemming, zonder beelden te bewaren. Een gezicht opent de deur nooit.
+- **Regels:** “als dit gebeurt, doe dat” tussen apparaten, tags, camera en deurstatus.
+- Alles staat uit tot je het aanzet; zie [docs/APPARATEN.md](docs/APPARATEN.md).
+- **Eigen Linux** nu ook voor 32-bits (i386) en ARM (arm64), naast amd64.
