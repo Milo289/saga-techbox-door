@@ -1,0 +1,17 @@
+[Unit]
+Description=Saga Techbox Deur screen (start screen and door screen)
+After=systemd-user-sessions.service plymouth-quit-wait.service
+Conflicts=getty@tty7.service
+
+[Service]
+Environment=HOME=/root
+TTYPath=/dev/tty7
+StandardInput=tty
+TTYVHangup=yes
+TTYVTDisallocate=yes
+ExecStart=/usr/bin/xinit /opt/saga-door/xinitrc -- :0 vt7 -nolisten tcp -noreset
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

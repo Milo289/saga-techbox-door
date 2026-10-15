@@ -46,7 +46,7 @@ jobs:
         run: |
           sudo apt-get install -y qemu-system-x86 socat imagemagick
           ACCEL=tcg; [ -w /dev/kvm ] && ACCEL=kvm
-          qemu-system-x86_64 -accel $ACCEL -m 3072 -smp 2 -cdrom Saga-Techbox-Deur-OS-amd64.iso -boot d -vga std -display none -monitor unix:/tmp/qemu.sock,server,nowait -nic user,hostfwd=tcp::8080-:8080 > /tmp/qemu.log 2>&1 &
+          qemu-system-x86_64 -accel $ACCEL -m 3072 -smp 2 -cdrom Saga-Techbox-Deur-OS-amd64.iso -boot d -vga std -display none -serial file:/tmp/serial.log -monitor unix:/tmp/qemu.sock,server,nowait -nic user,hostfwd=tcp::8080-:8080 > /tmp/qemu.log 2>&1 &
           QPID=$!
           ok=0
           sleep 15; echo "sendkey ret" | timeout 5 socat - UNIX-CONNECT:/tmp/qemu.sock || true   # in case the boot menu still waits
@@ -54,15 +54,18 @@ jobs:
             if curl -fs --max-time 4 http://localhost:8080/healthz; then echo " <- de server antwoordt na ongeveer $((i*5)) seconden"; ok=1; break; fi
             sleep 5
           done
-          sleep 20
+          sleep 60
           echo "screendump /tmp/screen.ppm" | timeout 10 socat - UNIX-CONNECT:/tmp/qemu.sock || true
           sleep 2
           timeout 30 convert /tmp/screen.ppm screen-amd64.png || true
+          cp /tmp/serial.log serial-amd64.log 2>/dev/null || true
           kill $QPID || true
           [ "$ok" = 1 ] || { echo "De server antwoordde niet binnen 6 minuten"; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always() && matrix.arch == 'amd64'
         with:
           name: boot-screenshot
-          path: screen-amd64.png
+          path: |
+            screen-amd64.png
+            serial-amd64.log
           if-no-files-found: ignore

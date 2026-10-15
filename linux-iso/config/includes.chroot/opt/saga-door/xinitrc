@@ -10,7 +10,7 @@ open_on() { # monitor number, page
   g=$(printf '%s\n' "$GEOS" | sed -n "${1}p")
   if [ -n "$g" ]; then W=${g%%x*}; r=${g#*x}; H=${r%%+*}; r=${r#*+}; X=${r%%+*}; Y=${r#*+}; POS="--window-position=$X,$Y --window-size=$W,$H"; else POS=""; fi
   ( while true; do
-      chromium --kiosk --incognito --no-first-run --noerrdialogs --disable-infobars --disable-translate --allow-file-access-from-files \
+      chromium --kiosk --incognito --no-first-run --noerrdialogs --disable-infobars --disable-translate --allow-file-access-from-files --no-sandbox --disable-gpu --disable-dev-shm-usage \
         --autoplay-policy=no-user-gesture-required --user-data-dir=/tmp/door-browser-$1 $POS "file:///opt/saga-door/loading.html?to=$2"
       sleep 2
     done ) &
