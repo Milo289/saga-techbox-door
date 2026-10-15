@@ -25,10 +25,21 @@ jobs:
           sudo dpkg -i --force-depends /tmp/lb.deb
           lb --version
       - run: sudo ARCH=${{ matrix.arch }} ./linux-iso/build.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-iso-${{ matrix.arch }}
-          path: Saga-Techbox-Deur-OS-${{ matrix.arch }}.iso
+      # The ISO goes to a release page (not to the build artifacts: those have a download limit and fill up quickly).
+      # A version tag (v...) uses that version's release; a manual run uses the release "iso-latest".
+      - name: Put the ISO on a release page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILE=Saga-Techbox-Deur-OS-${{ matrix.arch }}.iso
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            for i in $(seq 1 60); do gh release view "$TAG" >/dev/null 2>&1 && break; sleep 60; done
+          else
+            TAG=iso-latest
+            gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "${GITHUB_SHA}" --prerelease --title "Eigen Linux (laatste proefversie)" --notes "Automatisch gemaakt bij elke proefbouw van de Linux-schijf. Alleen om uit te proberen." || true
+          fi
+          gh release upload "$TAG" "$FILE" --clobber
       - name: Opstarttest (boots the ISO in a virtual computer, waits for the server, takes a screenshot)
         if: matrix.arch == 'amd64'
         timeout-minutes: 15
@@ -39,7 +50,7 @@ jobs:
           QPID=$!
           ok=0
           for i in $(seq 1 72); do
-            if curl -fs http://localhost:8080/healthz; then echo " <- de server antwoordt na ongeveer $((i*5)) seconden"; ok=1; break; fi
+            if curl -fs --max-time 4 http://localhost:8080/healthz; then echo " <- de server antwoordt na ongeveer $((i*5)) seconden"; ok=1; break; fi
             sleep 5
           done
           sleep 20
@@ -54,15 +65,3 @@ jobs:
           name: boot-screenshot
           path: screen-amd64.png
           if-no-files-found: ignore
-      - name: Add it to the release (once the release exists)
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for i in $(seq 1 60); do
-            if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-              gh release upload "${GITHUB_REF_NAME}" Saga-Techbox-Deur-OS-${{ matrix.arch }}.iso --clobber && exit 0
-            fi
-            sleep 60
-          done
-          echo "release not found"; exit 1
