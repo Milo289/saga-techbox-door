@@ -25,12 +25,17 @@ jobs:
           sudo dpkg -i --force-depends /tmp/lb.deb
           lb --version
       - run: sudo ARCH=${{ matrix.arch }} ./linux-iso/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-iso-${{ matrix.arch }}
+          path: Saga-Techbox-Deur-OS-${{ matrix.arch }}.iso
       - name: Opstarttest (boots the ISO in a virtual computer, waits for the server, takes a screenshot)
         if: matrix.arch == 'amd64'
         run: |
           sudo apt-get install -y qemu-system-x86 socat imagemagick
           ACCEL=tcg; [ -w /dev/kvm ] && ACCEL=kvm
-          qemu-system-x86_64 -accel $ACCEL -m 3072 -smp 2 -cdrom Saga-Techbox-Deur-OS-amd64.iso -boot d -vga std -display none -monitor unix:/tmp/qemu.sock,server,nowait -nic user,hostfwd=tcp::8080-:8080 &
+          qemu-system-x86_64 -accel $ACCEL -m 3072 -smp 2 -cdrom Saga-Techbox-Deur-OS-amd64.iso -boot d -vga std -display none -monitor unix:/tmp/qemu.sock,server,nowait -nic user,hostfwd=tcp::8080-:8080 > /tmp/qemu.log 2>&1 &
+          QPID=$!
           ok=0
           for i in $(seq 1 72); do
             if curl -fs http://localhost:8080/healthz; then echo " <- de server antwoordt na ongeveer $((i*5)) seconden"; ok=1; break; fi
@@ -40,6 +45,7 @@ jobs:
           echo "screendump /tmp/screen.ppm" | socat - UNIX-CONNECT:/tmp/qemu.sock || true
           sleep 2
           convert /tmp/screen.ppm screen-amd64.png || true
+          kill $QPID || true
           [ "$ok" = 1 ] || { echo "De server antwoordde niet binnen 6 minuten"; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always() && matrix.arch == 'amd64'
@@ -47,10 +53,6 @@ jobs:
           name: boot-screenshot
           path: screen-amd64.png
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-iso-${{ matrix.arch }}
-          path: Saga-Techbox-Deur-OS-${{ matrix.arch }}.iso
       - name: Add it to the release (once the release exists)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
