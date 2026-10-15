@@ -5,18 +5,25 @@ on:
     tags: ['v*']
 jobs:
   iso:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: i386, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap debian-archive-keyring
-      - run: sudo ./linux-iso/build.sh
+      - run: sudo ARCH=${{ matrix.arch }} ./linux-iso/build.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-iso
-          path: Saga-Techbox-Deur-OS-amd64.iso
+          name: linux-iso-${{ matrix.arch }}
+          path: Saga-Techbox-Deur-OS-${{ matrix.arch }}.iso
       - name: Add it to the release (once the release exists)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -24,7 +31,7 @@ jobs:
         run: |
           for i in $(seq 1 60); do
             if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-              gh release upload "${GITHUB_REF_NAME}" Saga-Techbox-Deur-OS-amd64.iso --clobber && exit 0
+              gh release upload "${GITHUB_REF_NAME}" Saga-Techbox-Deur-OS-${{ matrix.arch }}.iso --clobber && exit 0
             fi
             sleep 60
           done

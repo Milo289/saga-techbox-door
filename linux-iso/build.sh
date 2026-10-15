@@ -3,14 +3,21 @@
 # Needs a Debian/Ubuntu machine with:  sudo apt-get install live-build   and is run as root:  sudo ./linux-iso/build.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(dirname "$HERE")"
+ARCH="${ARCH:-amd64}"   # amd64 (normal pc), arm64 (ARM computers) or i386 (very old pcs)
 WORK="${WORK:-$ROOT/iso-build}"
+case "$ARCH" in
+  amd64) FLAVOUR=amd64; BOOT="" ;;
+  arm64) FLAVOUR=arm64; BOOT="--bootloaders grub-efi" ;;
+  i386)  FLAVOUR=686-pae; BOOT="" ;;
+  *) echo "Onbekend type: $ARCH"; exit 1 ;;
+esac
 rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK"
 
-lb config --mode debian --linux-flavours amd64 --linux-packages linux-image \
-  --distribution bookworm --architectures amd64 --binary-images iso-hybrid \
+lb config --mode debian --linux-flavours "$FLAVOUR" --linux-packages linux-image $BOOT \
+  --distribution bookworm --architectures "$ARCH" --binary-images iso-hybrid \
   --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-binary http://deb.debian.org/debian \
   --parent-mirror-bootstrap http://deb.debian.org/debian --parent-mirror-chroot http://deb.debian.org/debian --parent-mirror-binary http://deb.debian.org/debian \
-  --security true --mirror-chroot-security http://security.debian.org/debian-security --mirror-binary-security http://security.debian.org/debian-security \
+  --security false \
   --keyring-packages debian-archive-keyring --archive-areas main \
   --debian-installer none --apt-recommends false --memtest none \
   --iso-application "Saga Techbox Deur" --iso-volume "SAGA_DOOR" \
@@ -22,5 +29,5 @@ mkdir -p config/includes.chroot/opt/saga-door
 (cd "$ROOT" && cp -r package.json server.js power.js discover.js seal.js access.js public "$WORK/config/includes.chroot/opt/saga-door/")
 
 lb build
-mv -f ./*.iso "$ROOT/Saga-Techbox-Deur-OS-amd64.iso"
-echo "Klaar: $ROOT/Saga-Techbox-Deur-OS-amd64.iso"
+mv -f ./*.iso "$ROOT/Saga-Techbox-Deur-OS-$ARCH.iso"
+echo "Klaar: $ROOT/Saga-Techbox-Deur-OS-$ARCH.iso"
