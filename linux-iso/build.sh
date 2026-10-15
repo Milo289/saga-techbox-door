@@ -17,7 +17,7 @@ lb config --mode debian --linux-flavours "$FLAVOUR" --linux-packages linux-image
   --distribution bookworm --architectures "$ARCH" --binary-images iso-hybrid \
   --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-binary http://deb.debian.org/debian \
   --parent-mirror-bootstrap http://deb.debian.org/debian --parent-mirror-chroot http://deb.debian.org/debian --parent-mirror-binary http://deb.debian.org/debian \
-  --security false --firmware-chroot false \
+  --security false --firmware-chroot false --syslinux-timeout 3 \
   --keyring-packages debian-archive-keyring --archive-areas main \
   --debian-installer none --apt-recommends false --memtest none \
   --iso-application "Saga Techbox Deur" --iso-volume "SAGA_DOOR" \
