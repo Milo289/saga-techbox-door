@@ -66,7 +66,7 @@ const DEFAULT_SETTINGS = {
   mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false, digest: false, digestAt: '18:00' },
 };
 // System settings: only the main account can change these (see the Systeem tab).
-const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 20, blockMinutes: 10, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
+const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
 function normIp(ip) { ip = String(ip || '').replace(/^::ffff:/, ''); return ip === '::1' ? '127.0.0.1' : ip; } // "this computer" is one address, in IPv4 or IPv6
 function ipv4ToInt(ip) { const m = String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/); return m && m.slice(1).every((x) => Number(x) <= 255) ? ((Number(m[1]) << 24) | (Number(m[2]) << 16) | (Number(m[3]) << 8) | Number(m[4])) >>> 0 : null; }
 function validIpRule(r) { const [ip, bits] = String(r).split('/'); return (ipv4ToInt(ip) !== null && (bits === undefined || (/^\d{1,2}$/.test(bits) && Number(bits) <= 32))) || (/^[0-9a-f:]+$/i.test(ip) && ip.includes(':') && bits === undefined); }
@@ -96,7 +96,7 @@ function cleanSystem(b = {}) {
   return {
     maintenance: !!b.maintenance, maintenanceMessage: str(b.maintenanceMessage, 200),
     sessionDays: num(b.sessionDays, 1, 365, DEFAULT_SYSTEM.sessionDays), rememberDays: num(b.rememberDays, 1, 730, DEFAULT_SYSTEM.rememberDays),
-    maxAttempts: num(b.maxAttempts, 3, 200, DEFAULT_SYSTEM.maxAttempts), blockMinutes: num(b.blockMinutes, 1, 1440, DEFAULT_SYSTEM.blockMinutes),
+    maxAttempts: num(b.maxAttempts, 3, 200, DEFAULT_SYSTEM.maxAttempts), blockMinutes: num(b.blockMinutes, 1, 1440, DEFAULT_SYSTEM.blockMinutes), rateLimit: b.rateLimit === undefined ? true : !!b.rateLimit,
     allowedIps: (Array.isArray(b.allowedIps) ? b.allowedIps : []).map((x) => str(x, 50)).filter(validIpRule).slice(0, 40),
     retentionDays: num(b.retentionDays, 0, 3650, 0), autoBackup: b.autoBackup === undefined ? true : !!b.autoBackup, backupKeep: num(b.backupKeep, 1, 90, DEFAULT_SYSTEM.backupKeep),
   };
@@ -579,12 +579,32 @@ function verifyPassword(pw, stored) {
 const START_PERMS = ['view', 'status', 'inbox', 'users'], EMERGENCY_PERMS = ['view', 'status'];
 const inSetup = () => !state.users.some((x) => !x.starter);
 const effectivePerms = (u) => (u.starter ? (inSetup() ? START_PERMS : EMERGENCY_PERMS) : permsOf(u.perms));
+// The start password is made up at random for every installation (a password that is the same everywhere is the first thing an attacker tries).
+// It is printed once in the console, kept in data/starter-password.txt, and shown on the start screen of the Linux image (only on that screen itself).
+const STARTER_FILE = path.join(DATA_DIR, 'starter-password.txt');
+function starterPassword() {
+  if (process.env.DOOR_STARTER_PASSWORD) return process.env.DOOR_STARTER_PASSWORD;
+  try { const t = fs.readFileSync(STARTER_FILE, 'utf8').trim(); if (t) return t; } catch {}
+  const pw = crypto.randomBytes(9).toString('base64url');
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(STARTER_FILE, pw + '\n', { mode: 0o600 }); } catch {}
+  return pw;
+}
 if (!state.seededAdmin) {
   if (!state.users.some((u) => u.username === 'admin') && ROOT_USER !== 'admin') {
-    state.users.push({ id: newId(), username: 'admin', name: 'Admin', role: 'medewerker', perms: [...EMERGENCY_PERMS], hash: hashPassword('admin-start-123'), factory: true, starter: true, disabled: false, createdAt: Date.now() });
+    const pw = starterPassword();
+    state.users.push({ id: newId(), username: 'admin', name: 'Admin', role: 'medewerker', perms: [...EMERGENCY_PERMS], hash: hashPassword(pw), factory: true, starter: true, disabled: false, createdAt: Date.now() });
+    if (!process.env.DOOR_STARTER_PASSWORD) console.log(`Startaccount: admin / ${pw}   (staat ook in ${STARTER_FILE})`);
   }
   state.seededAdmin = true;
   save();
+}
+{ // older installations still have the well-known start password: replace it
+  const st = state.users.find((u) => u.starter && u.factory);
+  if (st && !process.env.DOOR_STARTER_PASSWORD && verifyPassword('admin-start-123', st.hash)) {
+    const pw = starterPassword();
+    st.hash = hashPassword(pw); save();
+    console.log(`Het bekende startwachtwoord is vervangen. Startaccount: admin / ${pw}   (staat ook in ${STARTER_FILE})`);
+  }
 }
 const DUMMY_HASH = hashPassword(crypto.randomBytes(8).toString('hex')); // so an unknown user takes as long as a wrong password
 function isPrivateIp(ip) {
@@ -748,7 +768,7 @@ async function notifyExternal(r, textOverride) {
       signal: AbortSignal.timeout(8000),
     }));
   }
-  if (s.webhookUrl) {
+  if (s.webhookUrl && outboundOk(s.webhookUrl)) {
     jobs.push(fetch(s.webhookUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, content: text, request: r || null }), signal: AbortSignal.timeout(8000),
@@ -1018,6 +1038,7 @@ function pruneMaps(now) {
   const cut = (m, ms) => { for (const [k, v] of m) { const arr = Array.isArray(v) ? v : [v]; if (!arr.some((t) => now - t < ms)) m.delete(k); } };
   cut(failures, state.system.blockMinutes * 60e3); cut(visitLog, 3600e3); cut(lastVisit, 3600e3); cut(lookups, 60e3); cut(profileHits, 3600e3);
   if (alertCooldown.size > 100) alertCooldown.clear();
+  pruneSecurity(now);
 }
 // quiet self-checks: disk, memory, event-loop delay, and (if wanted) a door screen that has gone away
 function monitors(now) {
@@ -1041,6 +1062,54 @@ function monitors(now) {
 let maxLag = 0, lagLast = Date.now();
 setInterval(() => { const n = Date.now(); maxLag = Math.max(maxLag, n - lagLast - 1000); lagLast = n; }, 1000).unref();
 
+// ---------- security: flood protection (DDoS), ban list, connection limits ----------
+// Every address gets a bucket of requests that refills steadily. A burst is fine (a page loads a dozen files), a flood is answered with "429 slow down",
+// and an address that keeps hammering is put on a ban list for ten minutes (answered in a few bytes, before anything else is done).
+const RATE = { burst: Number(process.env.DOOR_RATE_BURST) || 240, perSec: Number(process.env.DOOR_RATE_PER_SEC) || 30, strikes: 80, banMs: 10 * 60e3, maxSse: Number(process.env.DOOR_MAX_SSE) || 30 };
+const buckets = new Map(), bans = new Map(), strikes = new Map();
+const isLoopback = (ip) => ip === '127.0.0.1' || ip === '::1';
+function limited(ip, cost = 1) {
+  if (state.system.rateLimit === false || process.env.DOOR_RATE_LIMIT === 'off') return 0;
+  if ((isLoopback(ip) && process.env.DOOR_RATE_TEST !== '1') || ip === 'proxied') return 0; // this computer itself; behind a proxy without TRUST_PROXY every visitor looks the same, so no limiting is possible there
+  const now = Date.now();
+  const ban = bans.get(ip);
+  if (ban) { if (now < ban) return Math.ceil((ban - now) / 1000); bans.delete(ip); }
+  let b = buckets.get(ip);
+  if (!b) { b = { tokens: RATE.burst, at: now }; buckets.set(ip, b); }
+  b.tokens = Math.min(RATE.burst, b.tokens + ((now - b.at) / 1000) * RATE.perSec); b.at = now;
+  if (b.tokens >= cost) { b.tokens -= cost; return 0; }
+  const list = (strikes.get(ip) || []).filter((t) => now - t < 60e3); list.push(now); strikes.set(ip, list);
+  if (list.length >= RATE.strikes) {
+    bans.set(ip, now + RATE.banMs); strikes.delete(ip);
+    log('beveiliging', `${ip} is voor 10 minuten geblokkeerd: te veel verzoeken`, 'systeem');
+    raise('attack', `Een apparaat (${ip}) stuurde veel te veel verzoeken en is tien minuten geblokkeerd. Dit lijkt op een aanval of een kapotte app.`, { cooldownMin: 60 });
+    return Math.ceil(RATE.banMs / 1000);
+  }
+  return 2;
+}
+// failed logins per user name, from anywhere: slows down guessing by many addresses at once (without locking the real owner out)
+const userFails = new Map();
+function loginDelayMs(username) {
+  const now = Date.now(), list = (userFails.get(username) || []).filter((t) => now - t < 10 * 60e3);
+  return Math.min(5000, 400 + list.length * 300);
+}
+function noteUserFail(username) {
+  const now = Date.now(), list = (userFails.get(username) || []).filter((t) => now - t < 10 * 60e3); list.push(now); userFails.set(username, list);
+  if (list.length === 25) raise('guessing', `Iemand probeert veel wachtwoorden voor “${username}” (25 mislukte pogingen in 10 minuten).`, { cooldownMin: 60 });
+}
+// the most used passwords are refused for new accounts
+const COMMON_PW = new Set(['password', 'wachtwoord', '12345678', '123456789', '1234567890', 'qwertyui', 'qwerty123', 'admin123', 'admin-start-123', 'welkom123', 'welkom01', 'password1', 'password123', 'iloveyou', 'letmein1', 'abcd1234', '11111111', '00000000', 'saga1234', 'techbox1']);
+// outgoing calls (webhook, ntfy, lock, camera) may go to your own network, but never to the cloud “metadata” address that holds secrets
+function outboundOk(u) {
+  try { const x = new URL(u); const h = x.hostname.toLowerCase(); return (x.protocol === 'http:' || x.protocol === 'https:') && !/^169\.254\./.test(h) && h !== 'metadata.google.internal' && h !== '0.0.0.0' && !h.startsWith('fd00:ec2'); } catch { return false; }
+}
+function pruneSecurity(now) {
+  for (const [ip, b] of buckets) if (now - b.at > 120e3) buckets.delete(ip);
+  for (const [ip, t] of bans) if (now > t) bans.delete(ip);
+  for (const [ip, l] of strikes) if (!l.some((t) => now - t < 60e3)) strikes.delete(ip);
+  for (const [u, l] of userFails) if (!l.some((t) => now - t < 10 * 60e3)) userFails.delete(u);
+}
+
 // ---------- HTTP ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 function send(res, code, obj) {
@@ -1051,7 +1120,7 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
     req.on('data', (c) => { size += c.length; if (size > 1024 * 1024) { reject(new Error('Te groot')); req.destroy(); } else chunks.push(c); });
-    req.on('end', () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); } catch { reject(new Error('Ongeldig verzoek')); } });
+    req.on('end', () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8'), (k, v) => (k === '__proto__' || k === 'constructor' || k === 'prototype' ? undefined : v)) : {}); } catch { reject(new Error('Ongeldig verzoek')); } });
     req.on('error', reject);
   });
 }
@@ -1081,10 +1150,13 @@ const bad = (msg) => Object.assign(new Error(msg), { code: 400 });
 const findReq = (id) => { const r = state.requests.find((x) => x.id === id); if (!r) throw bad('Dat verzoek bestaat niet meer'); return r; };
 
 // the addresses at which this server can be reached (shown on the start screen of the Linux image)
-function where() {
+function where(local) {
   const addresses = [];
   for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) if (a.family === 'IPv4' && !a.internal) addresses.push(`http://${a.address}:${PORT}`);
-  return { name: state.settings.name, hostname: os.hostname(), port: PORT, version: APP_VERSION, addresses, mdns: `http://${os.hostname()}.local:${PORT}` };
+  const out = { name: state.settings.name, hostname: os.hostname(), port: PORT, version: APP_VERSION, addresses, mdns: `http://${os.hostname()}.local:${PORT}` };
+  // the start password is only handed out to a screen on this computer itself (the start screen of the Linux image), never over the network
+  if (local && state.users.some((u) => u.starter && u.factory && !u.disabled)) out.starter = { user: 'admin', password: starterPassword() };
+  return out;
 }
 // what a small device needs to know about the door
 function doorBrief() {
@@ -1123,6 +1195,7 @@ const adminRoutes = {
     if (existing && !permsOf(existing.perms).every((x) => can(id, x))) throw bad('Deze gebruiker heeft meer rechten dan jij');
     const password = typeof b.password === 'string' ? b.password : '';
     if (!existing && password.length < 8) throw bad('Wachtwoord: minstens 8 tekens');
+    if (password && (COMMON_PW.has(password.toLowerCase()) || password.toLowerCase() === username || /^(.)\1+$/.test(password))) throw bad('Dat wachtwoord is veel te makkelijk te raden. Kies iets anders.');
     if (password && password.length < 8) throw bad('Wachtwoord: minstens 8 tekens');
     const u = existing || { id: newId(), createdAt: Date.now(), hash: '' };
     if (existing && id.userId === existing.id && (b.disabled || !perms.includes('users'))) throw bad('Je kunt jezelf niet uitschakelen of je beheerrechten afnemen');
@@ -1731,15 +1804,24 @@ function handleVisit(req, b) {
   return { id: r.id, reply: r.reply, mailTo: r.email && mailOn() ? maskEmail(r.email) : '' };
 }
 
-const server = http.createServer(async (req, res) => {
+const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (req, res) => {
+  { // flood protection comes first, before anything else is looked at
+    const wait = limited(clientIp(req), req.url && req.url.startsWith('/events') ? 5 : 1);
+    if (wait) { res.writeHead(429, { 'Retry-After': String(wait), 'Content-Type': 'text/plain', Connection: 'close' }); return res.end('Te veel verzoeken — probeer het zo opnieuw'); }
+  }
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'"); // only this server's own pages may show its pages in a frame
+  // only this server's own pages and scripts run; nothing is loaded from elsewhere; nobody can put the pages in a frame
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'");
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  if (TRUST_PROXY && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000'); // only behind https
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   try {
     if (p === '/healthz') return send(res, 200, { ok: true });
-    if (p === '/api/where') return send(res, 200, where()); // for the start screen and for apps that look for the server
+    if (p === '/api/where') return send(res, 200, where(isLoopback(req.socket.remoteAddress && normIp(req.socket.remoteAddress)) && !req.headers['x-forwarded-for'] && !req.headers['x-real-ip'] && !req.headers['cf-connecting-ip'])); // for the start screen and for apps that look for the server
     if (p === '/start') return serveFile(res, 'start.html', req);
     if (p === '/events') {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
@@ -1748,6 +1830,7 @@ const server = http.createServer(async (req, res) => {
       if (eid?.sessionId && sessionOf(eid)?.locked) return send(res, 423, { error: 'Vergrendeld', locked: true });
       const sgate = role === 'admin' ? gate(eid, clientIp(req)) : null;
       if (sgate) return send(res, sgate.code, { error: sgate.error });
+      if ([...clients].filter((x) => x.ip === clientIp(req)).length >= RATE.maxSse && !(isLoopback(clientIp(req)) && process.env.DOOR_RATE_TEST !== '1') && clientIp(req) !== 'proxied') return send(res, 429, { error: 'Te veel open verbindingen vanaf dit apparaat' });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write('retry: 2000\n\n');
       const c = { res, role, visit: url.searchParams.get('visit') === '1', ip: clientIp(req), tok: String(url.searchParams.get('token') || ''), pin: String(url.searchParams.get('pin') || ''), userId: eid?.userId, sessionId: eid?.sessionId };
@@ -1766,7 +1849,7 @@ const server = http.createServer(async (req, res) => {
       let user = null, ok = false;
       if (username === ROOT_USER) { ok = verifyPassword(password, ROOT_HASH); user = rootIdentity(); }
       else { const u = state.users.find((x) => x.username === username && !x.disabled); ok = verifyPassword(password, u ? u.hash : DUMMY_HASH) && !!u; if (ok && u.factory && !isPrivateIp(ip)) ok = false; /* the factory password never works from the internet */ if (ok) { u.lastLogin = Date.now(); user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: effectivePerms(u) }; } }
-      if (!ok) { authFail(ip); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
+      if (!ok) { authFail(ip); noteUserFail(username); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, loginDelayMs(username))); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
       const lg = gate(user, ip);
       if (lg) return send(res, lg.code, { error: lg.error });
       const token = newSession(user.userId, req, !!b.remember);
@@ -1861,6 +1944,9 @@ const server = http.createServer(async (req, res) => {
     }
     send(res, 404, { error: 'not found' });
   } catch (e) {
+    // our own messages ("Dat verzoek bestaat niet meer") are shown; a real bug or a file-system error is not: that could give away paths and code
+    const internal = e instanceof TypeError || e instanceof RangeError || e instanceof ReferenceError || e instanceof SyntaxError && !/JSON/.test(e.message) || (typeof e.code === 'string' && /^E[A-Z]+$/.test(e.code));
+    if (internal) { console.error('internal error on', req.method, p, e && e.stack || e); log('fout', `Interne fout bij ${req.method} ${p}: ${e.message}`, 'systeem'); return send(res, 500, { error: 'Er ging iets mis in de server.' }); }
     send(res, e.logout ? 401 : e.code === 429 ? 429 : 400, { error: e.message });
   }
 });
@@ -1894,6 +1980,11 @@ if (['open', 'closed', 'busy'].includes(state.settings.startup.status)) { // cho
 }
 lastView = JSON.stringify(computeView());
 // `ready` lets the desktop app wait for the server (or show why it couldn't start)
+// slow-connection attacks (a request that is sent a byte at a time to keep connections busy): the whole request has to arrive quickly
+server.headersTimeout = Number(process.env.DOOR_HEADER_TIMEOUT_MS) || 15000;
+server.requestTimeout = Math.max(server.headersTimeout, 30000);
+server.keepAliveTimeout = 5000;
+server.maxHeadersCount = 60;
 const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, process.env.HOST || undefined, () => {

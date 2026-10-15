@@ -13,7 +13,7 @@ const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 // a tag number written in any way ("04:a2:3b", "04 A2 3B", "04a23b") becomes 04A23B
 const normUid = (u) => String(u || '').replace(/[^0-9a-f]/gi, '').toUpperCase().slice(0, 32);
-const httpUrl = (u) => { try { const x = new URL(String(u)); return x.protocol === 'http:' || x.protocol === 'https:' ? x.toString() : ''; } catch { return ''; } };
+const httpUrl = (u) => { try { const x = new URL(String(u)); const h = x.hostname.toLowerCase(); return (x.protocol === 'http:' || x.protocol === 'https:') && !/^169\.254\./.test(h) && h !== 'metadata.google.internal' && h !== '0.0.0.0' ? x.toString() : ''; } catch { return ''; } }; // never the cloud "metadata" address
 
 function defaults() {
   return {

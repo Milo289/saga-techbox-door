@@ -998,7 +998,8 @@
           h('label', {}, 'Onderhoud'), h('div', {}, chk('maintenance', 'Onderhoudsmodus: alleen jij kunt nog in het paneel'), h('input', { value: d.maintenanceMessage, placeholder: 'Bericht voor de anderen, bijv. “We zijn zo terug”', maxlength: 200, style: 'margin-top:8px;width:100%', oninput: (e) => { d.maintenanceMessage = e.target.value; } })),
           h('label', {}, 'Toegestane netwerken'), h('div', {}, ips, h('div', { class: 'muted', style: 'margin-top:4px' }, `Alleen deze adressen mogen inloggen (jij niet gebonden). Jouw adres nu: ${sysData.yourIp || '—'}.`)),
           h('label', {}, 'Ingelogd blijven'), h('div', { class: 'row' }, num('sessionDays', 1, 365), h('span', { class: 'muted' }, 'dagen, of'), num('rememberDays', 1, 730), h('span', { class: 'muted' }, 'dagen met “onthoud mij” (bij niet-gebruik)')),
-          h('label', {}, 'Foute pogingen'), h('div', { class: 'row' }, h('span', { class: 'muted' }, 'blokkeer na'), num('maxAttempts', 3, 200), h('span', { class: 'muted' }, 'pogingen, voor'), num('blockMinutes', 1, 1440), h('span', { class: 'muted' }, 'minuten')))),
+          h('label', {}, 'Foute pogingen'), h('div', { class: 'row' }, h('span', { class: 'muted' }, 'blokkeer na'), num('maxAttempts', 3, 200), h('span', { class: 'muted' }, 'pogingen, voor'), num('blockMinutes', 1, 1440), h('span', { class: 'muted' }, 'minuten')),
+          h('label', {}, 'Aanvalsbeveiliging'), chk('rateLimit', 'Stuurt één apparaat veel te veel verzoeken, dan wordt het afgeremd en tien minuten geblokkeerd (en krijg je een waarschuwing). Laat dit aan.'))),
 
       h('div', { class: 'card' }, h('h2', {}, 'Gegevens', h('span', { class: 'sp' }), h('button', { class: 'white sm', onclick: save }, 'Opslaan')),
         h('div', { class: 'form' },

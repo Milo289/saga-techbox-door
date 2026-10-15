@@ -20,6 +20,7 @@
     <div>
       <div class="card"><div class="muted">Open op een telefoon of computer in hetzelfde netwerk:</div><div id="addrs"></div>
         <div class="muted" id="mdns"></div></div>
+      <div class="card" id="starter" style="display:none"><b>Eerste inlog</b> <span class="muted">(alleen zichtbaar op dit scherm)</span><div class="addr" id="starterText" style="font-size:22px"></div><div class="muted">Verander dit wachtwoord zodra je binnen bent.</div></div>
       <div class="card"><b>Bedieningspaneel</b> (inloggen en alles instellen)<div class="btns"><a class="btn" href="/admin">Bedieningspaneel openen</a><a class="btn alt" href="/?kiosk=1">Deurscherm tonen</a></div>
         <div class="muted" id="next" style="margin-top:12px"></div></div>
       <div class="muted">Terug naar dit scherm vanaf het deurscherm: tik vijf keer snel in de linkerbovenhoek.</div>
@@ -37,6 +38,7 @@
     $('name').textContent = w.name; $('ver').textContent = 'Versie ' + w.version;
     $('addrs').innerHTML = (w.addresses.length ? w.addresses : ['Geen netwerk gevonden — steek een netwerkkabel in']).map((a) => `<div class="addr">${a.startsWith('http') ? a + '/admin' : a}</div>`).join('');
     $('mdns').textContent = 'Of: ' + w.mdns + '/admin';
+    if (w.starter) { $('starter').style.display = 'block'; $('starterText').textContent = w.starter.user + ' / ' + w.starter.password; }
     if (w.addresses[0]) { try { $('qr').innerHTML = QR.svg(w.addresses[0] + '/admin'); } catch {} }
   }
   // one monitor: show this screen for a moment, then the door screen (cancel with the button)

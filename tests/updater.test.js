@@ -7,15 +7,17 @@ const os = require('node:os');
 const path = require('node:path');
 
 const BIN = Buffer.alloc(200000, 7);
-let wantToken = null, version = '9.9.9', declaredSize = BIN.length;
+let wantToken = null, version = '9.9.9', declaredSize = BIN.length, sumsMode = 'good';
+const sha = require('node:crypto').createHash('sha256').update(BIN).digest('hex');
 const server = http.createServer((req, res) => {
   if (wantToken && req.headers.authorization !== `Bearer ${wantToken}`) { res.writeHead(404); return res.end('{}'); }
   const base = `http://127.0.0.1:${server.address().port}`;
   if (req.url === '/release') {
     res.writeHead(200, { 'content-type': 'application/json' });
     const files = ['mac-arm64.pkg', 'mac-x64.pkg', 'windows-setup.exe', 'linux-x86_64.AppImage', 'linux-amd64.deb', 'linux-arm64.deb'];
-    return res.end(JSON.stringify({ tag_name: `v${version}`, body: 'Nieuw', html_url: `${base}/page`, assets: files.map((f) => ({ name: `Saga-Techbox-Deur-${version}-${f}`, size: declaredSize, url: `${base}/dl`, browser_download_url: `${base}/dl` })) }));
+    return res.end(JSON.stringify({ tag_name: `v${version}`, body: 'Nieuw', html_url: `${base}/page`, assets: [...files.map((f) => ({ name: `Saga-Techbox-Deur-${version}-${f}`, size: declaredSize, url: `${base}/dl`, browser_download_url: `${base}/dl` })), { name: 'SHA256SUMS.txt', size: 100, url: `${base}/sums`, browser_download_url: `${base}/sums` }] }));
   }
+  if (req.url === '/sums') { res.writeHead(200); const h = sumsMode === 'good' ? sha : '0'.repeat(64); return res.end(sumsMode === 'none' ? '' : `${h}  Saga-Techbox-Deur-${version}-mac-arm64.pkg\n`); }
   if (req.url === '/dl') { res.writeHead(200, { 'content-length': BIN.length }); return res.end(BIN); }
   res.writeHead(404); res.end();
 });
@@ -72,4 +74,29 @@ test('only GitHub may hand out downloads (official address)', () => {
     const u=require('./app/updater.js');
     console.log(JSON.stringify([u.trusted('https://api.github.com/x'), u.trusted('https://objects.githubusercontent.com/a'), u.trusted('https://evil.example.com/a'), u.trusted('http://github.com/a')]));`], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
   assert.equal(out.stdout.trim(), '[true,true,false,false]');
+});
+
+test('an installer that does not match the checksum list is thrown away', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'upd-'));
+  const r = await updater.check('1.0.0', '', { platform: 'darwin', arch: 'arm64' });
+  assert.ok(r.asset.sums, 'the release lists the checksums');
+  sumsMode = 'good';
+  const ok = await updater.download(r.asset, '', dir);
+  assert.ok(fs.existsSync(ok));
+  fs.unlinkSync(ok);
+  sumsMode = 'bad';
+  await assert.rejects(updater.download(r.asset, '', dir), /controlesom/);
+  assert.ok(!fs.existsSync(path.join(dir, r.asset.name)) && !fs.existsSync(path.join(dir, r.asset.name + '.part')), 'nothing is left behind');
+  sumsMode = 'none';
+  await assert.rejects(updater.download(r.asset, '', dir), /controlesom/);
+  sumsMode = 'good';
+});
+
+test('verifyFile compares the right line', async () => {
+  const f = path.join(os.tmpdir(), 'vf-' + Date.now());
+  fs.writeFileSync(f, 'abc');
+  const h = require('node:crypto').createHash('sha256').update('abc').digest('hex');
+  assert.equal(await updater.verifyFile(f, 'a.pkg', `${h}  a.pkg\n${'0'.repeat(64)}  b.pkg\n`), true);
+  assert.equal(await updater.verifyFile(f, 'b.pkg', `${h}  a.pkg\n${'0'.repeat(64)}  b.pkg\n`), false);
+  assert.equal(await updater.verifyFile(f, 'zzz', `${h}  a.pkg\n`), false);
 });

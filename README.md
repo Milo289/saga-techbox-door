@@ -61,7 +61,7 @@ The program has one **main account** with every right. Its username and a hash o
 sealed by `seal.js`): the program has **no way to change them**, not from the website, the settings, the API or the desktop app, and
 **it does not start if those files are missing or altered**. There is no "forgot password".
 
-There is also a simple **start account** for setting the server up: username `admin`, start password `admin-start-123` (it only works from
+There is also a simple **start account** for setting the server up: username `admin`, start password **made up at random for every installation** (shown once in the console, kept in `data/starter-password.txt`, and on the start screen of the Linux image; it only works from
 your own network, and the main account can change or remove it under Beheer). While no other account exists it may create accounts;
 as soon as one exists it becomes an **emergency account** that can only see and change the status.
 
@@ -272,3 +272,6 @@ Het hele programma is doorgelopen op fouten, trage plekken en dingen die kunnen 
 - **Schema:** “scherm aan” gebeurt nu ook als de computer een paar minuten te laat wakker werd (tot een half uur); uitzetten blijft nooit te laat.
 - **Veiliger:** het camerabeeld-adres geeft alleen afbeeldingen door, zodat het geen manier is om andere pagina’s in het netwerk te lezen.
 - **Apps:** ze melden een verbinding die langer dan anderhalve minuut weg is, en nieuwe waarschuwingen van de server. De desktop-app (Electron) schrijft crashes naar een logbestand in plaats van een foutvenster te tonen op een deurscherm, en laadt een bevroren pagina na 20 seconden opnieuw.
+
+## Versie 3.0.0 — beveiliging
+Zie [SECURITY.md](SECURITY.md): bekende aanvallen zijn op de eigen server losgelaten en worden nu tegengehouden, met aanvalsbeveiliging (overspoelen, trage aanvallen, wachtwoorden raden, te veel verbindingen), een strenge Content-Security-Policy, een willekeurig startwachtwoord per installatie (het bekende standaardwachtwoord is weg), controlesommen op updates en een test voor alle routes. Je krijgt een waarschuwing als iemand de server probeert te overspoelen.

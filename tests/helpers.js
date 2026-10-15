@@ -24,7 +24,7 @@ async function startServer({ patch = false, dir, env = {} } = {}) {
   }
   const port = 20000 + Math.floor(Math.random() * 30000);
   const dataDir = path.join(dir, 'data');
-  const child = spawn(process.execPath, [path.join(root, 'server.js')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, HOST: '127.0.0.1', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [path.join(root, 'server.js')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, HOST: '127.0.0.1', DOOR_STARTER_PASSWORD: 'admin-start-123', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   child.stdout.on('data', (d) => { log += d; }); child.stderr.on('data', (d) => { log += d; });
   const srv = {

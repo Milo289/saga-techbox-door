@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "2.9.0"
+    MARKETING_VERSION: "3.0.0"
     CURRENT_PROJECT_VERSION: "1"
 targetTemplates:
   App:
@@ -78,7 +78,7 @@ targetTemplates:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: Deur Beheer maakt verbinding met jouw deurserver in het netwerk.
         INFOPLIST_KEY_NSHumanReadableCopyright: Saga Techbox
-        MARKETING_VERSION: "2.9.0"
+        MARKETING_VERSION: "3.0.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: NO

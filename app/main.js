@@ -109,15 +109,18 @@ function lanAddresses(port) {
 // ---------- windows ----------
 function keepOnOrigin(w, base) {
   const origin = new URL(base).origin;
-  w.webContents.on('will-navigate', (e, url) => { if (new URL(url).origin !== origin) { e.preventDefault(); shell.openExternal(url); } });
+  w.webContents.on('will-navigate', (e, url) => { if (new URL(url).origin !== origin) { e.preventDefault(); openSafe(url); } });
   w.webContents.setWindowOpenHandler(({ url }) => {
     if (new URL(url).origin === origin && config.role === 'control') {
       return { action: 'allow', overrideBrowserWindowOptions: { width: 600, height: 960, backgroundColor: '#000', autoHideMenuBar: true } };
     }
-    if (!url.startsWith(origin)) shell.openExternal(url);
+    if (!url.startsWith(origin)) openSafe(url);
     return { action: 'deny' };
   });
 }
+
+// only web addresses are handed to the system (a file:// or custom-scheme link could start another program)
+function openSafe(url) { try { const u = new URL(url); if (u.protocol === 'http:' || u.protocol === 'https:') shell.openExternal(u.toString()); } catch {} }
 
 // Keep trying until the server answers (after power-on the server may still be starting)
 function loadWithRetry(w, url) {

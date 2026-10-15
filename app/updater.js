@@ -2,6 +2,7 @@
 // Looks for a newer version on the GitHub releases page and downloads the right installer for this computer.
 // No Electron in here, so it can be tested on its own. Nothing is installed without the person saying so.
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 
 const DEFAULT_API = 'https://api.github.com/repos/Milo289/saga-techbox-door/releases/latest';
@@ -34,6 +35,21 @@ function trusted(url) {
 
 const baseHeaders = (token) => ({ 'User-Agent': 'saga-techbox-deur', ...(token ? { Authorization: `Bearer ${token}` } : {}) });
 
+// the release carries a list of checksums (SHA256SUMS.txt); a downloaded installer must match it before anything is opened
+function sumsOf(assets, token) {
+  const a = (assets || []).find((x) => x.name === 'SHA256SUMS.txt');
+  return a ? { url: token ? a.url : a.browser_download_url } : null;
+}
+function sha256File(file) {
+  return new Promise((resolve, reject) => { const h = crypto.createHash('sha256'); fs.createReadStream(file).on('data', (d) => h.update(d)).on('end', () => resolve(h.digest('hex'))).on('error', reject); });
+}
+// text of SHA256SUMS.txt ("<hash>  <name>" per line) → does this file match its line?
+async function verifyFile(file, name, sumsText) {
+  const line = String(sumsText).split('\n').map((l) => l.trim().split(/\s+/)).find((p) => p.length >= 2 && p[p.length - 1].replace(/^\*/, '') === name);
+  if (!line) return false;
+  return (await sha256File(file)).toLowerCase() === line[0].toLowerCase();
+}
+
 async function check(current, token, env) {
   let res;
   try { res = await fetch(API, { headers: { Accept: 'application/vnd.github+json', ...baseHeaders(token) }, signal: AbortSignal.timeout(15000) }); }
@@ -48,7 +64,7 @@ async function check(current, token, env) {
   const asset = pickAsset(rel.assets, env);
   return {
     upToDate: false, version, notes: String(rel.body || '').slice(0, 800), page: String(rel.html_url || ''),
-    asset: asset && /^[\w.\-]+$/.test(asset.name) ? { name: asset.name, size: Number(asset.size) || 0, url: token ? asset.url : asset.browser_download_url } : null,
+    asset: asset && /^[\w.\-]+$/.test(asset.name) ? { name: asset.name, size: Number(asset.size) || 0, url: token ? asset.url : asset.browser_download_url, sums: sumsOf(rel.assets, token) } : null,
   };
 }
 
@@ -79,8 +95,19 @@ async function download(asset, token, destDir, onProgress) {
     throw new Error('Downloaden werd onderbroken — probeer het opnieuw');
   }
   if (asset.size && got !== asset.size) { try { fs.unlinkSync(part); } catch {} throw new Error('De download is niet compleet — probeer het opnieuw'); }
+  // integrity: the installer must match the checksum list of the release (the official address always requires it)
+  if (asset.sums || OFFICIAL) {
+    let ok = false;
+    try {
+      if (asset.sums && trusted(asset.sums.url)) {
+        const r = await fetch(asset.sums.url, { headers: { Accept: 'application/octet-stream', ...baseHeaders(token) }, redirect: 'follow' });
+        if (r.ok) ok = await verifyFile(part, asset.name, await r.text());
+      }
+    } catch { ok = false; }
+    if (!ok) { try { fs.unlinkSync(part); } catch {} throw new Error('De download klopt niet met de controlesom van de release en is niet gebruikt. Probeer het later opnieuw.'); }
+  }
   fs.renameSync(part, file);
   return file;
 }
 
-module.exports = { check, download, pickAsset, isNewer, trusted };
+module.exports = { check, download, pickAsset, isNewer, trusted, verifyFile };
