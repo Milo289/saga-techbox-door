@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>Even geduld</title>
+<body style="margin:0;background:#0e1417;color:#fff;font:28px system-ui;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center">
+<div><div style="font-size:48px;margin-bottom:12px">Saga Techbox Deur</div><div id="m">De server start op…</div></div>
+<script>
+let n = 0;
+async function go() {
+  n++;
+  try { await fetch('http://localhost:8080/healthz', { mode: 'no-cors' }); location.href = 'http://localhost:8080/'; return; } catch {}
+  document.getElementById('m').textContent = 'De server start op… (' + n + ' s)' + (n > 60 ? ' — duurt lang: druk Ctrl+Alt+F2 en lees: journalctl -u saga-door' : '');
+  setTimeout(go, 1000);
+}
+go();
+</script>

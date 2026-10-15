@@ -15,3 +15,8 @@ fonts-dejavu
 curl
 ca-certificates
 tzdata
+xserver-xorg-legacy
+libpam-systemd
+dbus
+dbus-x11
+qemu-guest-agent

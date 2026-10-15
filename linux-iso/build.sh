@@ -21,7 +21,7 @@ lb config --mode debian --linux-flavours "$FLAVOUR" --linux-packages linux-image
   --keyring-packages debian-archive-keyring --archive-areas main \
   --debian-installer none --apt-recommends false --memtest none \
   --iso-application "Saga Techbox Deur" --iso-volume "SAGA_DOOR" \
-  --bootappend-live "boot=live components quiet splash hostname=saga-deur username=deur"
+  --bootappend-live "boot=live components hostname=saga-deur username=deur"
 
 # what is on the disc
 cp -r "$HERE/config/." config/
