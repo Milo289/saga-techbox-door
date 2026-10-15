@@ -8,6 +8,9 @@ rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK"
 
 lb config \
   --distribution bookworm --architectures amd64 --binary-images iso-hybrid \
+  --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-binary http://deb.debian.org/debian \
+  --parent-mirror-bootstrap http://deb.debian.org/debian --parent-mirror-chroot http://deb.debian.org/debian --parent-mirror-binary http://deb.debian.org/debian \
+  --keyring-packages debian-archive-keyring --archive-areas main \
   --debian-installer none --apt-recommends false --memtest none \
   --iso-application "Saga Techbox Deur" --iso-volume "SAGA_DOOR" \
   --bootappend-live "boot=live components quiet splash hostname=saga-deur username=deur"
