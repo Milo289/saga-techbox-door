@@ -6,7 +6,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(dirname "$HERE")"
 WORK="${WORK:-$ROOT/iso-build}"
 rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK"
 
-lb config \
+lb config --mode debian --linux-flavours amd64 --linux-packages linux-image \
   --distribution bookworm --architectures amd64 --binary-images iso-hybrid \
   --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-binary http://deb.debian.org/debian \
   --parent-mirror-bootstrap http://deb.debian.org/debian --parent-mirror-chroot http://deb.debian.org/debian --parent-mirror-binary http://deb.debian.org/debian \
