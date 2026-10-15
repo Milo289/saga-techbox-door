@@ -9,6 +9,7 @@ const net = require('net');
 const tls = require('tls');
 const os = require('os');
 const crypto = require('crypto');
+const integ = require('./integrations.js'); // microcontrollers, door lock + NFC tags, camera events, automations (all opt-in)
 const power = require('./power.js'); // switching the screen / computer off and on by a schedule (opt-in)
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -119,6 +120,7 @@ const freshState = () => ({
   customBell: null, // an own bell sound { mime, b64, at }
   lastDigestDay: '',
   power: power.defaults(), // energy management (see power.js)
+  integ: integ.defaults(), devices: [], sightings: [], // see integrations.js
   wakeApplied: 0, // when the wake-up schedule was last put on this computer
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
   seededAdmin: false,
@@ -331,7 +333,7 @@ function load() {
       for (const k of ['ntfyTopic', 'ntfyServer', 'webhookUrl']) if (raw.settings?.[k]) d.settings[k] = str(raw.settings[k], 300);
       return d;
     }
-    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), blocked: cleanBlocked(raw.blocked), customBell: cleanBell(raw.customBell), power: power.clean(raw.power), system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
+    return { ...d, ...raw, positions: cleanPositions(raw.positions), blocks: cleanBlocks(raw.blocks), blocked: cleanBlocked(raw.blocked), customBell: cleanBell(raw.customBell), power: power.clean(raw.power), integ: integ.clean(raw.integ), devices: Array.isArray(raw.devices) ? raw.devices.slice(0, 50) : [], sightings: Array.isArray(raw.sightings) ? raw.sightings.slice(0, 500) : [], system: cleanSystem(raw.system || {}), people: Array.isArray(raw.people) ? raw.people : [], users: Array.isArray(raw.users) ? raw.users : [], apiKeys: Array.isArray(raw.apiKeys) ? raw.apiKeys : [], sessions: Array.isArray(raw.sessions) ? raw.sessions : [], settings: toDutch(coerce(DEFAULT_SETTINGS, raw.settings)) };
   } catch {
     return d;
   }
@@ -484,6 +486,9 @@ const PERM_LABELS = {
   settings: 'Instellingen wijzigen', mail: 'E-mail en meldingen instellen', export: 'Back-up maken en terugzetten', audit: 'Activiteitenlog zien',
   users: 'Gebruikers en rechten beheren', api: 'API-sleutels beheren', system: 'Systeeminstellingen',
   power: 'Computer en scherm uit- en aanzetten',
+  devices: 'Microcontrollers (ESP32, Pico) laten meepraten',
+  unlock: 'Het slot en de NFC-tags beheren en de deur openen',
+  cameras: 'Camera’s en herkenning van personen beheren',
 };
 const PUBLIC_PERM_LABELS = Object.fromEntries(Object.entries(PERM_LABELS).filter(([k]) => k !== 'system')); // 'system' belongs to the main account only
 const ALL_PERMS = Object.keys(PERM_LABELS);
@@ -612,6 +617,9 @@ function adminState(id) {
     pendingProfiles: full('inbox') ? state.people.filter((x) => x.pending).map(({ id, nr, name, email }) => ({ id, nr, name, email })) : [],
     weatherNow: state.settings.weather.enabled && weather.ok ? { temp: weather.temp, code: weather.code } : null,
     power: full('power') ? { ...state.power, available: power.available(), dry: power.dryRun(), platform: power.dryRun() && process.env.DOOR_POWER_PLATFORM ? process.env.DOOR_POWER_PLATFORM : process.platform, pi: power.isPi(), pending: powerPending, log: power.log.slice(0, 10), offHours: power.offHoursPerWeek(state.power), kwh: power.kwhPerWeek(state.power), wakeApplied: state.wakeApplied } : undefined,
+    integ: full('unlock') || full('cameras') ? { ...(full('unlock') ? { lock: { ...state.integ.lock, headerValue: state.integ.lock.headerValue ? PASS_MASK : '' }, automations: state.integ.automations } : {}), ...(full('cameras') ? { cameras: state.integ.cameras, faces: state.integ.faces } : {}) } : undefined,
+    devices: full('settings') || full('unlock') || full('cameras') ? state.devices : [],
+    sightings: full('cameras') ? state.sightings.slice(0, 50) : [],
     people: full('people') ? state.people : [],
     peopleRev: state.peopleRev || 0,
     mailOn: mailOn(),
@@ -958,6 +966,25 @@ function serveFile(res, file) {
 const bad = (msg) => Object.assign(new Error(msg), { code: 400 });
 const findReq = (id) => { const r = state.requests.find((x) => x.id === id); if (!r) throw bad('Dat verzoek bestaat niet meer'); return r; };
 
+// what a small device needs to know about the door
+function doorBrief() {
+  const v = computeView();
+  return { mode: v.mode, label: state.settings.texts[v.mode] ? state.settings.texts[v.mode].label : v.mode, message: v.message || '', color: ({ open: '#30d158', closed: '#ff453a', busy: '#ff9f0a' })[v.mode] || '#ffffff', until: v.until || null };
+}
+// one thing to do, from a rule or a person's settings
+async function runAction(a, why, by) {
+  if (a.status) {
+    const now = Date.now(), until = a.minutes > 0 ? now + a.minutes * 60e3 : null;
+    state.manual = { mode: a.status, until, message: a.message || '', setAt: now, expiresAt: null };
+    log('koppeling', `${why}: status ${a.status}`, by);
+  } else if (a.message) { log('koppeling', `${why}: ${a.message}`, by); }
+  if (a.notify || a.bell) notifyExternal(null, `${why}${a.message ? ' — ' + a.message : ''}`).catch(() => {});
+  if (a.unlock) { try { await integ.unlock(state.integ); log('slot', `${why}: deur geopend`, by); } catch (e) { log('slot', `${why}: slot opende niet (${e.message})`, by); } }
+}
+async function fireAutomations(source, key, event, by) {
+  for (const rule of integ.matching(state.integ, source, key, event)) await runAction(source === 'camera' ? { ...rule.do, unlock: false } : rule.do, rule.name, by);
+}
+
 const adminRoutes = {
   'GET /api/admin-state': (b, id) => adminState(id),
   'GET /api/me': (b, id) => adminState(id).me,
@@ -1239,6 +1266,75 @@ const adminRoutes = {
     return { ok: true };
   },
 
+
+  // ----- microcontrollers, door lock + NFC, cameras (permissions: devices, unlock, cameras) -----
+  'POST /api/device/report': async (b, id) => {
+    const name = str(b.device, 40) || id.name;
+    let d = state.devices.find((x) => x.name === name);
+    if (!d) { if (state.devices.length >= 50) throw bad('Te veel apparaten'); d = { id: newId(), name, first: Date.now() }; state.devices.push(d); log('koppeling', `Nieuw apparaat: ${name}`, id.name); }
+    d.lastSeen = Date.now(); d.ip = id.ip || ''; d.last = { event: str(b.event, 40), value: b.value == null ? '' : str(b.value, 60) };
+    if (b.battery != null) d.battery = Math.max(0, Math.min(100, Math.round(Number(b.battery)))) || 0;
+    await fireAutomations('device', name, str(b.event, 40), id.name);
+    return { ok: true, ...doorBrief() };
+  },
+  'GET /api/device/poll': (b, id, url) => {
+    const name = str(url.searchParams.get('device'), 40);
+    const d = name && state.devices.find((x) => x.name === name);
+    if (d) d.lastSeen = Date.now();
+    return { ok: true, ...doorBrief() };
+  },
+  'POST /api/door/tag': async (b, id) => {
+    const uid = integ.normUid(b.uid);
+    const v = integ.tagVerdict(state.integ, uid);
+    if (!v.ok) { log('slot', `Tag ${uid.slice(0, 4)}… geweigerd: ${v.why}`, id.name); return { ok: true, allowed: false, why: v.why }; }
+    try { await integ.unlock(state.integ); } catch (e) { log('slot', `Slot opende niet: ${e.message}`, id.name); throw bad(e.message); }
+    log('slot', `${v.tag.name || 'Tag'} opende de deur`, id.name);
+    await fireAutomations('tag', v.tag.name || uid, 'scan', id.name);
+    return { ok: true, allowed: true, name: v.tag.name };
+  },
+  'POST /api/door/unlock': async (b, id) => {
+    if (!state.integ.lock.enabled || !state.integ.lock.url) throw bad('Het slot is nog niet ingesteld');
+    try { await integ.unlock(state.integ); } catch (e) { throw bad(e.message); }
+    log('slot', 'Deur geopend vanuit het paneel', id.name);
+    return { ok: true };
+  },
+  'POST /api/integrations/save': (b) => {
+    const cur = state.integ, raw = { ...cur };
+    if (b.lock) { raw.lock = { ...b.lock }; if (raw.lock.headerValue === PASS_MASK) raw.lock.headerValue = cur.lock.headerValue; }
+    if (b.automations) raw.automations = b.automations;
+    if (b.cameras) raw.cameras = b.cameras;
+    if (b.faces) raw.faces = b.faces;
+    state.integ = integ.clean(raw);
+    log('koppeling', 'Koppelingen opgeslagen');
+  },
+  'POST /api/devices/remove': (b) => { state.devices = state.devices.filter((x) => x.id !== b.id); },
+  'POST /api/camera/event': async (b, id) => {
+    const f = state.integ.faces;
+    if (!f.enabled) throw bad('Herkenning staat uit');
+    const kind = ['person', 'face', 'motion'].includes(b.kind) ? b.kind : 'person';
+    const name = str(b.name, 60), conf = Number(b.confidence);
+    const cam = str(b.camera, 60);
+    const entry = { at: Date.now(), camera: cam, kind, name: name || '', confidence: Number.isFinite(conf) ? Math.round(conf * 100) / 100 : null };
+    state.sightings.unshift(entry);
+    const cutoff = Date.now() - f.retentionDays * 864e5;
+    state.sightings = state.sightings.filter((x) => x.at >= cutoff).slice(0, 500);
+    const person = name && f.people.find((p) => p.name.toLowerCase() === name.toLowerCase());
+    if (person && person.consent && (entry.confidence === null || entry.confidence >= f.minConfidence)) {
+      await runAction({ ...person.action, unlock: false }, `${name} bij ${cam || 'camera'}`, id.name); // a face never opens the door: a photo could fool it
+      await fireAutomations('camera', name, kind, id.name);
+    } else if (kind !== 'motion') await fireAutomations('camera', name ? 'onbekend' : '', kind, id.name);
+    return { ok: true };
+  },
+  'GET /api/camera/snapshot': async (b, id, url) => {
+    const cam = state.integ.cameras.find((c) => c.id === url.searchParams.get('id'));
+    if (!cam || !cam.snapshotUrl) throw bad('Camera niet gevonden');
+    const res = await fetch(cam.snapshotUrl, { signal: AbortSignal.timeout(6000) }).catch(() => null);
+    if (!res || !res.ok) throw bad('De camera geeft geen beeld');
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 3e6) throw bad('Het beeld is te groot');
+    return { type: res.headers.get('content-type') || 'image/jpeg', data: buf.toString('base64') };
+  },
+
   'POST /api/weather/lookup': async (b) => {
     const q = str(b.city, 80);
     if (!q) throw bad('Vul een plaats in');
@@ -1288,11 +1384,11 @@ const adminRoutes = {
     return { ok: true };
   },
   'POST /api/test-notify': async () => ({ results: await notifyExternal(null, `Testmelding van ${state.settings.name}`) }),
-  'GET /api/export': () => { const { users, apiKeys, sessions, rootLock, ...rest } = state; return rest; }, // accounts and keys never leave the server
+  'GET /api/export': () => { const { users, apiKeys, sessions, rootLock, ...rest } = state; return { ...rest, integ: { ...rest.integ, lock: { ...rest.integ.lock, headerValue: '' } } }; }, // accounts and keys never leave the server
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
-    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), power: power.clean(b.power), users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
+    state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), power: power.clean(b.power), integ: state.integ, devices: state.devices, sightings: state.sightings, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
   },
 };
@@ -1381,6 +1477,9 @@ const NEED = {
   'POST /api/requests/delete': 'inbox', 'POST /api/moderation/block': 'inbox', 'POST /api/moderation/unblock': 'inbox', 'POST /api/moderation/profile': 'inbox',
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
+  'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/unlock': 'unlock',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings',
+  'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
   'POST /api/users/save': 'users', 'POST /api/users/remove': 'users', 'POST /api/sessions/revoke': 'users',

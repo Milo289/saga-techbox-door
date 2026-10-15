@@ -30,6 +30,7 @@
       "public/**",
       "server.js",
       "power.js",
+      "integrations.js",
       "discover.js",
       "seal.js",
       "access.js",

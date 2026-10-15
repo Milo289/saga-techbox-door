@@ -18,7 +18,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap debian-archive-keyring
+      - run: sudo apt-get update && sudo apt-get install -y debootstrap debian-archive-keyring squashfs-tools xorriso mtools dosfstools cpio
+      - name: A recent live-build (the Ubuntu one is too old for Debian images)
+        run: |
+          curl -fsSLo /tmp/lb.deb http://deb.debian.org/debian/pool/main/l/live-build/live-build_20230502_all.deb
+          sudo dpkg -i --force-depends /tmp/lb.deb
+          lb --version
       - run: sudo ARCH=${{ matrix.arch }} ./linux-iso/build.sh
       - uses: actions/upload-artifact@v4
         with:
