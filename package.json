@@ -33,6 +33,7 @@
       "integrations.js",
       "security.js",
       "pki.js",
+      "schedule.js",
       "discover.js",
       "seal.js",
       "access.js",

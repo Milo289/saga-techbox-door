@@ -126,7 +126,7 @@
   /* floating, so the page never shifts when it disappears (a shift mid-click would make you miss) */
   #banner { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 45; background: var(--fg); color: var(--on); padding: 10px 18px; border-radius: 999px; cursor: pointer; font-weight: 650; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.6); white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
   #toast { position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--fg); color: var(--on); padding: 10px 18px; border-radius: 999px; opacity: 0; transition: .25s; pointer-events: none; z-index: 60; font-weight: 650; max-width: calc(100vw - 32px); }
-  #toast.show { opacity: 1; transform: translateX(-50%); }
+  #toast.show { opacity: 1; transform: translateX(-50%); } #toast.act { pointer-events: auto; }
   #alert { position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
   #alert.open { display: flex; }
   #alert .card { max-width: 520px; width: 100%; }
@@ -414,9 +414,18 @@
   }
   function nextAt(hhmm) { const [hh, mm] = hhmm.split(':').map(Number); const t = new Date(); t.setHours(hh, mm, 0, 0); if (t <= new Date()) t.setDate(t.getDate() + 1); return t.getTime(); }
 
-  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2400); }
+  function toast(msg, action) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show'); t.classList.toggle('act', !!action);
+    if (action) { const b = h('button', { class: 'sm', style: 'margin-left:12px', onclick: () => { t.classList.remove('show'); action.fn(); } }, action.label); t.append(b); }
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), action ? 6000 : 2400);
+  }
+  // after a status change: a few seconds to take it back
+  function undoStatus(prev) {
+    toast('Status veranderd', { label: 'Ongedaan maken', fn: async () => { try { if (prev.source === 'manual') await api('/api/status', { mode: prev.mode, until: prev.until || undefined }); else await api('/api/status/auto', {}); toast('Teruggezet'); } catch {} } });
+  }
 
   async function api(path, body) {
+    const prevView = (path === '/api/status' || path === '/api/status/auto') && S ? { mode: S.view.mode, until: S.view.until, source: S.view.source } : null;
     let res;
     try {
       res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: body ? JSON.stringify(body) : undefined });
@@ -425,6 +434,7 @@
     if (res.status === 423) { showLock(); throw new Error('locked'); }
     const out = await res.json().catch(() => ({}));
     if (!res.ok) { toast(out.error || 'Er ging iets mis'); throw new Error(out.error); }
+    if (prevView) setTimeout(() => undoStatus(prevView), 50); // shown after the normal message
     return out;
   }
 
@@ -938,18 +948,35 @@
     paintDirty();
   }
   // one bar for all unsaved changes on a settings page: it presses the save button of every card that was changed
-  const dirtyCards = new Set();
+  const dirtyCards = new Set(); // cards with their own save button, or the word 'global' for the big save button at the bottom of the page
   const saveButtonOf = (card) => card.querySelector(':scope > h2 button.white');
+  const globalSave = () => $('view').querySelector(':scope > .save button.white');
   function paintDirty() {
-    const bar = $('saveBar'), n = [...dirtyCards].filter((c) => c.isConnected).length;
+    const bar = $('saveBar'), n = [...dirtyCards].filter((c) => c === 'global' || c.isConnected).length;
     bar.classList.toggle('hidden', n === 0);
-    $('saveTxt').textContent = n === 1 ? 'Je hebt 1 kaart gewijzigd' : `Je hebt ${n} kaarten gewijzigd`;
+    $('saveTxt').textContent = n === 0 ? '' : 'Je hebt wijzigingen die nog niet zijn opgeslagen';
   }
-  $('view').addEventListener('input', (e) => { if (!['settings', 'design', 'system'].includes(tab)) return; const card = e.target.closest && e.target.closest('.card'); if (card && saveButtonOf(card)) { dirtyCards.add(card); paintDirty(); } }, true);
-  $('view').addEventListener('change', (e) => { if (!['settings', 'design', 'system'].includes(tab)) return; const card = e.target.closest && e.target.closest('.card'); if (card && saveButtonOf(card)) { dirtyCards.add(card); paintDirty(); } }, true);
-  $('view').addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button.white'); const card = b && b.closest('.card'); if (card && dirtyCards.has(card) && saveButtonOf(card) === b) setTimeout(() => { dirtyCards.delete(card); paintDirty(); }, 600); }, true);
+  const markDirty = (e) => {
+    if (!['settings', 'design', 'system'].includes(tab)) return;
+    const card = e.target.closest && e.target.closest('.card');
+    if (e.target.closest && e.target.closest('#tools')) return;
+    if (card && saveButtonOf(card)) dirtyCards.add(card); else if (globalSave() && card) dirtyCards.add('global'); else return;
+    paintDirty();
+  };
+  $('view').addEventListener('input', markDirty, true);
+  $('view').addEventListener('change', markDirty, true);
+  $('view').addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('button.white'); if (!b) return;
+    const card = b.closest('.card');
+    if (card && dirtyCards.has(card) && saveButtonOf(card) === b) setTimeout(() => { dirtyCards.delete(card); paintDirty(); }, 600);
+    if (b === globalSave()) setTimeout(() => { dirtyCards.delete('global'); paintDirty(); }, 600);
+  }, true);
   $('saveAll').onclick = async () => {
-    for (const card of [...dirtyCards]) { const b = card.isConnected && saveButtonOf(card); if (b) { b.click(); await new Promise((r) => setTimeout(r, 450)); } dirtyCards.delete(card); }
+    for (const u of [...dirtyCards]) {
+      const b = u === 'global' ? globalSave() : u.isConnected && saveButtonOf(u);
+      if (b) { b.click(); await new Promise((r) => setTimeout(r, 500)); }
+      dirtyCards.delete(u);
+    }
     paintDirty();
   };
   $('saveUndo').onclick = () => { dirtyCards.clear(); renderAll(true); };
@@ -1288,7 +1315,7 @@
   if (window.doorApp) window.doorApp.onTrayStatus(async (mode) => {
     if (!S) return;
     if (!can('status')) return toast('Je hebt geen recht om de status te wijzigen');
-    try { await api('/api/status', { mode }); toast(`${S.settings.texts[mode].label} staat op de deur`); } catch {}
+    try { await api('/api/status', { mode }); } catch {}
   });
 
   // ---------- "Deze app" (desktop app) or a hint about it (browser) ----------
@@ -1325,6 +1352,54 @@
       if (i.dataDir) card.querySelector('.row').append(h('button', { class: 'ghost', onclick: () => window.doorApp.revealData() }, 'Open de gegevensmap'));
     }).catch(() => {});
     return card;
+  }
+
+  // ---------- settings: extra buttons, exceptions to the opening hours, who is told what, smart replies, calendar and weekly mail ----------
+  const DAYS_LONG = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+  const TYPES_NL = [['any', 'Alles'], ['bell', 'Aanbellen'], ['reason', 'Een reden'], ['message', 'Een vraagje'], ['appointment', 'Een afspraak'], ['callback', 'Terugbellen']];
+  const newId = () => Math.random().toString(36).slice(2, 10);
+  // a list the admin can add to, change and remove from; draws itself again after each change
+  function listEditor(arr, row, blank, addLabel) {
+    const box = h('div', { class: 'list' });
+    const draw = () => { box.replaceChildren(...arr.map((it, i) => h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px;margin:6px 0;align-items:center' }, ...row(it, i, draw), h('button', { class: 'sm ghost danger', type: 'button', onclick: () => { arr.splice(i, 1); draw(); markDirty({ target: box }); } }, 'Weg'))), h('button', { class: 'sm', type: 'button', onclick: () => { arr.push(blank()); draw(); markDirty({ target: box }); } }, addLabel)); };
+    draw();
+    return box;
+  }
+  const tin = (o, k, props = {}) => h('input', { value: o[k] ?? '', ...props, oninput: (e) => { o[k] = e.target.value; } });
+  const tsel = (o, k, list, extra = {}) => h('select', { ...extra, onchange: (e) => { o[k] = e.target.value; } }, ...list.map(([v, l]) => h('option', { value: v, selected: String(o[k]) === String(v) }, l)));
+  const tchk = (o, k, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!o[k], onchange: (e) => { o[k] = e.target.checked; } }), label);
+  const tim = (o, k, dflt) => h('input', { type: 'time', value: o[k] || dflt || '', oninput: (e) => { o[k] = e.target.value; } });
+  function smartCards(st) {
+    st.customButtons = st.customButtons || []; st.notifyRules = st.notifyRules || []; st.autoReplies = st.autoReplies || [];
+    st.hours.perDay = st.hours.perDay || {}; st.hours.breaks = st.hours.breaks || []; st.hours.holidays = st.hours.holidays || [];
+    const buttons = h('div', { class: 'card' }, h('h2', {}, 'Eigen knoppen'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Extra knoppen op het deurscherm, bijvoorbeeld “Pakketje bezorgd”. Eén tik is genoeg. Je kunt ook om een korte tekst vragen en een eigen antwoord laten zien.'),
+      listEditor(st.customButtons, (b) => [tin(b, 'label', { placeholder: 'Naam van de knop', maxlength: 40, style: 'width:190px' }), tchk(b, 'ask', 'Vraag om tekst'), tin(b, 'askLabel', { placeholder: 'Wat vraag je? (bijv. Wat lever je in?)', maxlength: 60, style: 'width:230px' }), tin(b, 'reply', { placeholder: 'Antwoord op de deur (optioneel)', maxlength: 140, style: 'flex:1;min-width:200px' })], () => ({ id: newId(), label: '', ask: false, askLabel: '', reply: '' }), 'Knop toevoegen'));
+    const hoursExtra = h('div', { class: 'card' }, h('h2', {}, 'Openingstijden: uitzonderingen'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Andere tijden op één dag, een pauze (de deur staat dan op Gesloten) en vrije dagen. Dit werkt samen met de openingstijden hierboven; zet die aan.'),
+      h('h3', { style: 'margin:10px 0 4px' }, 'Andere tijden per dag'),
+      ...[1, 2, 3, 4, 5, 6, 0].map((d) => { const pd = st.hours.perDay[d]; const mode = !pd ? 'normal' : pd.off ? 'off' : 'own'; const holder = h('span', { class: 'row' });
+        const draw = () => { const cur = st.hours.perDay[d]; holder.replaceChildren(...(cur && !cur.off ? [tim(cur, 'from'), h('span', { class: 'muted' }, 'tot'), tim(cur, 'to')] : [])); };
+        draw();
+        return h('div', { class: 'row', style: 'margin:4px 0;gap:8px;flex-wrap:wrap' }, h('b', { style: 'width:100px' }, DAYS_LONG[d]), h('select', { onchange: (e) => { const v = e.target.value; if (v === 'normal') delete st.hours.perDay[d]; else if (v === 'off') st.hours.perDay[d] = { off: true }; else st.hours.perDay[d] = { from: st.hours.from, to: st.hours.to }; draw(); } }, ...[['normal', 'Zoals boven'], ['own', 'Eigen tijden'], ['off', 'Gesloten']].map(([v, l]) => h('option', { value: v, selected: mode === v }, l))), holder); }),
+      h('h3', { style: 'margin:14px 0 4px' }, 'Pauzes (elke dag)'),
+      listEditor(st.hours.breaks, (b) => [tim(b, 'from', '12:00'), h('span', { class: 'muted' }, 'tot'), tim(b, 'to', '13:00'), tin(b, 'label', { placeholder: 'Naam (bijv. Lunch)', maxlength: 40 })], () => ({ from: '12:00', to: '13:00', label: '' }), 'Pauze toevoegen'),
+      h('h3', { style: 'margin:14px 0 4px' }, 'Vrije dagen en vakanties'),
+      listEditor(st.hours.holidays, (x) => [h('input', { type: 'date', value: x.date || '', oninput: (e) => { x.date = e.target.value; } }), tin(x, 'label', { placeholder: 'Naam (bijv. Studiedag)', maxlength: 60 })], () => ({ date: ymd(), label: '' }), 'Vrije dag toevoegen'));
+    const notify = h('div', { class: 'card' }, h('h2', {}, 'Meldingen per soort en persoon'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Bepaal wie of wat een melding geeft. De eerste regel die past, geldt. Zonder regels krijg je van alles een melding.'),
+      listEditor(st.notifyRules, (r) => [tsel(r, 'type', TYPES_NL), tin(r, 'person', { placeholder: 'Naam of nummer (leeg = iedereen)', maxlength: 60, style: 'width:200px' }), tchk(r, 'mute', 'Geen melding'), tchk(r, 'ntfy', 'Telefoon'), tchk(r, 'mail', 'Mail'), tchk(r, 'webhook', 'Webhook'), h('span', { class: 'muted' }, 'niet tussen'), tim(r, 'quietFrom'), h('span', { class: 'muted' }, 'en'), tim(r, 'quietTo')], () => ({ id: newId(), enabled: true, type: 'bell', person: '', mute: false, ntfy: true, mail: true, webhook: true, quietFrom: '', quietTo: '' }), 'Regel toevoegen'));
+    const replies = h('div', { class: 'card' }, h('h2', {}, 'Slimme antwoorden'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Een antwoord dat meteen op de deur verschijnt, afhankelijk van de status, het soort verzoek, de dag en de tijd. De eerste regel die past, geldt.'),
+      listEditor(st.autoReplies, (r) => [tsel(r, 'status', [['any', 'Elke status'], ['open', 'Open'], ['closed', 'Gesloten'], ['busy', 'Bezet']]), tsel(r, 'type', TYPES_NL), tim(r, 'from'), h('span', { class: 'muted' }, 'tot'), tim(r, 'to'), tin(r, 'text', { placeholder: 'Antwoord', maxlength: 140, style: 'flex:1;min-width:220px' })], () => ({ id: newId(), enabled: true, status: 'closed', type: 'any', from: '', to: '', days: [], text: '' }), 'Antwoord toevoegen'));
+    const calOut = h('div', {});
+    const drawCal = async () => { try { const c = await api('/api/calendar'); const url = c.path ? location.origin + c.path : ''; calOut.replaceChildren(url ? h('div', {}, h('div', { class: 'row', style: 'margin:6px 0' }, h('b', { style: 'user-select:all;word-break:break-all;font-size:13px' }, url), copyBtn(url)), h('p', { class: 'muted' }, 'Voeg dit adres toe als “abonnement” in je agenda (Apple Agenda: Archief → Nieuw agenda-abonnement; Google: Andere agenda’s → Via URL). Wie de link heeft, kan de afspraken zien: deel hem niet.'), h('div', { class: 'row' }, h('button', { class: 'sm', type: 'button', onclick: async () => { await api('/api/calendar/token', {}); drawCal(); } }, 'Nieuwe link (oude werkt dan niet meer)'), h('button', { class: 'sm danger', type: 'button', onclick: async () => { await api('/api/calendar/token', { off: true }); drawCal(); } }, 'Uitzetten'))) : h('button', { class: 'sm', type: 'button', onclick: async () => { await api('/api/calendar/token', {}); drawCal(); } }, 'Agendalink maken')); } catch { calOut.replaceChildren(h('span', { class: 'muted' }, 'Niet beschikbaar.')); } };
+    drawCal();
+    const cal = h('div', { class: 'card' }, h('h2', {}, 'Agenda en weekoverzicht'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Zie je afspraken en vrije dagen in je eigen agenda-app, en krijg elke week een overzicht per e-mail (e-mail moet staan ingesteld).'),
+      calOut,
+      h('div', { class: 'form', style: 'margin-top:14px' }, h('label', {}, 'Weekoverzicht'), tchk(st.mail, 'weekly', 'Elke week mailen op'), h('label', {}, 'Dag'), tsel(st.mail, 'weeklyDay', [5, 1, 2, 3, 4, 6, 0].map((d) => [d, DAYS_LONG[d]])), h('span', {}), h('button', { class: 'sm', type: 'button', onclick: async () => { try { await api('/api/mail/weekly-test', {}); toast('Weekoverzicht verstuurd'); } catch {} } }, 'Stuur nu een voorbeeld')));
+    return [buttons, hoursExtra, notify, replies, cal];
   }
 
   // people with only the mail right may only send the mail fields
@@ -1398,6 +1473,7 @@
 
   // ---------- Beveiliging: score, my account (two-step, passkeys, devices), https, attacks, log, system ----------
   const fill = (el, ...kids) => el.replaceChildren(...kids.flat(9).filter((k) => k != null && k !== false));
+  const copyBtn = (text, label = 'Kopieer') => h('button', { class: 'sm ghost', type: 'button', onclick: async (e) => { try { await navigator.clipboard.writeText(text); } catch { const t = h('textarea', {}); t.value = text; document.body.append(t); t.select(); try { document.execCommand('copy'); } catch {} t.remove(); } e.target.textContent = 'Gekopieerd ✓'; setTimeout(() => { e.target.textContent = label; }, 1500); } }, label);
   const secBox = (title, ...kids) => h('div', { class: 'card' }, h('h2', {}, title), ...kids.flat());
   const saveBlob = (name, text, type = 'text/plain') => { const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name }); a.click(); };
   const getFile = async (path, fallbackName) => {
@@ -1423,7 +1499,7 @@
     const box = secBox('Tweestapsverificatie');
     const out = h('div', {});
     box.append(out);
-    const showCodes = (codes) => fill(out, h('p', {}, 'Bewaar deze herstelcodes ergens veilig. Elke code werkt één keer, voor als je je telefoon kwijt bent. Je ziet ze niet nog een keer.'), h('pre', { style: 'user-select:all;font-size:15px;line-height:1.7' }, codes.join('\n')),
+    const showCodes = (codes) => fill(out, h('p', {}, 'Bewaar deze herstelcodes ergens veilig. Elke code werkt één keer, voor als je je telefoon kwijt bent. Je ziet ze niet nog een keer.'), h('pre', { style: 'user-select:all;font-size:15px;line-height:1.7' }, codes.join('\n')), copyBtn(codes.join('\n'), 'Kopieer alle codes'),
       h('div', { class: 'row' }, h('button', { class: 'white sm', onclick: () => saveBlob('herstelcodes.txt', codes.join('\n') + '\n') }, 'Opslaan als bestand'), h('button', { class: 'sm', onclick: draw }, 'Klaar')));
     async function draw() {
       const st = await api('/api/2fa/status');
@@ -1434,7 +1510,7 @@
             const svg = h('div', { style: 'width:190px;background:#fff;padding:8px;border-radius:10px' });
             if (window.QR) svg.innerHTML = QR.svg(s.uri, { border: 1 });
             const code = h('input', { placeholder: 'Code van 6 cijfers', inputmode: 'numeric', autocomplete: 'one-time-code', style: 'width:180px' });
-            fill(out, h('p', {}, '1. Scan deze code met je verificatie-app. Lukt dat niet? Typ deze sleutel over: ', h('b', { style: 'user-select:all' }, s.secret)), svg, h('p', {}, '2. Typ de code die de app nu laat zien.'),
+            fill(out, h('p', {}, '1. Scan deze code met je verificatie-app. Lukt dat niet? Typ deze sleutel over: ', h('b', { style: 'user-select:all' }, s.secret), ' ', copyBtn(s.secret)), svg, h('p', {}, '2. Typ de code die de app nu laat zien.'),
               h('div', { class: 'row' }, code, h('button', { class: 'white', onclick: async () => { const r = await api('/api/2fa/enable', { code: code.value }); showCodes(r.recovery); S.me.twoStep = true; S.me.mustSetup2fa = false; } }, 'Aanzetten')));
           } }, 'Instellen'));
       } else {
@@ -1488,7 +1564,7 @@
       fill(out, 
         h('p', { class: 'muted' }, 'De server maakt zijn eigen certificaat; je hoeft niets te kopen en geen domein te hebben. Je installeert het certificaat één keer op elk apparaat. Daarna is de verbinding versleuteld en geeft de browser geen waarschuwing meer.'),
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: st.enabled, onchange: async (e) => { await api('/api/https/settings', { enabled: e.target.checked }); setTimeout(draw, 700); } }), 'Https aanzetten (poort ' + st.port + ')'),
-        st.running ? h('div', {}, h('p', {}, 'Bereikbaar op: ', ...st.urls.flatMap((u) => [h('b', { style: 'user-select:all' }, u), ' '])),
+        st.running ? h('div', {}, h('div', {}, h('p', {}, 'Bereikbaar op:'), ...st.urls.map((u) => h('div', { class: 'row', style: 'margin:4px 0' }, h('b', { style: 'user-select:all' }, u), copyBtn(u)))),
           h('div', { class: 'row' }, h('button', { class: 'sm', onclick: () => { location.href = '/ca.crt'; } }, 'Certificaat (Mac, Windows, Linux, Android)'), h('button', { class: 'sm', onclick: () => { location.href = '/ca.mobileconfig'; } }, 'Profiel voor iPhone en iPad'), h('button', { class: 'sm', onclick: async () => { await api('/api/https/renew', {}); toast('Vernieuwd'); draw(); } }, 'Vernieuw servercertificaat')),
           h('p', { class: 'muted', style: 'font-size:13px' }, 'iPhone/iPad: installeer het profiel in Instellingen, en zet daarna het vertrouwen aan bij Instellingen → Algemeen → Info → Certificaatvertrouwen. Mac: open het bestand en zet het op “Altijd vertrouwen”. Vingerafdruk van het certificaat: ' + st.fingerprint)) : (st.enabled ? h('p', { class: 'muted' }, 'Bezig met starten…') : null));
     }
@@ -1575,7 +1651,7 @@
       const roundUp = (t) => Math.ceil(t / 60000) * 60000;
 
       // tap a status: it's on the door right away (without an end time)
-      const setMode = async (mode) => { await api('/api/status', { mode }); toast(`${S.settings.texts[mode].label} staat op de deur`); };
+      const setMode = async (mode) => { await api('/api/status', { mode }); };
       // tap a duration or set a time: applies right away to the status that's on the door now
       const setUntil = async (until) => {
         await api('/api/status', { mode: v.mode, until });
@@ -1900,6 +1976,7 @@
             h('label', {}, 'Tijden'), h('div', { class: 'row' }, timePicker(st.hours.from, (x) => { st.hours.from = x; }, 15), h('span', { class: 'muted' }, 'tot'), timePicker(st.hours.to, (x) => { st.hours.to = x; }, 15)),
             h('span', {}), h('span', { class: 'muted' }, `De status met de hand wijzigen kan altijd; dat geldt tot de volgende openings- of sluitingstijd. Tijdzone van de server: ${S.timeZone}.`))),
 
+        ...(can('settings') ? smartCards(st) : []),
         h('div', { class: 'card' }, h('h2', {}, 'Bezoekers'),
           h('div', { class: 'form' },
             h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje'), chk(st.visitors, 'callback', 'Terugbellen')),

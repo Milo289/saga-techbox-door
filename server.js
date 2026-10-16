@@ -12,6 +12,7 @@ const os = require('os');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const integ = require('./integrations.js'); // microcontrollers, door lock + NFC tags, camera events, automations (all opt-in)
+const schedule = require('./schedule.js'); // hours per day, extra buttons, who is told what, auto replies, calendar
 const pki = require('./pki.js'); // an own certificate authority, so https needs no domain
 const security = require('./security.js'); // encrypted secrets, two-step codes, tamper-evident log, protected backups
 const power = require('./power.js'); // switching the screen / computer off and on by a schedule (opt-in)
@@ -36,7 +37,8 @@ const DEFAULT_SETTINGS = {
     closed: { label: 'Gesloten', message: 'Graag niet binnenkomen' },
     busy: { label: 'Bezet', message: 'Er wordt gewerkt — even niet storen' },
   },
-  hours: { enabled: false, days: [1, 2, 3, 4, 5], from: '09:00', to: '17:00' },
+  hours: { enabled: false, days: [1, 2, 3, 4, 5], from: '09:00', to: '17:00', perDay: {}, breaks: [], holidays: [] },
+  customButtons: [], notifyRules: [], autoReplies: [],
   visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false },
   moderation: { filter: true, defaultList: true, words: '', action: 'mask', maxPerHour: 20, profileApproval: false }, // action: flag | mask | block
   themeSchedule: { enabled: false, lightFrom: '07:00', darkFrom: '19:00' }, // the door screen is light by day and dark by night
@@ -75,7 +77,7 @@ const DEFAULT_SETTINGS = {
   ntfyTopic: '',
   webhookUrl: '',
   // e-mail (optional): confirmation + answer to visitors who leave an address, and/or a mail to you per request
-  mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false, digest: false, digestAt: '18:00' },
+  mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false, digest: false, digestAt: '18:00', weekly: false, weeklyDay: 5 },
 };
 // System settings: only the main account can change these (see the Systeem tab).
 const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, attack: { burst: 240, perSec: 30, strikes: 80, banMinutes: 10, maxSse: 30 }, require2fa: 'off', backupPassword: '', backupCopyDir: '', https: false, httpsPort: 8443, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
@@ -184,7 +186,7 @@ function applyFormValues(values) {
   return n;
 }
 
-const PRIVATE_SETTINGS = ['ntfyServer', 'ntfyTopic', 'webhookUrl', 'quickReplies', 'autoReplyText', 'closedReply', 'autoReplyMinutes', 'mail'];
+const PRIVATE_SETTINGS = ['notifyRules', 'autoReplies', 'ntfyServer', 'ntfyTopic', 'webhookUrl', 'quickReplies', 'autoReplyText', 'closedReply', 'autoReplyMinutes', 'mail'];
 const PASS_MASK = '••••••••'; // the mail password is never sent back to the browser
 
 const freshState = () => ({
@@ -203,7 +205,7 @@ const freshState = () => ({
   blocks: [], // extra texts / logos on the door screen (see cleanBlocks)
   blocked: [], // blocked visitors { id, kind: 'ip'|'nr', value, until (0 = for ever), reason, at, by }
   customBell: null, // an own bell sound { mime, b64, at }
-  lastDigestDay: '',
+  lastDigestDay: '', lastWeeklyDay: '', icsToken: '',
   power: power.defaults(), // energy management (see power.js)
   rootTotp: null, rootPasskeys: [], rootDevices: [], historyHead: '', // two-step codes of the main account, devices it logged in on, the fingerprint of the newest log line
   alerts: [], // warnings: { id, kind, text, at, count, resolvedAt }
@@ -428,7 +430,7 @@ function load() {
 let state = load();
 // values that are never written to disk in plain text
 function secretSlots() {
-  const s = state.settings, slots = [[s.mail, 'pass'], [s, 'ntfyTopic'], [s, 'webhookUrl'], [state.system, 'backupPassword']];
+  const s = state.settings, slots = [[state, 'icsToken'], [s.mail, 'pass'], [s, 'ntfyTopic'], [s, 'webhookUrl'], [state.system, 'backupPassword']];
   if (state.integ && state.integ.lock) slots.push([state.integ.lock, 'headerValue']);
   for (const u of state.users) if (u.totp) slots.push([u.totp, 'secret']);
   if (state.rootTotp) slots.push([state.rootTotp, 'secret']);
@@ -520,19 +522,7 @@ process.on('uncaughtException', (e) => onCrash('uncaughtException', e));
 process.on('unhandledRejection', (e) => onCrash('unhandledRejection', e));
 
 // ---------- what should the door show? ----------
-function hoursState(now) {
-  const h = state.settings.hours;
-  if (!h.enabled || !h.days.length || h.from >= h.to) return null;
-  const d = new Date(now);
-  for (let i = 0; i < 8; i++) {
-    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i);
-    if (!h.days.includes(day.getDay())) continue;
-    const o = atTime(day, h.from).getTime(), c = atTime(day, h.to).getTime();
-    if (now < o) return { open: false, changeAt: o };
-    if (now < c) return { open: true, changeAt: c };
-  }
-  return { open: false, changeAt: null };
-}
+function hoursState(now) { return schedule.hoursState(state.settings.hours, now); }
 
 function manualActiveAt(t) {
   const m = state.manual;
@@ -959,17 +949,17 @@ function describe(r) {
   if (r.flagged && r.flagged.length) parts.push(`⚠ Gemarkeerd: ${r.flagged.join(', ')}`);
   return parts.join('\n');
 }
-async function notifyExternal(r, textOverride) {
+async function notifyExternal(r, textOverride, plan = { ntfy: true, webhook: true }) {
   const s = state.settings;
   const text = textOverride || describe(r);
   const jobs = [];
-  if (s.ntfyTopic) {
+  if (s.ntfyTopic && plan.ntfy) {
     jobs.push(fetch(`${(s.ntfyServer || 'https://ntfy.sh').replace(/\/$/, '')}/${encodeURIComponent(s.ntfyTopic)}`, {
       method: 'POST', body: text, headers: { Title: `${s.name}: ${r ? TYPE_LABEL[r.type] : 'Deur'}`, Priority: r?.type === 'bell' ? '5' : '4', Tags: 'door' },
       signal: AbortSignal.timeout(8000),
     }));
   }
-  if (s.webhookUrl && outboundOk(s.webhookUrl)) {
+  if (s.webhookUrl && plan.webhook && outboundOk(s.webhookUrl)) {
     jobs.push(fetch(s.webhookUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, content: text, request: r || null }), signal: AbortSignal.timeout(8000),
@@ -1172,6 +1162,18 @@ async function sendDigest() {
   await sendMail(m.adminTo, d.subject, d.text);
 }
 
+function weeklyText(now = Date.now()) {
+  const from = now - 7 * 864e5, week = state.requests.filter((r) => r.createdAt >= from);
+  const n = (t) => week.filter((r) => r.type === t).length;
+  const byDay = [0, 0, 0, 0, 0, 0, 0]; for (const r of week) byDay[new Date(r.createdAt).getDay()]++;
+  const names = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'], busiest = byDay.indexOf(Math.max(...byDay));
+  const unanswered = week.filter((r) => !r.reply && r.state !== 'done').length;
+  const upcoming = state.appointments.filter((a) => a.at > now && a.at < now + 7 * 864e5).sort((a, b) => a.at - b.at);
+  const lines = [`De afgelopen week bij ${state.settings.name}:`, '', `• ${week.length} ${week.length === 1 ? 'bezoek' : 'bezoeken'} in totaal`, `• ${n('bell')} keer aangebeld, ${n('message')} vraagjes, ${n('appointment')} afspraakverzoeken, ${n('callback')} terugbelverzoeken, ${n('reason')} andere verzoeken`, `• ${unanswered} bleven zonder antwoord of zijn niet afgehandeld`];
+  if (week.length) lines.push(`• Drukste dag: ${names[busiest]} (${byDay[busiest]})`);
+  if (upcoming.length) lines.push('', 'Afspraken komende week:', ...upcoming.map((a) => `  - ${new Date(a.at).toLocaleString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false })} — ${a.name}`));
+  return { subject: `Weekoverzicht — ${state.settings.name}`, text: lines.join('\n') + sign() };
+}
 function tick() {
   try { tickInner(); resolveAlert('tick', true); } catch (e) { raise('tick', `De klok van de server liep vast: ${e.message}`, { cooldownMin: 15 }); }
 }
@@ -1209,6 +1211,13 @@ function tickInner() {
       sendDigest().catch((e) => { log('mail', `Samenvatting mislukt: ${e.message}`, 'systeem'); });
     }
   }
+  if (dg.weekly && mailOn() && isEmail(dg.adminTo)) {
+    const d = new Date(), day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    if (d.getDay() === dg.weeklyDay && state.lastWeeklyDay !== day && `${pad(d.getHours())}:${pad(d.getMinutes())}` >= dg.digestAt) {
+      state.lastWeeklyDay = day; dirty = true;
+      const w = weeklyText(); sendMail(dg.adminTo, w.subject, w.text).catch((e) => { log('mail', `Weekoverzicht mislukt: ${e.message}`, 'systeem'); });
+    }
+  }
   if (state.system.autoBackup) {
     const d = new Date(), day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     if (state.lastBackupDay !== day && d.getHours() >= 3) {
@@ -1222,10 +1231,10 @@ function tickInner() {
   if (state.busy.length + state.appointments.length !== before) dirty = true;
 
   const mins = state.settings.autoReplyMinutes;
-  if (mins > 0 && state.settings.autoReplyText) {
+  if (mins > 0 && (state.settings.autoReplyText || (state.settings.autoReplies || []).length)) {
     for (const r of state.requests) {
       if (!r.reply && r.state !== 'done' && now - r.createdAt > mins * 60e3 && now - r.createdAt < 3600e3) {
-        r.reply = state.settings.autoReplyText; r.repliedAt = now; r.autoReplied = true; dirty = true;
+        r.reply = state.settings.autoReplyText || ''; r.repliedAt = now; r.autoReplied = true; dirty = true;
       }
     }
   }
@@ -1613,6 +1622,9 @@ const adminRoutes = {
     if (!/^#[0-9a-f]{6}$/i.test(String(merged.accent))) merged.accent = '';
     if (merged.palette !== 'custom' && !PALETTES.some((x) => x.id === merged.palette)) merged.palette = 'standard';
     merged.form = sanitizeForm(merged.form);
+    merged.hours = { ...merged.hours, ...schedule.cleanHoursExtra('hours' in b ? b.hours : merged.hours) };
+    for (const [k, fn] of [['customButtons', schedule.cleanCustomButtons], ['notifyRules', schedule.cleanNotifyRules], ['autoReplies', schedule.cleanAutoReplies]]) merged[k] = fn(k in b ? b[k] : state.settings[k]);
+    merged.mail.weekly = !!merged.mail.weekly; merged.mail.weeklyDay = Math.max(0, Math.min(6, Math.round(Number(merged.mail.weeklyDay)) || 0));
     const mo = merged.moderation;
     if (!['flag', 'mask', 'block'].includes(mo.action)) mo.action = 'mask';
     mo.maxPerHour = Math.max(1, Math.min(500, Math.round(Number(mo.maxPerHour)) || 20));
@@ -1864,6 +1876,13 @@ const adminRoutes = {
     }
     throw bad('Dit los je op in de instellingen zelf.');
   },
+  'GET /api/calendar': (b, id) => ({ enabled: !!state.icsToken, path: state.icsToken ? `/calendar.ics?token=${state.icsToken}` : '' }),
+  'POST /api/calendar/token': (b, id) => {
+    state.icsToken = b.off ? '' : crypto.randomBytes(24).toString('base64url');
+    securityEvent(`${id.name} ${b.off ? 'zette de agendalink uit' : 'maakte een nieuwe agendalink'}`);
+    return { enabled: !!state.icsToken, path: state.icsToken ? `/calendar.ics?token=${state.icsToken}` : '' };
+  },
+  'POST /api/mail/weekly-test': async () => { const m = state.settings.mail; if (!mailOn() || !isEmail(m.adminTo)) throw bad('Stel eerst e-mail in en vul een adres in voor meldingen.'); const w = weeklyText(); await sendMail(m.adminTo, w.subject, w.text); return { ok: true }; },
   'GET /api/https': () => httpsStatus(),
   'POST /api/https/settings': (b, id) => {
     const wasOn = !!httpsServer, oldPort = state.system.httpsPort;
@@ -2075,7 +2094,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/https': 'settings', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/https': 'settings', 'GET /api/calendar': 'settings', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -2144,7 +2163,10 @@ function handleVisit(req, b) {
   const v = state.settings.visitors;
   const view = computeView(now);
   const allowed = { bell: v.doorbell, reason: v.reasons, appointment: v.appointments, message: v.messages, callback: v.callback };
-  if (!allowed[b.type]) throw bad('Die optie staat uit');
+  const custom = b.button ? (state.settings.customButtons || []).find((x) => x.id === b.button) : null;
+  if (b.button && !custom) throw bad('Die knop bestaat niet meer');
+  if (custom) { b.type = 'reason'; b.reason = custom.label; if (custom.ask && !str(b.message)) throw bad(`Typ eerst ${custom.askLabel ? custom.askLabel.toLowerCase() : 'een bericht'}`); if (!custom.ask) b.message = ''; }
+  else if (!allowed[b.type]) throw bad('Die optie staat uit');
   if (b.type === 'bell' && view.mode !== 'open' && !v.bellWhenBlocked) throw bad('De bel staat nu uit — kies een reden');
   if (b.type === 'bell' && now - lastBellAt < bellCooldown()) {
     const wait = Math.ceil((lastBellAt + bellCooldown() - now) / 1000);
@@ -2185,16 +2207,19 @@ function handleVisit(req, b) {
     }
     if (flags.length) r.flagged = [...new Set(flags)].slice(0, 10);
   }
-  if (view.mode === 'closed' && state.settings.closedReply) Object.assign(r, { reply: state.settings.closedReply, repliedAt: now, autoReplied: true });
+  const smart = (custom && custom.reply) || schedule.pickAutoReply(state.settings.autoReplies, { mode: view.mode, type: r.type });
+  if (smart) Object.assign(r, { reply: smart, repliedAt: now, autoReplied: true });
+  else if (view.mode === 'closed' && state.settings.closedReply) Object.assign(r, { reply: state.settings.closedReply, repliedAt: now, autoReplied: true });
   lastVisit.set(ip, now);
   visitLog.set(ip, [...(visitLog.get(ip) || []).filter((t) => now - t < 3600e3), now]);
   if (r.type === 'bell') lastBellAt = now;
   state.requests.unshift(r);
   state.requests.length = Math.min(state.requests.length, 300);
   log('visit', describe(r).replace(/\n/g, ' · '));
-  notifyExternal(r).catch(() => {});
+  const plan = schedule.notifyPlan(state.settings.notifyRules, r);
+  if (plan.ntfy || plan.webhook) notifyExternal(r, undefined, plan).catch(() => {});
   mailVisitor(r, 'confirm');
-  mailAdmin(r);
+  if (plan.mail) mailAdmin(r);
   for (const c of clients) if (c.role === 'admin' && can(identifyFrom(c.tok, c.pin), 'inbox')) write(c, 'visit', r);
   // the doorbell rings on every screen at once: door screens, phones and the control panel
   if (r.type === 'bell') for (const c of clients) write(c, 'ring', { id: r.id, at: now });
@@ -2221,6 +2246,12 @@ const handle = async (req, res) => {
     if (p === '/healthz') return send(res, 200, { ok: true });
     if (p === '/api/where') return send(res, 200, where(isLoopback(req.socket.remoteAddress && normIp(req.socket.remoteAddress)) && !req.headers['x-forwarded-for'] && !req.headers['x-real-ip'] && !req.headers['cf-connecting-ip'])); // for the start screen and for apps that look for the server
     if (p === '/start') return serveFile(res, 'start.html', req);
+    if (p === '/calendar.ics') {
+      const tok = url.searchParams.get('token') || '';
+      if (!state.icsToken || tok.length !== state.icsToken.length || !crypto.timingSafeEqual(Buffer.from(tok), Buffer.from(state.icsToken))) { authFail(clientIp(req)); return send(res, 404, { error: 'Niet gevonden' }); }
+      res.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(schedule.ics({ name: state.settings.name, appointments: state.appointments, holidays: (state.settings.hours.holidays || []).filter((x) => x.date >= new Date(Date.now() - 864e5).toISOString().slice(0, 10)) }));
+    }
     if ((p === '/ca.crt' || p === '/ca.mobileconfig') && httpsInfo) {
       const iphone = p === '/ca.mobileconfig';
       res.writeHead(200, { 'Content-Type': iphone ? 'application/x-apple-aspen-config' : 'application/x-x509-ca-cert', 'Content-Disposition': `attachment; filename="${iphone ? 'saga-techbox.mobileconfig' : 'saga-techbox-ca.crt'}"` });

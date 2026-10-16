@@ -497,7 +497,7 @@
   // only rebuilt when something relevant changes, so taps are never lost mid-update
   function renderVisitors() {
     const st = S.settings, v = st.visitors;
-    const sig = JSON.stringify([v, st.reasons, bellAllowed(), st.ui]);
+    const sig = JSON.stringify([v, st.reasons, bellAllowed(), st.ui, st.customButtons]);
     if (sig === visitorSig) return;
     visitorSig = sig;
     const reasons = v.reasons ? st.reasons : [];
@@ -513,6 +513,7 @@
     if (v.appointments) acts.push(h('button', { class: 'tile', onclick: () => openAppointment() }, icon('cal'), tx('book')));
     if (v.messages) acts.push(h('button', { class: 'tile', onclick: openQuestion }, icon('msg'), tx('question')));
     if (v.callback) acts.push(h('button', { class: 'tile', onclick: openCallback }, icon('phone'), tx('callback')));
+    for (const cb of st.customButtons || []) acts.push(h('button', { class: 'tile', onclick: () => openCustom(cb) }, cb.label));
     $('actions').style.gridTemplateColumns = `repeat(${Math.max(1, acts.length)}, 1fr)`;
     $('actions').replaceChildren(...acts);
     $('ask').classList.toggle('hidden', !acts.length && !reasons.length);
@@ -573,7 +574,7 @@
     let shift = true;
     const kb = h('div', { class: 'kb' });
     const press = (fn) => (e) => { e.preventDefault(); bumpIdle(); if (!activeInput) return; fn(activeInput); activeInput.dispatchEvent(new Event('input')); };
-    const draw = () => kb.replaceChildren(
+    const draw = () => kb.replaceChildren(...[
       ...['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'].map((row) => h('div', { class: 'kr' }, ...[...row].map((ch) => {
         const c = shift ? ch.toUpperCase() : ch;
         return h('button', { onpointerdown: press((el) => { if (el.value.length < (el.maxLength > 0 ? el.maxLength : 500)) el.value += c; if (shift && /[a-z]/i.test(c)) { shift = false; draw(); } }) }, c);
@@ -585,7 +586,7 @@
         h('button', { onpointerdown: press((el) => { el.value += ','; }) }, ','),
         h('button', { class: 'ww', onpointerdown: press((el) => { el.value += ' '; }) }, 'spatie'),
         h('button', { onpointerdown: press((el) => { el.value += '.'; }) }, '.'),
-        h('button', { class: 'w', onpointerdown: press((el) => { el.value = el.value.slice(0, -1); if (!el.value) { shift = true; draw(); } }) }, '⌫')));
+        h('button', { class: 'w', onpointerdown: press((el) => { el.value = el.value.slice(0, -1); if (!el.value) { shift = true; draw(); } }) }, '⌫'))].filter(Boolean));
     draw();
     kb.redraw = (toLower) => { if (toLower) shift = false; draw(); };
     return kb;
@@ -687,6 +688,17 @@
     const err = h('div', { class: 'err' });
     openSheet('', h('h3', {}, reason), ...pb.els, keyboard(), err,
       formButtons(tx('send'), (b) => { const e = pb.check(); if (e) { err.textContent = e; return; } sendVisit({ type: 'reason', reason, ...pb.values() }, err, b); }));
+  }
+
+  // an extra button made by the admin: one tap, or one tap and a short text
+  function openCustom(cb) {
+    const go = (message) => whoAreYou({ title: cb.label, send: tx('send'), payload: { type: 'reason', button: cb.id, message: message || '' }, back: () => openCustom(cb) });
+    if (!cb.ask) return go('');
+    const msg = field('textarea', { placeholder: cb.askLabel || tx('tellMore'), maxlength: formCfg().maxMessageLength || 500 });
+    const err = h('div', { class: 'err' });
+    const next = h('button', { class: 'btn go' }, tx('next'));
+    next.onclick = () => { if (!msg.value.trim()) { err.textContent = cb.askLabel || tx('tellMore'); return; } go(msg.value); };
+    openSheet('', h('h3', {}, cb.label), msg, keyboard(), err, h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), next));
   }
 
   // Terugbellen: name, phone number, and when it suits

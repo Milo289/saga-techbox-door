@@ -26,7 +26,7 @@ lb config --mode debian --linux-flavours "$FLAVOUR" --linux-packages linux-image
 # what is on the disc
 cp -r "$HERE/config/." config/
 mkdir -p config/includes.chroot/opt/saga-door
-(cd "$ROOT" && cp -r package.json server.js power.js integrations.js security.js pki.js discover.js seal.js access.js public "$WORK/config/includes.chroot/opt/saga-door/")
+(cd "$ROOT" && cp -r package.json server.js power.js integrations.js security.js pki.js schedule.js discover.js seal.js access.js public "$WORK/config/includes.chroot/opt/saga-door/")
 
 lb build
 mv -f ./*.iso "$ROOT/Saga-Techbox-Deur-OS-$ARCH.iso"
