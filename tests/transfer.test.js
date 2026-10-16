@@ -44,3 +44,22 @@ test('only the main account can move data, and the old server keeps working', as
   assert.equal((await call(srv, 'POST', '/api/transfer/pull', { url: 'http://127.0.0.1:1', username: 'a', password: 'b' }, tok)).status, 404);
   assert.equal((await call(srv, 'GET', '/api/transfer/export', undefined, tok)).status, 404);
 });
+
+test('the data can also travel as a file: download here, put it back there', async (t) => {
+  const a = await startServer({ patch: true, system: true, dir: tmp() });
+  const b = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => Promise.all([a.stop(), b.stop()]));
+  const ta = await login(a), tb = await login(b);
+  await call(a, 'POST', '/api/settings', { name: 'Uit een bestand', reasons: ['Alleen hier'] }, ta);
+  const file = await fetch(`${a.url}/api/transfer/export`, { headers: { Authorization: `Bearer ${ta}` } }).then((r) => r.text());
+  const data = JSON.parse(file);
+  assert.equal(data.transfer, true); assert.equal(data.sessions, undefined, 'sessions never travel'); assert.equal(data.rootLock, undefined);
+  assert.equal((await call(b, 'POST', '/api/transfer/import', { version: 1, settings: {} }, tb)).status, 400, 'a file of another kind is refused');
+  const r = await call(b, 'POST', '/api/transfer/import', data, tb);
+  assert.equal(r.status, 200, r.text);
+  assert.equal((await call(b, 'GET', '/api/state')).json.settings.name, 'Uit een bestand');
+  // an ordinary back-up of an older server (without accounts) works too
+  const old = (await call(a, 'GET', '/api/export', undefined, ta)).json;
+  const r2 = await call(b, 'POST', '/api/transfer/import', old, await login(b));
+  assert.equal(r2.status, 200, r2.text); assert.equal(r2.json.full, false);
+});

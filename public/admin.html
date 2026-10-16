@@ -1190,6 +1190,14 @@
   const transferDraft = { url: '', username: '', password: '', code: '' };
   function transferCard() {
     const out = h('div', { class: 'muted', style: 'margin-top:10px' });
+    // a file made by this button on another server, or an ordinary back-up (Instellingen → Meer) of an older one
+    const fileIn = h('input', { type: 'file', accept: '.json,application/json', class: 'hidden', onchange: async (e) => {
+      const file = e.target.files[0]; e.target.value = '';
+      if (!file) return;
+      let data; try { data = JSON.parse(await file.text()); } catch { return toast('Dit bestand kan niet gelezen worden'); }
+      if (!confirm('De gegevens van deze server worden vervangen door die uit het bestand. Er wordt eerst een back-up van deze server gemaakt. Doorgaan?')) return;
+      try { const r = await api('/api/transfer/import', data); out.textContent = `Klaar. ${r.requests} bezoekersverzoeken, ${r.people} personen${r.full ? `, ${r.users} account(s)` : ''} overgenomen.${r.full ? '' : ' Dit bestand bevat geen accounts: die maak je hier opnieuw aan.'}`; S = await api('/api/admin-state'); toast('Gegevens overgezet'); } catch {}
+    } });
     const f = (key, label, props = {}) => [h('label', {}, label), h('input', { value: transferDraft[key], 'data-keep': 'transfer-' + key, autocapitalize: 'none', spellcheck: 'false', ...props, oninput: (e) => { transferDraft[key] = e.target.value; } })];
     const go = h('button', { class: 'white', onclick: async () => {
       if (!transferDraft.url.trim() || !transferDraft.username.trim() || !transferDraft.password) { out.textContent = 'Vul het adres, de gebruikersnaam en het wachtwoord van de oude server in.'; return; }
@@ -1207,6 +1215,17 @@
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Neem alles over van een andere deurserver: instellingen, bezoekers, personen, afspraken, het logboek en (van een server met deze versie) ook de accounts. Handig als je naar een nieuwe computer of een nieuwe Linux-schijf gaat. Vul hieronder in hoe je op de oude server inlogt (het hoofdaccount of een account dat gegevens mag exporteren).'),
       h('div', { class: 'form' }, ...f('url', 'Adres van de oude server', { placeholder: 'bijv. 192.168.2.32:8080' }), ...f('username', 'Gebruikersnaam'), ...f('password', 'Wachtwoord', { type: 'password', autocomplete: 'off' }), ...f('code', 'Tweestapscode (alleen als nodig)', { autocomplete: 'off' }), h('span', {}), go),
       out,
+      h('h3', { style: 'margin:18px 0 6px' }, 'Of met een bestand'),
+      h('p', { class: 'muted', style: 'margin:0 0 8px' }, 'Download alle gegevens van deze server als bestand en zet dat bestand op een andere server terug. Handig als de twee servers elkaar niet kunnen bereiken.'),
+      h('div', { class: 'row' },
+        h('button', { onclick: async () => {
+          const res = await fetch('/api/transfer/export', { headers: authHeaders() });
+          if (!res.ok) return toast('Downloaden mislukt');
+          const text = await res.text(), name = `saga-gegevens-${ymd()}.json`;
+          if (window.doorApp?.saveFile) { const r = await window.doorApp.saveFile(name, text); if (r.ok) toast('Opgeslagen'); return; }
+          h('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: name }).click();
+        } }, 'Gegevens downloaden'),
+        h('button', { onclick: () => fileIn.click() }, 'Gegevens uit een bestand zetten'), fileIn),
       h('p', { class: 'muted', style: 'font-size:13px;margin-bottom:0' }, 'Let op: wat nu op deze server staat wordt vervangen (een back-up wordt eerst gemaakt, zie hierboven). Wachtwoorden en sleutels reizen leesbaar over het netwerk; doe dit dus op je eigen netwerk. Daarna moeten collega’s opnieuw inloggen.'));
   }
 
