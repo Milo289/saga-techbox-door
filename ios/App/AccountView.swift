@@ -298,3 +298,21 @@ struct PalettePreview: View {
     }
 }
 
+
+
+/// A report to send to the developer: versions, connection, the last events. Never contains passwords, keys or session tokens.
+@MainActor enum Diagnostics {
+    static func report(_ store: DoorStore) -> String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        var lines = ["Deur Beheer — diagnose", "Tijd: \(Date().formatted(date: .abbreviated, time: .standard))",
+                     "App: \(Bundle.main.bundleIdentifier ?? "?") \(info["CFBundleShortVersionString"] as? String ?? "?") (\(info["CFBundleVersion"] as? String ?? "?")) \(Build.configuration)",
+                     "Systeem: \(ProcessInfo.processInfo.operatingSystemVersionString)",
+                     "Server: \(store.base?.absoluteString ?? "—")", "Server-versie: \(store.state.server.version.str)",
+                     "Verbinding: \(store.connection)", "Reactietijd: \(store.lastLatencyMs.map { "\($0) ms" } ?? "—")",
+                     "Account: \(store.state.me.name.str) (\(store.state.me.role.str))", "Rechten: \(store.perms.joined(separator: ", "))",
+                     "Https: \(store.state.https.running.bool ? "aan" : "uit")", "Beveiligingsscore: \(store.state.security.score.int.map(String.init) ?? "—")",
+                     "Bewaarde servers: \(Profiles.all.count), vertrouwde certificaten: \(Pins.all.count)", "", "Laatste gebeurtenissen:"]
+        for e in store.events.prefix(100) { lines.append("\(e.at.formatted(date: .omitted, time: .standard)) [\(e.kind)] \(e.text)") }
+        return lines.joined(separator: "\n")
+    }
+}

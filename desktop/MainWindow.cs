@@ -37,6 +37,9 @@ public sealed class MainWindow : Window
         _server = Credentials.Load()?.Server ?? "";
         Content = BuildFrame();
         C.Changed += () => Dispatcher.UIThread.Post(Redraw);
+        C.NeedCode += () => Dispatcher.UIThread.Post(ShowCodeDialog);
+        C.NeedTrust += () => Dispatcher.UIThread.Post(ShowTrustDialog);
+        RestoreWindow();
         ActualThemeVariantChanged += (_, _) => Redraw();
         // warnings for you: the server lost for more than a minute and a half, and warnings the server raises itself
         var watch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
@@ -45,6 +48,83 @@ public sealed class MainWindow : Window
         C.Visit += v => Dispatcher.UIThread.Post(() => { var msg = $"{VisitLabel(v)}: {(DoorClient.Str(v["name"]) is { Length: > 0 } n ? n : "iemand")}"; Toast(msg); Notifier.Show("Saga Techbox", msg); });
         C.Ring += () => Dispatcher.UIThread.Post(() => { Toast("Er is aangebeld"); try { if (!AppSettings.Current.Quiet) Console.Beep(); } catch { } });
         Redraw();
+    }
+
+    // ---------- where the window was ----------
+    void RestoreWindow()
+    {
+        if (Program.SnapshotPath != null) return;
+        try
+        {
+            var s = AppSettings.Current;
+            if (s.WinW >= MinWidth && s.WinH >= MinHeight) { Width = s.WinW; Height = s.WinH; }
+            if (s.WinX != int.MinValue) { WindowStartupLocation = WindowStartupLocation.Manual; Position = new PixelPoint(s.WinX, s.WinY); }
+            if (s.WinMax) WindowState = WindowState.Maximized;
+            Opened += (_, _) =>
+            {
+                // a screen that is gone (another monitor): back to the middle of the main screen
+                var p = new PixelPoint(Position.X + 40, Position.Y + 40);
+                if (!Screens.All.Any(sc => sc.Bounds.Contains(p)) && Screens.Primary is { } main) Position = new PixelPoint(main.WorkingArea.X + 60, main.WorkingArea.Y + 60);
+            };
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            timer.Tick += (_, _) => SaveWindow();
+            timer.Start();
+            Closing += (_, _) => SaveWindow();
+        }
+        catch { }
+    }
+    void SaveWindow()
+    {
+        try
+        {
+            var s = AppSettings.Current;
+            bool max = WindowState == WindowState.Maximized;
+            if (WindowState == WindowState.Normal && IsVisible)
+            {
+                if (s.WinX == Position.X && s.WinY == Position.Y && s.WinW == (int)Width && s.WinH == (int)Height && !s.WinMax) return;
+                s.WinX = Position.X; s.WinY = Position.Y; s.WinW = (int)Width; s.WinH = (int)Height; s.WinMax = false; s.Save();
+            }
+            else if (max && !s.WinMax) { s.WinMax = true; s.Save(); }
+        }
+        catch { }
+    }
+
+    // ---------- two questions the connection can ask ----------
+    bool _codeOpen, _trustOpen;
+    void OpenDialog(Window w) { try { if (!IsVisible) Show(); Activate(); _ = w.ShowDialog(this); } catch { w.Show(); } }
+    void ShowCodeDialog()
+    {
+        if (_codeOpen || C.PendingMfa == null) return;
+        _codeOpen = true;
+        var err = Ui.Text("", 13, true, Ui.Brush("#ff9f0a"));
+        var win = new Window { Title = "Tweestapsverificatie", Width = 460, Height = 320, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Ui.Brush(Ui.BgHex) };
+        string code = "";
+        var input = Ui.Input("", "Code", t => code = t);
+        async void Send()
+        {
+            try { await C.SubmitCodeAsync(code); win.Close(); }
+            catch (Exception e) { err.Text = e.Message; }
+        }
+        input.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) Send(); };
+        win.Content = Ui.Stack(12, Ui.Text("Tweestapsverificatie", 20, true),
+            Ui.Text("Open je verificatie-app en typ de code van 6 cijfers. Kwijt? Gebruik een herstelcode.", 14, false, Ui.Muted), input, err,
+            Ui.Row(10, Ui.Btn("Bevestigen", Send, Ui.Accent, "#000000"), Ui.Btn("Annuleren", () => win.Close()))).Also(s => s.Margin = new Thickness(24));
+        win.Closed += (_, _) => _codeOpen = false;
+        OpenDialog(win);
+    }
+    void ShowTrustDialog()
+    {
+        if (_trustOpen || C.PendingTrust == null) return;
+        _trustOpen = true;
+        var (host, fp) = C.PendingTrust.Value;
+        var win = new Window { Title = "Nieuwe beveiligde verbinding", Width = 560, Height = 400, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Ui.Brush(Ui.BgHex) };
+        win.Content = Ui.Stack(12, Ui.Text("Nieuwe beveiligde verbinding", 20, true),
+            Ui.Text($"Je maakt voor het eerst verbinding met {host} via https. De server gebruikt zijn eigen certificaat. Controleer of deze vingerafdruk gelijk is aan die in het bedieningspaneel (Beveiliging → Beveiligde verbinding):", 14, false, Ui.Muted),
+            new TextBox { Text = fp, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas, Menlo, monospace") },
+            Ui.Text("Klopt het? Dan vertrouwt deze app alleen dit certificaat voor deze server. Klopt het niet, kies dan Annuleren: iemand anders kan zich dan voordoen als je server.", 13, false, Ui.Muted),
+            Ui.Row(10, Ui.Btn("Vertrouwen", () => { C.TrustAndRetry(); win.Close(); }, Ui.Accent, "#000000"), Ui.Btn("Annuleren", () => win.Close()))).Also(s => s.Margin = new Thickness(24));
+        win.Closed += (_, _) => _trustOpen = false;
+        OpenDialog(win);
     }
 
     // ---------- frame ----------
@@ -307,7 +387,9 @@ public sealed class MainWindow : Window
             _busy = true; _connectError = ""; Redraw();
             try
             {
-                await C.LoginAsync(_server, _user, _pass);
+                try { await C.LoginAsync(_server, _user, _pass); }
+                catch (NeedCodeException) { } // the password is right; the code is asked for after connecting
+                catch (UntrustedException) { } // the certificate is asked about after connecting
                 new Credentials(DoorClient.Normalize(_server), _user.Trim().ToLowerInvariant(), _pass).Save();
                 _pass = ""; _page = "status"; C.Start();
             }
@@ -420,7 +502,18 @@ public sealed class MainWindow : Window
         var quiet = Ui.Card(Ui.Stack(10, Ui.Text("Stille uren", 16, true), on, Ui.Row(10, Ui.Text("Van", 13), from, Ui.Text("tot", 13), to),
             Ui.Text("Bezoekers blijven gewoon in de lijst; alleen het geluid blijft weg.", 12, false, Ui.Muted)));
 
-        return Ui.Page(connect, look, quick, quiet);
+        Control? startup = null;
+        if (StartAtLogin.Supported)
+        {
+            var login = new CheckBox { Content = "Deze app openen als ik inlog op mijn computer", IsChecked = StartAtLogin.IsOn, Foreground = Ui.White };
+            login.IsCheckedChanged += (_, _) => StartAtLogin.Set(login.IsChecked == true);
+            startup = Ui.Card(Ui.Stack(10, Ui.Text("Opstarten", 16, true), login, Ui.Text("De app blijft dan rustig bij de klok staan en meldt zich als iemand aanbelt.", 12, false, Ui.Muted)));
+        }
+        Control? diag = null;
+        if (Program.IsDev)
+            diag = Ui.Card(Ui.Stack(10, Ui.Text("Diagnose", 16, true), Ui.Text("Kopieert een overzicht voor de ontwikkelaar: versies, verbinding en de laatste gebeurtenissen. Er staan nooit wachtwoorden of sleutels in.", 12, false, Ui.Muted),
+                Ui.Btn("Diagnose kopiëren", async () => { try { await (GetTopLevel(this)?.Clipboard?.SetTextAsync(Diagnostics.Report()) ?? Task.CompletedTask); Toast("Gekopieerd"); } catch { Toast("Kopiëren lukte niet"); } }, Ui.Soft)));
+        return Ui.Page(connect, look, quick, quiet, startup, diag);
     }
 
     // ---------- developer page (only in the Dev app) ----------

@@ -24,6 +24,7 @@ struct DeveloperView: View {
                     NavigationLink { RawStateView(store: store) } label: { Label("Ruwe gegevens van de server", systemImage: "curlybraces") }
                     NavigationLink { ApiConsoleView(store: store) } label: { Label("API-console", systemImage: "terminal") }
                     Toggle("Elke API-aanroep loggen", isOn: $verbose)
+                    ShareLink(item: Diagnostics.report(store), subject: Text("Diagnose Deur Beheer")) { Label("Diagnose delen", systemImage: "stethoscope") }
                 }
                 Section("Testen") {
                     Button("Lokale melding sturen") { notify("Test", "Zo ziet een melding eruit.") }

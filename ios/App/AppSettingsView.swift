@@ -161,6 +161,8 @@ struct AppSettingsView: View {
             Toggle(isOn: $sounds) { Label("Geluid bij bezoekers", systemImage: "speaker.wave.2.fill") }
             Toggle(isOn: $notifyVisits) { Label("Melding bij nieuwe bezoeker", systemImage: "bell.badge.fill") }
             Toggle(isOn: $badge) { Label("Aantal op het app-icoon", systemImage: "app.badge.fill") }
+            Picker(selection: Binding(get: { UserDefaults.standard.object(forKey: Pref.soundBell) as? Int ?? 0 }, set: { UserDefaults.standard.set($0, forKey: Pref.soundBell); Sounds.preview($0) })) { ForEach(Array(Sounds.names.enumerated()), id: \.offset) { Text($1).tag($0) } } label: { Label("Geluid bij aanbellen", systemImage: "bell.fill") }
+            Picker(selection: Binding(get: { UserDefaults.standard.object(forKey: Pref.soundMessage) as? Int ?? 1 }, set: { UserDefaults.standard.set($0, forKey: Pref.soundMessage); Sounds.preview($0) })) { ForEach(Array(Sounds.names.enumerated()), id: \.offset) { Text($1).tag($0) } } label: { Label("Geluid bij een vraag", systemImage: "bubble.left.fill") }
             Button("Test het geluid en het trillen") { Haptics.success(); Sounds.bell(); store.show("Zo klinkt het") }
         } footer: { Text("De app krijgt bezoekers live binnen zolang hij open is. Voor meldingen als de app dicht is: vul bij de server een ntfy-onderwerp in (Webpaneel → Instellingen → Meldingen op je telefoon).") }
         Section {

@@ -11,7 +11,7 @@ namespace SagaTechbox;
 public sealed class DoorClient
 {
     public static readonly DoorClient Shared = new();
-    static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    static readonly HttpClient Http = Pinning.Client(TimeSpan.FromSeconds(15));
 
     public string Server = "";
     string? _token;
@@ -28,6 +28,11 @@ public sealed class DoorClient
     public event Action? Changed;
     public event Action<JsonNode>? Visit;
     public event Action? Ring;
+    /// set while the account waits for its two-step code / for the user to trust the server's certificate
+    public string? PendingMfa { get; private set; }
+    public (string Host, string Fp)? PendingTrust { get; private set; }
+    public event Action? NeedCode;
+    public event Action? NeedTrust;
 
     // ---- the values the screens need ----
     public string Name => Str(State["settings"]?["name"], "Deur");
@@ -60,11 +65,52 @@ public sealed class DoorClient
         if (url == "") throw new Exception("Dat adres klopt niet.");
         HttpResponseMessage res;
         try { res = await Http.PostAsync(url + "/api/login", Json(new JsonObject { ["username"] = user.Trim().ToLowerInvariant(), ["password"] = pass, ["remember"] = true })); }
-        catch { throw new Exception("Geen verbinding met de deurserver."); }
+        catch { Fail(); throw; }
         var body = JsonNode.Parse(await res.Content.ReadAsStringAsync());
         if (res.IsSuccessStatusCode && body?["token"] != null) return body["token"]!.GetValue<string>();
+        if (res.IsSuccessStatusCode && body?["needs2fa"]?.GetValue<bool>() == true && body["mfa"] != null) throw new NeedCodeException(body["mfa"]!.GetValue<string>());
         if ((int)res.StatusCode == 401) throw new Exception("Gebruikersnaam of wachtwoord klopt niet.");
         throw new Exception(Str(body?["error"], $"Inloggen lukte niet ({(int)res.StatusCode})."));
+    }
+
+    /// A failed connection: either the certificate has to be trusted first, or there is simply no connection.
+    static void Fail()
+    {
+        if (Pinning.TakePending() is { } p) throw new UntrustedException(p.Host, p.Fp);
+        throw new Exception("Geen verbinding met de deurserver.");
+    }
+
+    /// The second step: the code from the verification app (or a recovery code).
+    public async Task SubmitCodeAsync(string code)
+    {
+        if (PendingMfa == null) return;
+        HttpResponseMessage res;
+        try { res = await Http.PostAsync(Server + "/api/login/2fa", Json(new JsonObject { ["mfa"] = PendingMfa, ["code"] = code.Trim() })); }
+        catch { Fail(); throw; }
+        var body = JsonNode.Parse(await res.Content.ReadAsStringAsync());
+        if (!res.IsSuccessStatusCode || body?["token"] == null) throw new Exception(Str(body?["error"], $"Die code werkt niet ({(int)res.StatusCode})."));
+        Credentials.SaveToken(body["token"]!.GetValue<string>());
+        PendingMfa = null;
+        Start();
+    }
+
+    public void TrustAndRetry()
+    {
+        if (PendingTrust is { } p) Pinning.Trust(p.Host, p.Fp);
+        PendingTrust = null;
+        Start();
+    }
+
+    async Task<bool> TokenWorksAsync(string token)
+    {
+        try
+        {
+            var req = new HttpRequestMessage(HttpMethod.Get, Server + "/api/me");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await Http.SendAsync(req);
+            return res.IsSuccessStatusCode;
+        }
+        catch { return false; }
     }
 
     // ---- start / stop ----
@@ -90,12 +136,16 @@ public sealed class DoorClient
             try
             {
                 Set("Verbinden…", false);
-                _token = await LoginAsync(creds.Server, creds.User, creds.Pass);
+                var saved = Credentials.LoadToken();
+                if (saved != null && await TokenWorksAsync(saved)) _token = saved;
+                else { _token = await LoginAsync(creds.Server, creds.User, creds.Pass); Credentials.SaveToken(_token); }
                 await RefreshAsync();
                 failures = 0;
                 await Listen(ct);
             }
             catch (OperationCanceledException) { break; }
+            catch (NeedCodeException n) { PendingMfa = n.Mfa; Set("Er is een code nodig", false); NeedCode?.Invoke(); break; }
+            catch (UntrustedException u) { PendingTrust = (u.Host, u.Fingerprint); Set("Het certificaat moet nog worden vertrouwd", false); NeedTrust?.Invoke(); break; }
             catch (Exception e)
             {
                 failures++;
@@ -119,7 +169,7 @@ public sealed class DoorClient
     {
         var req = new HttpRequestMessage(HttpMethod.Get, $"{Server}/events?role=admin&token={Uri.EscapeDataString(_token ?? "")}");
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-        using var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        using var client = Pinning.Client(Timeout.InfiniteTimeSpan);
         using var res = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         if (!res.IsSuccessStatusCode) throw new Exception("De live verbinding gaf een fout.");
         Set("Live", true);
@@ -161,11 +211,15 @@ public sealed class DoorClient
             if (_token != null) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
             if (body != null) req.Content = Json(body); else if (method == "POST") req.Content = Json(new JsonObject());
             HttpResponseMessage res;
-            try { res = await Http.SendAsync(req); } catch { throw new Exception("Geen verbinding met de deurserver."); }
-            if ((int)res.StatusCode == 401 && attempt == 0 && Credentials.Load() is { } c) { _token = await LoginAsync(c.Server, c.User, c.Pass); continue; }
+            try { res = await Http.SendAsync(req); } catch { Fail(); throw; }
+            if ((int)res.StatusCode == 401 && attempt == 0 && Credentials.Load() is { } c) { _token = await LoginAsync(c.Server, c.User, c.Pass); Credentials.SaveToken(_token); continue; }
             var text = await res.Content.ReadAsStringAsync();
             JsonNode? node = null; try { node = JsonNode.Parse(text); } catch { }
-            if (!res.IsSuccessStatusCode) throw new Exception(Str(node?["error"], $"Dat lukte niet ({(int)res.StatusCode})."));
+            if (!res.IsSuccessStatusCode)
+            {
+                var hint = Str(node?["hint"]); // what to do now
+                throw new Exception(Str(node?["error"], $"Dat lukte niet ({(int)res.StatusCode}).") + (hint != "" ? "\n" + hint : ""));
+            }
             return node;
         }
         return null;

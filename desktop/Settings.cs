@@ -24,6 +24,12 @@ public sealed class AppSettings
     public bool QuietOn { get; set; }
     public int QuietFrom { get; set; } = 22 * 60;
     public int QuietTo { get; set; } = 7 * 60;
+    // where the window was (so it opens in the same place and size)
+    public int WinX { get; set; } = int.MinValue;
+    public int WinY { get; set; }
+    public int WinW { get; set; }
+    public int WinH { get; set; }
+    public bool WinMax { get; set; }
 
     static string FileName => Path.Combine(Credentials.Dir, "settings.json");
     public static AppSettings Current { get; private set; } = Load();

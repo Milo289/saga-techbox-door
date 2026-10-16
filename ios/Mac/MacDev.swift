@@ -18,6 +18,7 @@ struct MacDev: View {
             data.tabItem { Label("Gegevens", systemImage: "curlybraces") }
             log.tabItem { Label("Gebeurtenissen", systemImage: "waveform.path.ecg") }
             about.tabItem { Label("Verbinding", systemImage: "network") }
+            VStack(spacing: 12) { Text("Een overzicht voor de ontwikkelaar: versies, verbinding en de laatste gebeurtenissen. Er staan nooit wachtwoorden of sleutels in.").foregroundStyle(.secondary); ShareLink(item: Diagnostics.report(store), subject: Text("Diagnose Deur Beheer")) { Label("Diagnose delen", systemImage: "stethoscope") }.buttonStyle(.borderedProminent) }.padding(24).tabItem { Label("Diagnose", systemImage: "stethoscope") }
         }.padding(8).navigationTitle("Ontwikkelaar")
     }
 

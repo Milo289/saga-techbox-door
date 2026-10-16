@@ -62,6 +62,8 @@ struct MacSettings: View {
                 Section("Meldingen en geluid") {
                     Toggle("Melding bij een nieuwe bezoeker", isOn: $notifyVisits)
                     Toggle("Geluid bij een bezoeker of de bel", isOn: $sounds)
+                    Picker("Geluid bij aanbellen", selection: Binding(get: { UserDefaults.standard.object(forKey: Pref.soundBell) as? Int ?? 0 }, set: { UserDefaults.standard.set($0, forKey: Pref.soundBell); Sounds.preview($0) })) { ForEach(Array(Sounds.names.enumerated()), id: \.offset) { Text($1).tag($0) } }
+                    Picker("Geluid bij een vraag", selection: Binding(get: { UserDefaults.standard.object(forKey: Pref.soundMessage) as? Int ?? 1 }, set: { UserDefaults.standard.set($0, forKey: Pref.soundMessage); Sounds.preview($0) })) { ForEach(Array(Sounds.names.enumerated()), id: \.offset) { Text($1).tag($0) } }
                     Toggle("Trackpad-trilling bij acties", isOn: $haptics)
                     Toggle("Bezoekers automatisch als gezien markeren", isOn: $autoSeen)
                 }

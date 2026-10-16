@@ -59,6 +59,13 @@ final class MacDelegate: NSObject, NSApplicationDelegate {
         // test aid for development builds only: save a picture of the window and quit
         if let path = ProcessInfo.processInfo.environment["DEUR_SNAPSHOT"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                // first choice: a real picture of the window as it is on screen (dark mode shows its real colours)
+                if let w = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && $0.title != "" }),
+                   let cg = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(w.windowNumber), [.boundsIgnoreFraming, .bestResolution]) {
+                    try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+                    NSApp.terminate(nil)
+                    return
+                }
                 if let w = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && $0.title != "" }) ?? NSApp.windows.first, let v = w.contentView,
                    let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
                     v.cacheDisplay(in: v.bounds, to: rep)

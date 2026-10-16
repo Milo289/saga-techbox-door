@@ -136,7 +136,11 @@ final class DoorStore: ObservableObject {
         var (code, data) = try await request(method, path, body: body)
         if code == 401 { token = nil; try await ensureToken(); (code, data) = try await request(method, path, body: body) }
         let json = JSON(try? JSONSerialization.jsonObject(with: data))
-        if code >= 400 { throw DoorApi.Failure.server(json.error.string ?? "Dat lukte niet (\(code)).") }
+        if code >= 400 {
+            var m = json.error.string ?? "Dat lukte niet (\(code))."
+            if let hint = json.hint.string, !hint.isEmpty { m += "\n" + hint } // what to do now
+            throw DoorApi.Failure.server(m)
+        }
         return json
     }
 

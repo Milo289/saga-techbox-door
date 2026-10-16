@@ -29,6 +29,8 @@ enum Pref {
     static let devMode = "p.devMode"
     static let verboseLog = "p.verboseLog"
     static let recentMessages = "p.recentMessages"
+    static let soundBell = "p.soundBell"          // index in Sounds.names
+    static let soundMessage = "p.soundMessage"
     static let accentHex = "p.accentHex"   // this device's own accent colour (empty = follow the server)
 }
 
@@ -66,13 +68,18 @@ enum Haptics {
 
 enum Sounds {
     static var enabled: Bool { UserDefaults.standard.bool(forKey: Pref.sounds) }
+    /// the sounds you can choose for a doorbell and for a question
+    static let names = ["Glas", "Pop", "Ping", "Tink", "Hero", "Duikboot"]
+    private static func index(_ key: String, _ fallback: Int) -> Int { let v = UserDefaults.standard.object(forKey: key) as? Int ?? fallback; return names.indices.contains(v) ? v : fallback }
     #if os(iOS)
-    static func bell() { if enabled { AudioServicesPlaySystemSound(1013) } }
-    static func message() { if enabled { AudioServicesPlaySystemSound(1007) } }
+    private static let ids: [SystemSoundID] = [1013, 1007, 1005, 1057, 1016, 1020]
+    static func preview(_ i: Int) { if names.indices.contains(i) { AudioServicesPlaySystemSound(ids[i]) } }
     #else
-    static func bell() { if enabled { NSSound(named: "Glass")?.play() } }
-    static func message() { if enabled { NSSound(named: "Pop")?.play() } }
+    private static let mac = ["Glass", "Pop", "Ping", "Tink", "Hero", "Submarine"]
+    static func preview(_ i: Int) { if names.indices.contains(i) { NSSound(named: mac[i])?.play() } }
     #endif
+    static func bell() { if enabled { preview(index(Pref.soundBell, 0)) } }
+    static func message() { if enabled { preview(index(Pref.soundMessage, 1)) } }
 }
 
 /// The three door colours.
