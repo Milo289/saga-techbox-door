@@ -82,8 +82,14 @@ final class DoorStore: ObservableObject {
                 break
             } catch let f as DoorApi.Failure {
                 if case .wrongLogin = f { connection = .offline("Inloggen mislukt — controleer je gegevens"); running = false; break }
-                if case .needs2fa(let mfa) = f { needsCode = mfa; connection = .offline("Er is een code nodig"); running = false; break }
-                if case .untrusted(let host, let fp) = f { trustPrompt = TrustPrompt(host: host, fingerprint: fp); connection = .offline("Het certificaat moet nog worden vertrouwd"); running = false; break }
+                if case .needs2fa(let mfa) = f { needsCode = mfa; connection = .offline("Er is een code nodig"); running = false; #if DEBUG
+                    autoCodeForTests()
+                    #endif
+                    break }
+                if case .untrusted(let host, let fp) = f { trustPrompt = TrustPrompt(host: host, fingerprint: fp); connection = .offline("Het certificaat moet nog worden vertrouwd"); running = false; #if DEBUG
+                    autoTrustForTests()
+                    #endif
+                    break }
                 connection = .offline(f.localizedDescription)
                 failures += 1
             } catch {
@@ -147,6 +153,11 @@ final class DoorStore: ObservableObject {
     func askTrust(host: String, fingerprint: String) { trustPrompt = TrustPrompt(host: host, fingerprint: fingerprint) }
     func acceptTrust() { if let p = trustPrompt { Pins.trust(host: p.host, fingerprint: p.fingerprint) }; trustPrompt = nil; restart() }
     func declineTrust() { trustPrompt = nil; connection = .offline("Het certificaat is niet vertrouwd") }
+    #if DEBUG
+    /// test aid for development builds only: type the code without a person (DEUR_TEST_CODE)
+    func autoTrustForTests() { if ProcessInfo.processInfo.environment["DEUR_TEST_TRUST"] != nil, trustPrompt != nil { acceptTrust() } }
+    func autoCodeForTests() { if let c = ProcessInfo.processInfo.environment["DEUR_TEST_CODE"], needsCode != nil { Task { try? await submitCode(c) } } }
+    #endif
     func cancelCode() { needsCode = nil; connection = .offline("Inloggen is niet afgerond") }
     func submitCode(_ code: String) async throws {
         guard let mfa = needsCode, let api = DoorApi.configured() else { return }

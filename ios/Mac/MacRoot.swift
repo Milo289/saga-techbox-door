@@ -63,6 +63,7 @@ struct MacRoot: View {
         }
         .preferredColorScheme(appearance.colorScheme)
         .securitySheets(store)
+        .sheet(isPresented: Binding(get: { configured == true && !UserDefaults.standard.bool(forKey: "tour.done") && store.hasState }, set: { _ in })) { HelpTour() }
         .task { configured = await Task.detached { DoorApi.configured() != nil && Keychain.load() != nil }.value }
     }
 }

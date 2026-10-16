@@ -7,11 +7,14 @@ struct InboxView: View {
     @State private var showAll = false
     @State private var selected: VisitRequest?
     @State private var query = ""
+    @State private var typeFilter = ""
+    @State private var askBulk = false
 
     private var list: [VisitRequest] {
         let base = showAll ? store.requests : store.openRequests
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        return q.isEmpty ? base : base.filter { ($0.name + " " + $0.summary + " " + $0.nr + " " + $0.typeLabel).lowercased().contains(q) }
+        let byType = typeFilter.isEmpty ? base : base.filter { $0.type == typeFilter }
+        return q.isEmpty ? byType : byType.filter { ($0.name + " " + $0.summary + " " + $0.nr + " " + $0.typeLabel).lowercased().contains(q) }
     }
 
     var body: some View {
@@ -23,12 +26,26 @@ struct InboxView: View {
                     ContentUnavailableView(showAll ? "Nog niets" : "Alles is afgehandeld", systemImage: "tray", description: Text("Als iemand op de deur een knop aantikt, zie je het hier meteen."))
                 } else {
                     List {
-                        ForEach(list) { r in
-                            Button { selected = r } label: { row(r) }.buttonStyle(.plain)
-                                .listRowBackground(Color.white.opacity(0.06))
-                                .swipeActions(edge: .trailing) {
-                                    if r.isOpen { Button { Task { await store.run("Afgehandeld") { _ = try await store.post("api/requests/done", ["id": r.id]) } } } label: { Label("Klaar", systemImage: "checkmark") }.tint(.green) }
+                        Section {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    chip("Alles", "")
+                                    chip("Aangebeld", "bell"); chip("Vraagjes", "message"); chip("Afspraken", "appointment"); chip("Terugbellen", "callback"); chip("Andere", "reason")
                                 }
+                            }.listRowBackground(Color.clear).listRowInsets(EdgeInsets())
+                        }
+                        ForEach(groups, id: \.0) { title, items in
+                            Section(title) {
+                                ForEach(items) { r in
+                                    Button { selected = r } label: { row(r) }.buttonStyle(.plain)
+                                        .listRowBackground(Color.white.opacity(0.06))
+                                        .accessibilityElement(children: .combine)
+                                        .accessibilityHint("Tik om te beantwoorden")
+                                        .swipeActions(edge: .trailing) {
+                                            if r.isOpen { Button { Task { await store.run("Afgehandeld") { _ = try await store.post("api/requests/done", ["id": r.id]) } } } label: { Label("Klaar", systemImage: "checkmark") }.tint(.green) }
+                                        }
+                                }
+                            }
                         }
                     }.scrollContentBackground(.hidden)
                 }
@@ -42,16 +59,38 @@ struct InboxView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { Task { await store.run("Gezien") { _ = try await store.post("api/requests/seen") } } } label: { Label("Alles als gezien", systemImage: "eye") }
+                        Button { askBulk = true } label: { Label("Deze lijst afhandelen", systemImage: "checkmark.circle") }.disabled(list.filter(\.isOpen).isEmpty)
                         Button(role: .destructive) { Task { await store.run("Gewist") { _ = try await store.post("api/requests/clear") } } } label: { Label("Afgehandelde wissen", systemImage: "trash") }
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
             .searchable(text: $query, prompt: "Zoeken in bezoekers")
+            .confirmationDialog("\(list.filter(\.isOpen).count) verzoeken afhandelen?", isPresented: $askBulk, titleVisibility: .visible) {
+                Button("Afhandelen") { Task { for r in list where r.isOpen { _ = try? await store.post("api/requests/done", ["id": r.id]) }; store.show("Afgehandeld") } }
+                Button("Annuleren", role: .cancel) {}
+            }
             .refreshable { try? await store.refresh() }
             .sheet(item: $selected) { r in RequestDetail(store: store, request: store.requests.first { $0.id == r.id } ?? r) }
             .onAppear { markSeen() }
             .onChange(of: store.newCount) { _, n in if n > 0 { markSeen() } }
         }
+    }
+
+    private var groups: [(String, [VisitRequest])] {
+        let cal = Calendar.current
+        let byDay = Dictionary(grouping: list) { cal.startOfDay(for: $0.createdAt) }
+        return byDay.keys.sorted(by: >).map { day in
+            let title = cal.isDateInToday(day) ? "Vandaag" : cal.isDateInYesterday(day) ? "Gisteren" : day.formatted(.dateTime.weekday(.wide).day().month(.wide))
+            return (title, byDay[day] ?? [])
+        }
+    }
+
+    private func chip(_ label: String, _ type: String) -> some View {
+        Button { typeFilter = type } label: {
+            Text(label).font(.subheadline.weight(.medium)).padding(.horizontal, 12).padding(.vertical, 6)
+                .background(typeFilter == type ? Palette.accent : Color.white.opacity(0.1), in: Capsule())
+                .foregroundStyle(typeFilter == type ? Color.black : Color.white)
+        }.buttonStyle(.plain)
     }
 
     private func markSeen() {

@@ -42,6 +42,8 @@ targetTemplates:
           - UIInterfaceOrientationLandscapeRight
         NSFaceIDUsageDescription: Deur Beheer vergrendelt zich met Face ID, zodat alleen jij erin kunt.
         NSLocalNetworkUsageDescription: Deur Beheer maakt verbinding met jouw deurserver in het netwerk.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
           NSAllowsLocalNetworking: true
@@ -74,6 +76,8 @@ targetTemplates:
       - path: App/Discovery.swift
       - path: App/Extras.swift
       - path: App/Net.swift
+      - path: App/AccountView.swift
+      - path: App/Profiles.swift
       - path: App/SecurityUI.swift
       - path: App/FormSettings.swift
     settings:

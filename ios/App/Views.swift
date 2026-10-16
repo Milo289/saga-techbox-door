@@ -34,6 +34,7 @@ struct ContentView: View {
         .persistentSystemOverlays(model.configured && model.role == "door" ? .hidden : .automatic)
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
         .securitySheets(DoorStore.shared)
+        .sheet(isPresented: Binding(get: { model.configured && model.role == "control" && !model.locked && !UserDefaults.standard.bool(forKey: "tour.done") && DoorStore.shared.hasState }, set: { _ in })) { HelpTour() }
         .onAppear { if model.configured && model.role == "control" { Task { await model.unlock() } } }
         .onChange(of: phase) { _, new in
             if new == .background { leftAt = Date() }

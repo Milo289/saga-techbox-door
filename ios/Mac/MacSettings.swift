@@ -22,6 +22,9 @@ struct MacSettings: View {
     @State private var message: String?
     @State private var askForget = false
     @State private var found: [Discovery.Found] = []
+    @State private var exporting = false
+    @State private var importing = false
+    @State private var showTour = false
 
     var body: some View {
         TabView {
@@ -51,6 +54,10 @@ struct MacSettings: View {
                 }
             }.formStyle(.grouped).tabItem { Label("Account", systemImage: "person.crop.circle") }
 
+            AccountDetailView(store: store).formStyle(.grouped).tabItem { Label("Mijn account", systemImage: "person.text.rectangle") }
+            SecurityOverviewView(store: store).formStyle(.grouped).tabItem { Label("Beveiliging", systemImage: "lock.shield") }
+            ServersView(store: store).formStyle(.grouped).tabItem { Label("Servers", systemImage: "server.rack") }
+
             Form {
                 Section("Meldingen en geluid") {
                     Toggle("Melding bij een nieuwe bezoeker", isOn: $notifyVisits)
@@ -69,6 +76,10 @@ struct MacSettings: View {
             Form {
                 Section("Weergave") {
                     Picker("Uiterlijk", selection: $appearance) { Text("Zoals deze Mac").tag("system"); Text("Licht").tag("light"); Text("Donker").tag("dark") }.pickerStyle(.segmented)
+                }
+                Section("Kleurthema van de server") {
+                    ForEach(Array(store.state.palettes.array.enumerated()), id: \.offset) { _, p in paletteRow(p) }
+
                 }
                 Section("Kleur") {
                     HStack(spacing: 10) {
@@ -116,15 +127,45 @@ struct MacSettings: View {
                 Section("Menubalk") {
                     Text("Het icoon toont de kleur van de deur. Klik erop voor de status, je snelle acties en de nieuwste bezoekers.").font(.caption).foregroundStyle(.secondary)
                 }
+                Section("Bewaren en terugzetten") {
+                    Button("Instellingen bewaren als bestand…") { exporting = true }
+                    Button("Instellingen terugzetten uit een bestand…") { importing = true }
+                    Button("Uitleg tonen") { showTour = true }
+                    Text("Dit zijn de instellingen van de app: snelle acties, voorkeuren en de lijst met servers. Wachtwoorden zitten er nooit in.").font(.caption).foregroundStyle(.secondary)
+                }
                 Section("Sneltoetsen") {
                     LabeledContent("Open", value: "⌥⌘1"); LabeledContent("Gesloten", value: "⌥⌘2"); LabeledContent("Bezet", value: "⌥⌘3"); LabeledContent("Instellingen", value: "⌘,")
                 }
             }.formStyle(.grouped).tabItem { Label("Meer", systemImage: "ellipsis.circle") }
         }
+        .sheet(isPresented: $showTour) { HelpTour() }
+        .fileExporter(isPresented: $exporting, document: SettingsFile(data: SettingsPorting.export()), contentType: .json, defaultFilename: "deur-beheer-instellingen") { r in message = (try? r.get()) == nil ? "Niet bewaard" : "Bewaard" }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { r in
+            guard case .success(let url) = r else { return }
+            let ok = url.startAccessingSecurityScopedResource(); defer { if ok { url.stopAccessingSecurityScopedResource() } }
+            message = ((try? Data(contentsOf: url)).map { SettingsPorting.import($0) } ?? false) ? "Teruggezet — start de app opnieuw voor alles" : "Dit bestand hoort niet bij Deur Beheer"
+        }
         .confirmationDialog("Account en server vergeten? Je moet daarna opnieuw instellen.", isPresented: $askForget, titleVisibility: .visible) {
             Button("Vergeten", role: .destructive) { store.forget(); Keychain.delete(); UserDefaults.standard.removeObject(forKey: "serverURL"); message = "Vergeten. Start de app opnieuw om opnieuw in te stellen." }
             Button("Annuleren", role: .cancel) {}
         }
+    }
+
+    private func paletteRow(_ p: JSON) -> some View {
+        let chosen = store.state.settings.palette.str == p.id.str
+        return Button { Task { await applyPalette(p) } } label: {
+            HStack(spacing: 12) {
+                PalettePreview(open: p.open.str, closed: p.closed.str, busy: p.busy.str, accent: p.accent.str)
+                Text(p.name.str)
+                Spacer()
+                if chosen { Image(systemName: "checkmark").foregroundStyle(Palette.accent) }
+            }
+        }.buttonStyle(.plain).disabled(!store.can("settings"))
+    }
+    private func applyPalette(_ p: JSON) async {
+        let colors: [String: Any] = ["open": p.open.str, "closed": p.closed.str, "busy": p.busy.str]
+        let body: [String: Any] = ["palette": p.id.str, "colors": colors, "colorsLight": p.light.dict, "accent": p.accent.str]
+        await store.run("Kleurthema: " + p.name.str) { _ = try await store.post("api/settings", body) }
     }
 
     private var connection: String { switch store.connection { case .live: return "live"; case .connecting: return "verbinden…"; case .idle: return "uit"; case .offline(let m): return m } }

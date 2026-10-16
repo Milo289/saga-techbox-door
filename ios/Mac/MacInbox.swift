@@ -6,17 +6,22 @@ struct MacInbox: View {
     @State private var selection: String?
     @State private var showDone = false
     @State private var query = ""
+    @State private var typeFilter = ""
+    @State private var askBulk = false
 
     private var list: [VisitRequest] {
         let base = showDone ? store.requests : store.openRequests
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        return q.isEmpty ? base : base.filter { ($0.name + " " + $0.summary + " " + $0.nr + " " + $0.typeLabel).lowercased().contains(q) }
+        let byType = typeFilter.isEmpty ? base : base.filter { $0.type == typeFilter }
+        return q.isEmpty ? byType : byType.filter { ($0.name + " " + $0.summary + " " + $0.nr + " " + $0.typeLabel).lowercased().contains(q) }
     }
 
     var body: some View {
         HSplitView {
             VStack(spacing: 0) {
                 TextField("Zoeken in bezoekers", text: $query).textFieldStyle(.roundedBorder).padding([.horizontal, .top], 10).padding(.bottom, 6)
+                Picker("Soort", selection: $typeFilter) { Text("Alles").tag(""); Text("Aangebeld").tag("bell"); Text("Vraagjes").tag("message"); Text("Afspraken").tag("appointment"); Text("Terugbellen").tag("callback"); Text("Andere").tag("reason") }
+                    .pickerStyle(.menu).labelsHidden().padding(.horizontal, 10).padding(.bottom, 6)
                 List(list, selection: $selection) { r in row(r).tag(r.id) }
                     .overlay { if list.isEmpty { ContentUnavailableView("Niemand wacht", systemImage: "bell.slash", description: Text("Nieuwe bezoekers verschijnen hier meteen.")) } }
                 Divider()
@@ -26,6 +31,7 @@ struct MacInbox: View {
                     Menu {
                         Button("Exporteren als CSV…") { CSV.export(store.requests) }
                         Divider()
+                        Button("Deze lijst afhandelen…") { askBulk = true }.disabled(list.filter(\.isOpen).isEmpty)
                         Button("Alles als gezien") { Task { await store.run("Gezien") { _ = try await store.post("api/requests/seen") } } }
                         Button("Afgehandelde wissen", role: .destructive) { Task { await store.run("Gewist") { _ = try await store.post("api/requests/clear") } } }
                     } label: { Image(systemName: "ellipsis.circle") }.menuStyle(.borderlessButton).fixedSize()
@@ -37,6 +43,10 @@ struct MacInbox: View {
             }.frame(minWidth: 380, maxWidth: .infinity)
         }
         .navigationTitle("Bezoekers")
+        .confirmationDialog("\(list.filter(\.isOpen).count) verzoeken afhandelen?", isPresented: $askBulk, titleVisibility: .visible) {
+            Button("Afhandelen") { Task { for r in list where r.isOpen { _ = try? await store.post("api/requests/done", ["id": r.id]) }; store.show("Afgehandeld") } }
+            Button("Annuleren", role: .cancel) {}
+        }
         .onChange(of: store.newCount) { _, _ in }
         .onAppear { if UserDefaults.standard.bool(forKey: Pref.autoSeen) { Task { try? await store.post("api/requests/seen") } } }
     }

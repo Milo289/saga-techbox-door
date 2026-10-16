@@ -43,7 +43,7 @@ struct DeurBeheerMacApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings { MacSettings(store: store).frame(width: 620, height: 600).modifier(SchemeModifier()) }
+        Settings { MacSettings(store: store).frame(width: 760, height: 640).modifier(SchemeModifier()) }
     }
 }
 
