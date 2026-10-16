@@ -96,6 +96,7 @@ async function startLocalServer() {
   process.env.DATA_DIR = DATA_DIR;
   process.env.ADMIN_PIN = config.pin || '';
   if (app.isPackaged) process.env.DOOR_APP_EXE = app.getPath('exe'); // so the wake-up schedule can start this app
+  process.once('saga-restart', () => { app.relaunch(); app.exit(0); }); // "Server herstarten" in the panel: start this app again
   const { ready } = require('../server.js');
   await ready;
   return (localServerUrl = url);
