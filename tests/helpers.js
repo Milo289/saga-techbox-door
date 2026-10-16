@@ -27,21 +27,26 @@ async function startServer({ patch = false, system = false, dir, env = {} } = {}
     }
     fs.writeFileSync(path.join(root, 'server.js'), out);
   }
-  const port = 20000 + Math.floor(Math.random() * 30000);
   const dataDir = path.join(dir, 'data');
-  const child = spawn(process.execPath, [path.join(root, 'server.js')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, HOST: '127.0.0.1', DOOR_STARTER_PASSWORD: 'admin-start-123', DOOR_MDNS: 'off', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
-  let log = '';
-  child.stdout.on('data', (d) => { log += d; }); child.stderr.on('data', (d) => { log += d; });
-  const srv = {
-    port, dir, dataDir, child, url: `http://127.0.0.1:${port}`, log: () => log,
-    async stop() { if (child.exitCode === null) { child.kill(); await new Promise((r) => child.once('exit', r)); } },
-  };
-  for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(`${srv.url}/healthz`)).ok) return srv; } catch {}
-    await sleep(100);
+  // a port can be taken, or reserved by the system (Windows keeps ranges for itself): then another one is tried
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const port = 20000 + Math.floor(Math.random() * 30000);
+    const child = spawn(process.execPath, [path.join(root, 'server.js')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, HOST: '127.0.0.1', DOOR_STARTER_PASSWORD: 'admin-start-123', DOOR_MDNS: 'off', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let log = '';
+    child.stdout.on('data', (d) => { log += d; }); child.stderr.on('data', (d) => { log += d; });
+    const srv = {
+      port, dir, dataDir, child, url: `http://127.0.0.1:${port}`, log: () => log,
+      async stop() { if (child.exitCode === null) { child.kill(); await new Promise((r) => child.once('exit', r)); } },
+    };
+    for (let i = 0; i < 100; i++) {
+      try { if ((await fetch(`${srv.url}/healthz`)).ok) return srv; } catch {}
+      if (child.exitCode !== null) break;
+      await sleep(100);
+    }
+    await srv.stop();
+    if (attempt < 5 && /EACCES|EADDRINUSE/.test(log)) continue;
+    throw new Error('server did not start:\n' + log);
   }
-  await srv.stop();
-  throw new Error('server did not start:\n' + log);
 }
 
 async function call(srv, method, p, body, token, headers = {}) {
