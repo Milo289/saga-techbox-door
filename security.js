@@ -177,6 +177,15 @@ function verifyAssertion({ clientDataJSON, authenticatorData, signature }, { cha
   if ((signCount || p.signCount) && p.signCount <= (signCount || 0)) throw new Error('Deze passkey lijkt gekopieerd te zijn en wordt geweigerd.');
   return { signCount: p.signCount };
 }
+
+// The Content-Security-Policy of one HTML page: inline scripts and styles are allowed only by their fingerprint.
+// The browser reads line endings as a single line feed before it fingerprints, so the file's Windows line endings must be treated the same way.
+function pageCsp(html) {
+  const hashes = (tag) => [...html.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'gi'))]
+    .filter((m) => !/\ssrc=/i.test(m[0].slice(0, m[0].indexOf('>'))))
+    .map((m) => `'sha256-${crypto.createHash('sha256').update(m[1].replace(/\r\n?/g, '\n')).digest('base64')}'`);
+  return `default-src 'self'; script-src 'self' ${hashes('script').join(' ')}; style-src 'self' ${hashes('style').join(' ')}; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'`;
+}
 const passkey = { cborDecode, coseToSpki, parseAuthData, verifyRegistration, verifyAssertion, b64u };
 
-module.exports = { passkey, keyStore, base32, totp, sha, recoveryCodes, normRecovery, hashEntry, verifyChain, encryptBackup, decryptBackup, isEncryptedBackup };
+module.exports = { pageCsp, passkey, keyStore, base32, totp, sha, recoveryCodes, normRecovery, hashEntry, verifyChain, encryptBackup, decryptBackup, isEncryptedBackup };

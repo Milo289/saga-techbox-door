@@ -67,3 +67,14 @@ test('recovery codes look right and are matched without dashes or capitals', () 
   for (const c of codes) assert.match(c, /^[0-9a-f]{5}-[0-9a-f]{5}$/);
   assert.equal(sec.normRecovery(codes[0].toUpperCase()), sec.normRecovery(codes[0]));
 });
+
+test('the page policy fingerprints inline scripts the way a browser does, also with Windows line endings', () => {
+  const lf = '<html><style>a { b: c; }\n</style><script src="/x.js"></script><script>\nlet a = 1;\nlet b = 2;\n</script></html>';
+  const crlf = lf.replace(/\n/g, '\r\n');
+  assert.equal(sec.pageCsp(crlf), sec.pageCsp(lf));
+  const csp = sec.pageCsp(lf);
+  const want = require('crypto').createHash('sha256').update('\nlet a = 1;\nlet b = 2;\n').digest('base64');
+  assert.ok(csp.includes(`'sha256-${want}'`), 'the inline script is allowed by its fingerprint');
+  assert.equal((csp.match(/sha256-/g) || []).length, 2, 'the script with a src is not fingerprinted');
+  assert.ok(!/script-src[^;]*unsafe-inline/.test(csp));
+});

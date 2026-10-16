@@ -1362,10 +1362,7 @@ function serveFile(res, file, req) {
     const type = MIME[path.extname(full)] || 'application/octet-stream';
     const compress = /^(text\/|application\/(json|javascript)|image\/svg)/.test(type) && buf.length > 1024;
     let csp = '';
-    if (type.startsWith('text/html')) { // strict: only the scripts and styles that are in the file itself (by fingerprint) and our own files run; nothing injected can
-      const hashes = (tag) => [...buf.toString('utf8').matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'gi'))].filter((m) => !/\ssrc=/i.test(m[0].slice(0, m[0].indexOf('>')))).map((m) => `'sha256-${crypto.createHash('sha256').update(m[1]).digest('base64')}'`);
-      csp = `default-src 'self'; script-src 'self' ${hashes('script').join(' ')}; style-src 'self' ${hashes('style').join(' ')}; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'`;
-    }
+    if (type.startsWith('text/html')) csp = security.pageCsp(buf.toString('utf8')); // strict: only the scripts and styles that are in the file itself (by fingerprint) and our own files run; nothing injected can
     e = { csp, mtime: st.mtimeMs, type, etag: '"' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"', raw: buf, gz: compress ? zlib.gzipSync(buf, { level: 6 }) : null };
     fileCache.set(full, e);
   }
