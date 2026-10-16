@@ -35,6 +35,7 @@
       "pki.js",
       "schedule.js",
       "mdns.js",
+      "settings-schema.js",
       "discover.js",
       "seal.js",
       "access.js",

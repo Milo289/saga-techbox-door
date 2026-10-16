@@ -41,11 +41,11 @@ struct AppSettingsView: View {
     @State private var showTour = false
 
     enum Cat: String, Hashable, CaseIterable, Identifiable {
-        case account, security, notifications, appearance, quick, advanced
+        case account, security, notifications, appearance, quick, advanced, server
         var id: String { rawValue }
-        var title: String { switch self { case .account: return "Account"; case .security: return "Beveiliging"; case .notifications: return "Meldingen"; case .appearance: return "Uiterlijk"; case .quick: return "Snelle acties"; case .advanced: return "Geavanceerd" } }
-        var symbol: String { switch self { case .account: return "person.crop.circle"; case .security: return "lock.shield"; case .notifications: return "bell.badge"; case .appearance: return "paintpalette"; case .quick: return "bolt.fill"; case .advanced: return "gearshape.2" } }
-        var summary: String { switch self { case .account: return "Wie je bent, wachtwoord, tweestapsverificatie, apparaten, servers"; case .security: return "Face ID, vergrendelen, bevestigen, score van de server"; case .notifications: return "Geluid, trillen, stille uren"; case .appearance: return "Donker of licht, kleuren, hoofdscherm"; case .quick: return "Eigen knoppen en het bezoekersformulier"; case .advanced: return "Siri, bewaren en terugzetten, uitleg, over" } }
+        var title: String { switch self { case .account: return "Account"; case .security: return "Beveiliging"; case .notifications: return "Meldingen"; case .appearance: return "Uiterlijk"; case .quick: return "Snelle acties"; case .advanced: return "Geavanceerd"; case .server: return "Alle serverinstellingen" } }
+        var symbol: String { switch self { case .account: return "person.crop.circle"; case .security: return "lock.shield"; case .notifications: return "bell.badge"; case .appearance: return "paintpalette"; case .quick: return "bolt.fill"; case .advanced: return "gearshape.2"; case .server: return "server.rack" } }
+        var summary: String { switch self { case .account: return "Wie je bent, wachtwoord, tweestapsverificatie, apparaten, servers"; case .security: return "Face ID, vergrendelen, bevestigen, score van de server"; case .notifications: return "Geluid, trillen, stille uren"; case .appearance: return "Donker of licht, kleuren, hoofdscherm"; case .quick: return "Eigen knoppen en het bezoekersformulier"; case .advanced: return "Siri, bewaren en terugzetten, uitleg, over"; case .server: return "Alles wat het webpaneel ook kan instellen (alleen ontwikkelaarsversie)" } }
     }
     /// what you can find with the search box
     private static let index: [(String, Cat, String)] = [
@@ -57,6 +57,7 @@ struct AppSettingsView: View {
         ("Geluid bij bezoekers", .notifications, "bel sound"), ("Trillen", .notifications, "haptics"), ("Stille uren", .notifications, "nacht niet storen"), ("Aantal op het app-icoon", .notifications, "badge"),
         ("Uiterlijk", .appearance, "donker licht thema"), ("Kleurthema", .appearance, "kleuren palet accent"), ("Hoofdscherm", .appearance, "knoppen duur bericht planner"), ("App-icoon", .appearance, "icoon"),
         ("Snelle acties", .quick, "lunch vergadering knoppen"), ("Bezoekersformulier", .quick, "verplicht naam e-mail"),
+        ("Alle serverinstellingen", .server, "openingstijden pauzes vakantie mail meldingen teksten kleuren knoppen moderatie systeem"),
         ("Siri en Opdrachten", .advanced, "shortcuts spraak"), ("Instellingen bewaren en terugzetten", .advanced, "export import back-up"), ("Uitleg tonen", .advanced, "rondleiding help"), ("Over", .advanced, "versie ontwikkelaar"),
     ]
     private var results: [(String, Cat)] {
@@ -69,7 +70,7 @@ struct AppSettingsView: View {
             List {
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
                     Section {
-                        ForEach(Cat.allCases) { c in
+                        ForEach(Cat.allCases.filter { $0 != .server || Build.isDeveloperApp }) { c in
                             NavigationLink(value: c) {
                                 HStack(spacing: 14) {
                                     Image(systemName: c.symbol).font(.title3).foregroundStyle(Palette.accent).frame(width: 30)
@@ -108,6 +109,10 @@ struct AppSettingsView: View {
     }
 
     @ViewBuilder private func page(_ c: Cat) -> some View {
+        if c == .server { AllSettingsView(store: store).scrollContentBackground(.hidden).background(Color.black.ignoresSafeArea()) } else { pageForm(c) }
+    }
+
+    @ViewBuilder private func pageForm(_ c: Cat) -> some View {
         Form {
             switch c {
             case .account: accountPage
@@ -116,6 +121,7 @@ struct AppSettingsView: View {
             case .appearance: appearancePage
             case .quick: quickPage
             case .advanced: advancedPage
+            case .server: EmptyView()
             }
         }
         .scrollContentBackground(.hidden).background(Color.black.ignoresSafeArea())

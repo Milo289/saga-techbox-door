@@ -12,6 +12,7 @@ const os = require('os');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const integ = require('./integrations.js'); // microcontrollers, door lock + NFC tags, camera events, automations (all opt-in)
+const settingsSchema = require('./settings-schema.js'); // every setting described as data, for the apps
 const mdns = require('./mdns.js'); // the name saga-deur.local on the local network
 const schedule = require('./schedule.js'); // hours per day, extra buttons, who is told what, auto replies, calendar
 const pki = require('./pki.js'); // an own certificate authority, so https needs no domain
@@ -121,6 +122,8 @@ function cleanSystem(b = {}) {
     retentionDays: num(b.retentionDays, 0, 3650, 0), autoBackup: b.autoBackup === undefined ? true : !!b.autoBackup, backupKeep: num(b.backupKeep, 1, 90, DEFAULT_SYSTEM.backupKeep),
   };
 }
+
+const schemaCtx = (id) => ({ settings: state.settings, system: state.system, can: (p) => can(id, p), UI_TEXTS, BELL_TONES, REPLY_TONES, PASS_MASK });
 
 // ---------- the visitor form: what is asked, what is required ----------
 const FORM_TYPES = [['bell', 'Aanbellen'], ['reason', 'Een reden kiezen'], ['message', 'Een vraagje'], ['appointment', 'Een tijd boeken'], ['callback', 'Terugbellen']];
@@ -1899,6 +1902,22 @@ const adminRoutes = {
     return httpsStatus();
   },
   'GET /api/form-schema': () => ({ groups: formSchema() }),
+  'GET /api/settings-schema': (b, id) => ({ groups: settingsSchema.build(schemaCtx(id)) }),
+  'POST /api/settings-schema/save': (b, id) => {
+    const parsed = settingsSchema.parse(schemaCtx(id), b && typeof b.values === 'object' && b.values ? b.values : {});
+    const setPath = (obj, path, v) => { const parts = path.split('.'); let o = obj; for (const p of parts.slice(0, -1)) { if (!o[p] || typeof o[p] !== 'object') o[p] = {}; o = o[p]; } if (v === null) delete o[parts.at(-1)]; else o[parts.at(-1)] = v; };
+    const body = {};
+    for (const [path, v] of Object.entries(parsed.settings)) { const top = path.split('.')[0]; if (!(top in body)) body[top] = structuredClone(state.settings[top]); setPath(body, path, v); }
+    if (Object.keys(body).length) adminRoutes['POST /api/settings'](body, id);
+    if (Object.keys(parsed.system).length) {
+      const merged = structuredClone(state.system);
+      for (const [path, v] of Object.entries(parsed.system)) setPath(merged, path, v);
+      state.system = cleanSystem({ ...merged, https: state.system.https, httpsPort: state.system.httpsPort });
+      log('systeem', `Systeeminstellingen gewijzigd door ${id.name}`);
+    }
+    log('instellingen', `${id.name} wijzigde ${Object.keys(parsed.settings).length + Object.keys(parsed.system).length} instelling(en) in de app`);
+    return { ok: true };
+  },
   'POST /api/form-settings': (b) => { const n = applyFormValues(b && typeof b.values === 'object' && b.values ? b.values : {}); state.settings.form = sanitizeForm(state.settings.form); log('instellingen', `Bezoekersformulier aangepast (${n} ${n === 1 ? 'instelling' : 'instellingen'})`); return { ok: true, groups: formSchema() }; },
   'POST /api/login/ticket': (b, id) => {
     if (!id.userId) throw bad('Dit kan alleen met een gewoon account.');
@@ -2092,7 +2111,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/https': 'settings', 'GET /api/calendar': 'settings', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/calendar': 'settings', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',

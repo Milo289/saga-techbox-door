@@ -60,7 +60,7 @@ final class MacDelegate: NSObject, NSApplicationDelegate {
         if let path = ProcessInfo.processInfo.environment["DEUR_SNAPSHOT"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
                 // first choice: a real picture of the window as it is on screen (dark mode shows its real colours)
-                if let w = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && $0.title != "" }),
+                if ProcessInfo.processInfo.environment["DEUR_REAL_WINDOW"] != nil, let w = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && $0.title != "" }),
                    let cg = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(w.windowNumber), [.boundsIgnoreFraming, .bestResolution]) {
                     try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
                     NSApp.terminate(nil)

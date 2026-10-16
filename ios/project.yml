@@ -76,6 +76,7 @@ targetTemplates:
       - path: App/Discovery.swift
       - path: App/Extras.swift
       - path: App/Net.swift
+      - path: App/AllSettings.swift
       - path: App/AccountView.swift
       - path: App/Profiles.swift
       - path: App/SecurityUI.swift
