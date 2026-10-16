@@ -1629,7 +1629,7 @@ const adminRoutes = {
     const mo = merged.moderation;
     if (!['flag', 'mask', 'block'].includes(mo.action)) mo.action = 'mask';
     mo.maxPerHour = Math.max(1, Math.min(500, Math.round(Number(mo.maxPerHour)) || 20));
-    mo.words = str(mo.words, 500);
+    mo.words = str(mo.words, 3000);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(merged.away.until)) merged.away.until = '';
     merged.away.message = str(merged.away.message, 140);
     const wx = merged.weather;
@@ -2125,11 +2125,11 @@ const NEED = {
 };
 
 // ----- moderation: filter for bad words, blocked visitors, limits -----
-const DEFAULT_BAD = ['kut', 'kanker', 'tering', 'tyfus', 'klootzak', 'hoer', 'lul', 'eikel', 'debiel', 'fuck', 'fucking', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'dick', 'slut', 'whore', 'idiot'];
+const DEFAULT_BAD = ['kut', 'kutje', 'kutwijf', 'kutmarokkaan', 'klootzak', 'kloothommel', 'kloojo', 'klojo', 'kanker', 'kankerlijer', 'kankerhoer', 'kankerzooi', 'tering', 'teringlijer', 'tyfus', 'tyfuslijer', 'tyfushoer', 'pleuris', 'hoer', 'hoerenzoon', 'hoerenkind', 'slet', 'sloerie', 'lul', 'lulhannes', 'lulkoek', 'eikel', 'debiel', 'mongool', 'mongol', 'spast', 'spastisch', 'klootviool', 'godverdomme', 'godver', 'godverdomd', 'gvd', 'neuk', 'neuken', 'neukt', 'flikker', 'flikkers', 'nicht', 'mietje', 'pedo', 'pedofiel', 'nazi', 'fuck', 'fucking', 'fucker', 'fuckin', 'fuckhead', 'motherfucker', 'mofo', 'shit', 'shitty', 'bullshit', 'bitch', 'bastard', 'asshole', 'arsehole', 'cunt', 'dickhead', 'prick', 'twat', 'wanker', 'slut', 'whore', 'retard', 'retarded', 'faggot', 'fag', 'nigger', 'nigga', 'niggers', 'kaffer', 'kut', 'kanker', 'tering', 'tyfus', 'klootzak', 'hoer', 'lul', 'eikel', 'debiel', 'fuck', 'fucking', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'slut', 'whore', 'idiot'];
 const plainText = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[@4]/g, 'a').replace(/0/g, 'o').replace(/1/g, 'i').replace(/3/g, 'e').replace(/[$5]/g, 's').replace(/7/g, 't');
 function badWords() {
   const m = state.settings.moderation;
-  const own = String(m.words || '').split(/[,;\n]+/).map((w) => plainText(w).trim()).filter((w) => w.length >= 2).slice(0, 200);
+  const own = String(m.words || '').split(/[,;\n]+/).map((w) => plainText(w).trim()).filter((w) => w.length >= 2).slice(0, 400);
   return [...new Set([...(m.defaultList ? DEFAULT_BAD : []), ...own])].map((w) => w.replace(/[^a-z0-9]/g, '')).filter(Boolean);
 }
 // returns the bad words found and a version with those words hidden behind stars

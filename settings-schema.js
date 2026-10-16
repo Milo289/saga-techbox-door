@@ -48,7 +48,7 @@ function build(ctx) {
   add('away', 'Afwezig', 'settings', 'Zet de deur tot een datum op Gesloten, met je eigen bericht.', [B('away.enabled', 'Ik ben afwezig'), F('away.until', 'Tot en met', 'date'), T('away.message', 'Bericht', 140)]);
   add('startup', 'Opstarten', 'settings', 'Wat de deur laat zien als de server opnieuw start.', [C('startup.status', 'Status bij opstarten', [['hours', 'Volg de openingstijden'], ['open', 'Open'], ['closed', 'Gesloten'], ['busy', 'Bezet']]), T('startup.message', 'Bericht', 140)]);
   add('moderation', 'Moderatie', 'settings', 'Houd het netjes: ongepaste woorden filteren en nieuwe profielen eerst goedkeuren.', [
-    B('moderation.filter', 'Ongepaste woorden herkennen'), B('moderation.defaultList', 'De ingebouwde lijst gebruiken'), T('moderation.words', 'Eigen woorden (gescheiden door komma’s)', 500),
+    B('moderation.filter', 'Ongepaste woorden herkennen'), B('moderation.defaultList', 'De ingebouwde lijst gebruiken'), T('moderation.words', 'Eigen woorden (gescheiden door komma’s)', 3000),
     C('moderation.action', 'Wat gebeurt er?', [['mask', 'Het woord verbergen en het bericht markeren'], ['flag', 'Alleen het bericht markeren'], ['block', 'Het bericht niet versturen']]),
     N('moderation.maxPerHour', 'Berichten per uur per telefoon', 1, 500), B('moderation.profileApproval', 'Nieuwe profielen eerst goedkeuren'),
   ]);
