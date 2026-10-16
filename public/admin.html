@@ -237,6 +237,13 @@
     <label class="check" style="font-size:14px"><input type="checkbox" id="remember"><span id="rememberText">Onthoud mij op dit apparaat</span></label>
     <button class="white" id="loginBtn" type="submit">Inloggen</button>
   </form>
+  <form id="codeForm" class="lf hidden">
+    <p class="muted" style="margin:0">Open je verificatie-app en typ de code van 6 cijfers. Kwijt? Gebruik een herstelcode.</p>
+    <input id="lc" name="code" inputmode="text" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" placeholder="Code">
+    <button class="white" id="codeBtn" type="submit">Bevestigen</button>
+    <button class="link-btn" id="codeBack" type="button">Terug</button>
+  </form>
+  <button class="link-btn hidden" id="passkeyBtn" type="button">Inloggen met een passkey</button>
   <form id="pinForm" class="lf hidden">
     <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Pincode">
     <button class="white" id="pinBtn" type="submit">Ontgrendelen</button>
@@ -421,6 +428,7 @@
       const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: saved.username, password: saved.password, remember: true }) });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { if (res.status === 401) window.doorApp.clearLogin(); return false; } // password changed: forget it
+      if (out.needs2fa) return false; // the code has to be typed by hand
       TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', '');
       return true;
     } catch { return false; }
@@ -442,7 +450,10 @@
   }
   function setLoginForm(which) {
     $('userForm').classList.toggle('hidden', which !== 'user');
+    $('codeForm').classList.toggle('hidden', which !== 'code');
+    $('passkeyBtn').classList.toggle('hidden', which !== 'user' || !window.PublicKeyCredential);
     $('pinForm').classList.toggle('hidden', which !== 'pin');
+    if (which === 'code') $('swapLogin').classList.add('hidden'); else if (authInfo.pin && authInfo.mode !== 'pin') $('swapLogin').classList.remove('hidden');
     $('swapLogin').textContent = which === 'user' ? 'Liever met een pincode inloggen' : 'Inloggen met gebruikersnaam';
     $('swapLogin').onclick = () => { setLoginForm(which === 'user' ? 'pin' : 'user'); $('pinErr').textContent = ''; setTimeout(() => $(which === 'user' ? 'pin' : 'lu').focus(), 30); };
   }
@@ -455,11 +466,42 @@
       const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...typed, remember }) });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { $('pinErr').textContent = out.error || 'Inloggen lukte niet'; $('lp').value = ''; $('lp').focus(); return; }
+      if (out.needs2fa) { mfaTicket = out.mfa; mfaTyped = typed; mfaRemember = remember; $('lp').value = ''; setLoginForm('code'); $('lc').focus(); return; }
       TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', ''); $('lp').value = '';
       if (window.doorApp?.saveLogin) { if (remember) window.doorApp.saveLogin(typed.username, typed.password).then((r) => { if (r && !r.ok && r.error) toast(r.error); }); else window.doorApp.clearLogin(); }
       start();
     } catch { $('pinErr').textContent = 'Geen verbinding met de deurserver'; }
     finally { btn.disabled = false; }
+  };
+  let mfaTicket = '', mfaTyped = null, mfaRemember = false;
+  $('codeBack').onclick = () => { mfaTicket = ''; $('lc').value = ''; $('pinErr').textContent = ''; setLoginForm('user'); };
+  $('codeForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('codeBtn'); btn.disabled = true; $('pinErr').textContent = '';
+    try {
+      const res = await fetch('/api/login/2fa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mfa: mfaTicket, code: $('lc').value }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { $('pinErr').textContent = out.error || 'Die code werkt niet'; $('lc').value = ''; if (res.status === 429 || /verlopen/.test(out.error || '')) $('codeBack').click(); return; }
+      TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', ''); $('lc').value = '';
+      if (window.doorApp?.saveLogin && mfaTyped) { if (mfaRemember) window.doorApp.saveLogin(mfaTyped.username, mfaTyped.password); else window.doorApp.clearLogin(); }
+      start();
+    } catch { $('pinErr').textContent = 'Geen verbinding met de deurserver'; }
+    finally { btn.disabled = false; }
+  };
+  // passkey: fingerprint / face / device code instead of a password (only on https or localhost, with a name instead of an IP address)
+  const b64 = { to: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), from: (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)).buffer };
+  $('passkeyBtn').onclick = async () => {
+    $('pinErr').textContent = '';
+    try {
+      const o = await fetch('/api/login/passkey', { cache: 'no-store' }).then((r) => r.json());
+      if (!o.available) { $('pinErr').textContent = o.why || 'Passkeys zijn hier niet beschikbaar.'; return; }
+      const cred = await navigator.credentials.get({ publicKey: { challenge: b64.from(o.challenge), rpId: o.rpId, userVerification: 'required', timeout: 60000 } });
+      const a = cred.response;
+      const res = await fetch('/api/login/passkey', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challenge: o.challenge, id: cred.id, clientDataJSON: b64.to(a.clientDataJSON), authenticatorData: b64.to(a.authenticatorData), signature: b64.to(a.signature), remember: $('remember').checked }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { $('pinErr').textContent = out.error || 'Deze passkey werkt niet'; return; }
+      TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', ''); start();
+    } catch (e) { $('pinErr').textContent = e && e.name === 'NotAllowedError' ? 'De passkey is geannuleerd.' : 'Inloggen met een passkey lukte niet.'; }
   };
   $('pinForm').onsubmit = (e) => { e.preventDefault(); PIN = $('pin').value.trim(); TOKEN = ''; store.set('doorToken', ''); store.set('doorPin', PIN); $('pin').value = ''; start(); };
   async function logout() {

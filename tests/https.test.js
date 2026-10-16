@@ -35,3 +35,15 @@ test('https with the own CA: off by default, on by setting, trusted only with th
   const sc = (await call(srv, 'GET', '/api/admin-state', undefined, tok)).json.security;
   assert.ok(JSON.stringify(sc).includes('https'));
 });
+
+test('strict CSP: pages allow only their own scripts by fingerprint, never unsafe-inline scripts', async (t) => {
+  const srv = await startServer({ patch: true, dir: fs.mkdtempSync(path.join(os.tmpdir(), 'csp-')) });
+  t.after(() => srv.stop());
+  for (const p of ['/', '/admin', '/start', '/help', '/visit']) {
+    const r = await fetch(srv.url + p);
+    const csp = r.headers.get('content-security-policy') || '';
+    const script = csp.split(';').find((x) => x.trim().startsWith('script-src')) || '';
+    assert.ok(!script.includes('unsafe-inline') && !script.includes('unsafe-eval'), p + ': ' + script);
+    if (p !== '/help') assert.match(script, /sha256-/);
+  }
+});
