@@ -297,7 +297,7 @@
   const can = (p) => !!S?.me?.perms.includes(p);
   let S = null;
   let tab = store.get('doorTab', 'now');
-  if (!['now', 'inbox', 'settings', 'admin', 'system'].includes(tab)) tab = 'now';
+  if (!['now', 'inbox', 'settings', 'design', 'admin', 'security', 'system'].includes(tab)) tab = 'now';
   let inboxFilter = 'open';
   let alertId = null;
   let es = null, lastMsg = 0;
@@ -880,9 +880,9 @@
   function updateTitle() { const n = S ? S.requests.filter((r) => r.state === 'new').length : 0; document.title = (n ? `(${n}) ` : '') + 'Deurbediening'; }
 
   // ---------- frame ----------
-  const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], can('settings') && ['design', 'Ontwerp'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer'], can('system') && ['system', 'Systeem']].filter(Boolean);
+  const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], can('settings') && ['design', 'Ontwerp'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer'], S.me.kind !== 'open' && ['security', 'Beveiliging'], can('system') && ['system', 'Systeem']].filter(Boolean);
   let userDraft = null, keyDraft = null, newKey = null;
-  const editing = () => tab === 'settings' || tab === 'design' || tab === 'system' || (tab === 'admin' && (userDraft || keyDraft));
+  const editing = () => tab === 'security' || tab === 'settings' || tab === 'design' || tab === 'system' || (tab === 'admin' && (userDraft || keyDraft));
   function setTab(t) { tab = t; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
 
   // never redraw while a finger/mouse button is down, or that click would get lost
@@ -1326,7 +1326,155 @@
   }
 
   // ---------- views ----------
+
+  // ---------- Beveiliging: score, my account (two-step, passkeys, devices), https, attacks, log, system ----------
+  const fill = (el, ...kids) => el.replaceChildren(...kids.flat(9).filter((k) => k != null && k !== false));
+  const secBox = (title, ...kids) => h('div', { class: 'card' }, h('h2', {}, title), ...kids.flat());
+  const saveBlob = (name, text, type = 'text/plain') => { const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name }); a.click(); };
+  const getFile = async (path, fallbackName) => {
+    const res = await fetch(path, { headers: authHeaders() });
+    if (!res.ok) { toast('Downloaden lukte niet'); return; }
+    saveBlob(fallbackName, await res.text());
+  };
+  function scoreCard() {
+    const box = secBox('Beveiligingsscore');
+    const sec = S.security;
+    if (!sec) { box.append(h('p', { class: 'muted' }, 'De score is te zien met het recht “Instellingen wijzigen”.')); return box; }
+    const tone = sec.score >= 80 ? 'var(--open)' : sec.score >= 50 ? 'var(--busy)' : 'var(--closed)';
+    box.append(h('div', { class: 'row', style: 'align-items:baseline;gap:10px' }, h('b', { style: `font-size:40px;color:${tone}` }, sec.score), h('span', { class: 'muted' }, 'van 100')));
+    for (const i of sec.items) {
+      box.append(h('div', { class: 'row', style: 'gap:8px;margin:6px 0;align-items:flex-start' },
+        h('span', { style: `color:${i.ok ? 'var(--open)' : 'var(--busy)'};width:18px` }, i.ok ? '✓' : '!'),
+        h('div', { class: 'grow' }, h('div', {}, i.text), i.tip ? h('div', { class: 'muted', style: 'font-size:13px' }, i.tip) : null),
+        i.fix ? h('button', { class: 'sm', onclick: async () => { await api('/api/security/fix', { id: i.fix }); toast('Opgelost'); } }, 'Los op') : null));
+    }
+    return box;
+  }
+  function twoStepCard() {
+    const box = secBox('Tweestapsverificatie');
+    const out = h('div', {});
+    box.append(out);
+    const showCodes = (codes) => fill(out, h('p', {}, 'Bewaar deze herstelcodes ergens veilig. Elke code werkt één keer, voor als je je telefoon kwijt bent. Je ziet ze niet nog een keer.'), h('pre', { style: 'user-select:all;font-size:15px;line-height:1.7' }, codes.join('\n')),
+      h('div', { class: 'row' }, h('button', { class: 'white sm', onclick: () => saveBlob('herstelcodes.txt', codes.join('\n') + '\n') }, 'Opslaan als bestand'), h('button', { class: 'sm', onclick: draw }, 'Klaar')));
+    async function draw() {
+      const st = await api('/api/2fa/status');
+      if (!st.enabled) {
+        fill(out, h('p', { class: 'muted' }, 'Naast je wachtwoord vraagt de server dan een code uit een app (zoals Google Authenticator, Microsoft Authenticator of 1Password). Zo kan niemand met alleen je wachtwoord inloggen.' + (st.required ? ' De beheerder eist dit voor jouw account.' : '')),
+          h('button', { class: 'white', onclick: async () => {
+            const s = await api('/api/2fa/setup', {});
+            const svg = h('div', { style: 'width:190px;background:#fff;padding:8px;border-radius:10px' });
+            if (window.QR) svg.innerHTML = QR.svg(s.uri, { border: 1 });
+            const code = h('input', { placeholder: 'Code van 6 cijfers', inputmode: 'numeric', autocomplete: 'one-time-code', style: 'width:180px' });
+            fill(out, h('p', {}, '1. Scan deze code met je verificatie-app. Lukt dat niet? Typ deze sleutel over: ', h('b', { style: 'user-select:all' }, s.secret)), svg, h('p', {}, '2. Typ de code die de app nu laat zien.'),
+              h('div', { class: 'row' }, code, h('button', { class: 'white', onclick: async () => { const r = await api('/api/2fa/enable', { code: code.value }); showCodes(r.recovery); S.me.twoStep = true; S.me.mustSetup2fa = false; } }, 'Aanzetten')));
+          } }, 'Instellen'));
+      } else {
+        const pw = h('input', { type: 'password', placeholder: 'Je wachtwoord', autocomplete: 'current-password' }), code = h('input', { placeholder: 'Code', autocomplete: 'one-time-code', style: 'width:140px' });
+        fill(out, h('p', {}, '✓ Staat aan. Je hebt nog ', h('b', {}, st.recoveryLeft), ' herstelcodes.'),
+          h('div', { class: 'row' }, code, h('button', { class: 'sm', onclick: async () => { const r = await api('/api/2fa/recovery', { code: code.value }); showCodes(r.recovery); } }, 'Nieuwe herstelcodes')),
+          h('h3', { style: 'margin:14px 0 6px' }, 'Uitzetten'), h('div', { class: 'row' }, pw, h('button', { class: 'sm danger', onclick: async () => { await api('/api/2fa/disable', { password: pw.value, code: code.value }); toast('Uitgezet'); draw(); } }, 'Uitzetten')), h('p', { class: 'muted', style: 'font-size:13px' }, 'Daarvoor typ je ook de code hierboven in.'));
+      }
+    }
+    draw().catch(() => {});
+    return box;
+  }
+  function passkeyCard() {
+    const box = secBox('Passkeys');
+    const out = h('div', {});
+    box.append(h('p', { class: 'muted' }, 'Inloggen met je vingerafdruk, gezicht of toestelcode, zonder wachtwoord. Werkt alleen met een beveiligde verbinding (https) en een naam in plaats van een IP-adres, bijvoorbeeld https://saga-deur.local.'), out);
+    async function draw() {
+      const list = (await api('/api/passkeys')).passkeys;
+      fill(out, ...list.map((k) => h('div', { class: 'row', style: 'margin:6px 0' }, h('div', { class: 'grow' }, k.name, h('span', { class: 'muted' }, k.lastUsed ? ` — laatst gebruikt ${ago(k.lastUsed)}` : ' — nog niet gebruikt')), h('button', { class: 'sm danger', onclick: async () => { await api('/api/passkeys/remove', { id: k.id }); draw(); } }, 'Verwijderen'))),
+        window.PublicKeyCredential ? h('button', { class: 'white', onclick: add }, 'Passkey toevoegen') : h('p', { class: 'muted' }, 'Deze browser kent geen passkeys.'));
+    }
+    async function add() {
+      try {
+        const o = await api('/api/passkeys/options', {});
+        const cred = await navigator.credentials.create({ publicKey: { challenge: b64.from(o.challenge), rp: { id: o.rpId, name: o.rpName }, user: { id: b64.from(o.user.id), name: o.user.name, displayName: o.user.displayName }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }], authenticatorSelection: { residentKey: 'required', userVerification: 'required' }, excludeCredentials: o.exclude.map((id) => ({ type: 'public-key', id: b64.from(id) })), attestation: 'none', timeout: 60000 } });
+        await api('/api/passkeys/add', { challenge: o.challenge, clientDataJSON: b64.to(cred.response.clientDataJSON), attestationObject: b64.to(cred.response.attestationObject) });
+        toast('Passkey toegevoegd'); draw();
+      } catch (e) { if (e && e.name) toast(e.name === 'NotAllowedError' ? 'Geannuleerd' : 'Toevoegen lukte niet'); }
+    }
+    draw().catch(() => {});
+    return box;
+  }
+  function sessionsCard() {
+    const box = secBox('Mijn apparaten');
+    const out = h('div', {});
+    box.append(out);
+    async function draw() {
+      const list = (await api('/api/my/sessions')).sessions;
+      fill(out, ...list.map((x) => h('div', { class: 'row', style: 'margin:6px 0' }, h('div', { class: 'grow' }, x.device, x.current ? h('b', {}, ' (dit apparaat)') : null, h('div', { class: 'muted', style: 'font-size:13px' }, `${x.ip} — laatst actief ${ago(x.lastSeen)}`)), x.current ? null : h('button', { class: 'sm', onclick: async () => { await api('/api/my/sessions/revoke', { id: x.id }); draw(); } }, 'Uitloggen'))),
+        list.length > 1 ? h('button', { class: 'sm danger', onclick: async () => { await api('/api/my/sessions/revoke', { others: true }); toast('Overal uitgelogd'); draw(); } }, 'Overal uitloggen behalve hier') : null);
+    }
+    draw().catch(() => {});
+    return box;
+  }
+  function httpsCard() {
+    const box = secBox('Beveiligde verbinding (https)');
+    const out = h('div', {});
+    box.append(out);
+    async function draw() {
+      const st = await api('/api/https');
+      fill(out, 
+        h('p', { class: 'muted' }, 'De server maakt zijn eigen certificaat; je hoeft niets te kopen en geen domein te hebben. Je installeert het certificaat één keer op elk apparaat. Daarna is de verbinding versleuteld en geeft de browser geen waarschuwing meer.'),
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: st.enabled, onchange: async (e) => { await api('/api/https/settings', { enabled: e.target.checked }); setTimeout(draw, 700); } }), 'Https aanzetten (poort ' + st.port + ')'),
+        st.running ? h('div', {}, h('p', {}, 'Bereikbaar op: ', ...st.urls.flatMap((u) => [h('b', { style: 'user-select:all' }, u), ' '])),
+          h('div', { class: 'row' }, h('button', { class: 'sm', onclick: () => { location.href = '/ca.crt'; } }, 'Certificaat (Mac, Windows, Linux, Android)'), h('button', { class: 'sm', onclick: () => { location.href = '/ca.mobileconfig'; } }, 'Profiel voor iPhone en iPad'), h('button', { class: 'sm', onclick: async () => { await api('/api/https/renew', {}); toast('Vernieuwd'); draw(); } }, 'Vernieuw servercertificaat')),
+          h('p', { class: 'muted', style: 'font-size:13px' }, 'iPhone/iPad: installeer het profiel in Instellingen, en zet daarna het vertrouwen aan bij Instellingen → Algemeen → Info → Certificaatvertrouwen. Mac: open het bestand en zet het op “Altijd vertrouwen”. Vingerafdruk van het certificaat: ' + st.fingerprint)) : (st.enabled ? h('p', { class: 'muted' }, 'Bezig met starten…') : null));
+    }
+    draw().catch(() => { box.replaceChildren(h('h2', {}, 'Beveiligde verbinding (https)'), h('p', { class: 'muted' }, 'Zichtbaar met het recht “Instellingen wijzigen”.')); });
+    return box;
+  }
+  function attackCard() {
+    const box = secBox('Aanvallen en blokkades');
+    const out = h('div', {});
+    box.append(out);
+    async function draw() {
+      const d = await api('/api/security/bans');
+      const ip = h('input', { placeholder: 'IP-adres om te blokkeren', style: 'width:200px' });
+      fill(out, 
+        d.bans.length || d.lockouts.length ? [...d.bans.map((b) => h('div', { class: 'row', style: 'margin:6px 0' }, h('div', { class: 'grow' }, b.ip, h('span', { class: 'muted' }, ` — geblokkeerd tot ${fmtWhen(b.until)}`)), h('button', { class: 'sm', onclick: async () => { await api('/api/security/unban', { ip: b.ip }); draw(); } }, 'Opheffen'))),
+          ...d.lockouts.map((b) => h('div', { class: 'row', style: 'margin:6px 0' }, h('div', { class: 'grow' }, b.ip, h('span', { class: 'muted' }, ` — ${b.tries} foute inlogpogingen`)), h('button', { class: 'sm', onclick: async () => { await api('/api/security/unban', { ip: b.ip }); draw(); } }, 'Opheffen')))] : h('p', { class: 'muted' }, 'Er is nu niemand geblokkeerd.'),
+        h('div', { class: 'row' }, ip, h('button', { class: 'sm', onclick: async () => { await api('/api/security/ban', { ip: ip.value, minutes: 60 }); draw(); } }, 'Blokkeer 1 uur')));
+    }
+    draw().catch(() => { box.replaceChildren(h('h2', {}, 'Aanvallen en blokkades'), h('p', { class: 'muted' }, 'Zichtbaar met het recht “Instellingen wijzigen”.')); });
+    return box;
+  }
+  function auditCard() {
+    const box = secBox('Logboek');
+    const out = h('p', { class: 'muted' }, 'Elke regel in het logboek is aan de vorige vastgemaakt. Wordt er iets aangepast of weggehaald, dan zie je dat hier.');
+    box.append(out, h('div', { class: 'row' },
+      h('button', { class: 'sm', onclick: async () => { const v = await api('/api/audit/verify'); out.textContent = v.ok ? `✓ Het logboek klopt (${v.lines} regels).` : `✗ Het logboek is aangepast bij regel ${v.brokenAt + 1}.`; } }, 'Controleer'),
+      h('button', { class: 'sm', onclick: () => getFile('/api/audit/export?format=csv', 'logboek.csv') }, 'Exporteer (Excel)'),
+      h('button', { class: 'sm', onclick: () => getFile('/api/audit/export?format=json', 'logboek.json') }, 'Exporteer (JSON)')));
+    return box;
+  }
+  function systemSecurityCard() {
+    const box = secBox('Back-ups, aanvalsbeveiliging en herstart');
+    const out = h('div', {});
+    box.append(out);
+    api('/api/system').then(({ system }) => {
+      const a = system.attack || {}, v = { ...system, attack: { ...a } };
+      const num = (label, get, set, min, max, unit) => [h('label', {}, label), h('input', { type: 'number', min, max, value: get(), style: 'width:110px', oninput: (e) => set(Number(e.target.value)) }), unit ? h('span', { class: 'muted' }, ' ' + unit) : null];
+      fill(out, h('div', { class: 'form' },
+        h('label', {}, 'Tweestapsverificatie verplicht voor'), h('select', { onchange: (e) => { v.require2fa = e.target.value; } }, ...[['off', 'niemand'], ['root', 'het hoofdaccount'], ['privileged', 'iedereen met veel rechten']].map(([k, l]) => h('option', { value: k, selected: v.require2fa === k }, l))),
+        h('label', {}, 'Wachtwoord voor back-ups'), h('input', { type: 'password', value: v.backupPassword || '', autocomplete: 'new-password', oninput: (e) => { v.backupPassword = e.target.value; }, placeholder: 'Leeg = niet versleuteld' }),
+        h('label', {}, 'Tweede kopie van back-ups in map'), h('input', { value: v.backupCopyDir || '', placeholder: 'Bijvoorbeeld een USB-stick of netwerkmap', oninput: (e) => { v.backupCopyDir = e.target.value; } }),
+        h('label', {}, 'Aanvalsbeveiliging'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: v.rateLimit !== false, onchange: (e) => { v.rateLimit = e.target.checked; } }), 'Aan'),
+        num('Piek per adres', () => v.attack.burst, (x) => { v.attack.burst = x; }, 20, 2000, 'verzoeken'), num('Gemiddeld per seconde', () => v.attack.perSec, (x) => { v.attack.perSec = x; }, 1, 200, ''),
+        num('Waarschuwingen voor blokkade', () => v.attack.strikes, (x) => { v.attack.strikes = x; }, 1, 50, 'keer'), num('Blokkade duurt', () => v.attack.banMinutes, (x) => { v.attack.banMinutes = x; }, 1, 1440, 'minuten'), num('Live-verbindingen per adres', () => v.attack.maxSse, (x) => { v.attack.maxSse = x; }, 1, 100, '')),
+        h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { class: 'white', onclick: async () => { await api('/api/system/settings', v); toast('Opgeslagen'); } }, 'Opslaan'),
+          h('button', { class: 'sm danger', onclick: async () => { if (!confirm('De server herstart nu. Het duurt een paar seconden. Doorgaan?')) return; await api('/api/system/restart', {}); toast('Herstarten…'); } }, 'Server herstarten')));
+    }).catch(() => { box.replaceChildren(h('h2', {}, 'Back-ups, aanvalsbeveiliging en herstart'), h('p', { class: 'muted' }, 'Alleen zichtbaar voor het hoofdaccount.')); });
+    return box;
+  }
+  function securityView() {
+    return [scoreCard(), twoStepCard(), passkeyCard(), sessionsCard(), can('settings') ? httpsCard() : null, can('settings') ? attackCard() : null, can('audit') ? auditCard() : null, can('system') ? systemSecurityCard() : null].filter(Boolean);
+  }
+
   const VIEWS = {
+    security: securityView,
     now() {
       const v = S.view;
       if (!can('status')) {
