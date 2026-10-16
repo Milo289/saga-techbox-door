@@ -138,7 +138,7 @@ struct MacSettings: View {
         guard let base = DoorApi.normalize(server) ?? DoorApi.configured()?.base else { message = "Vul eerst een serveradres in."; return }
         let name = user.trimmingCharacters(in: .whitespaces).lowercased()
         do {
-            _ = try await DoorApi(base: base).login(username: name, password: pass)
+            try await DoorApi(base: base).verify(username: name, password: pass)
             guard Keychain.save(username: name, password: pass) else { message = "Opslaan in de Sleutelhanger mislukte."; return }
             UserDefaults.standard.set(name, forKey: "accountName")
             UserDefaults.standard.set(base.absoluteString, forKey: "serverURL"); pass = ""; store.restart(); message = "Ingelogd als \(name)"

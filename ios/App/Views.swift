@@ -33,6 +33,7 @@ struct ContentView: View {
         .statusBarHidden(model.configured && model.role == "door")
         .persistentSystemOverlays(model.configured && model.role == "door" ? .hidden : .automatic)
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
+        .securitySheets(DoorStore.shared)
         .onAppear { if model.configured && model.role == "control" { Task { await model.unlock() } } }
         .onChange(of: phase) { _, new in
             if new == .background { leftAt = Date() }
@@ -138,13 +139,13 @@ struct OnboardingView: View {
         guard let url = DoorApi.normalize(server) else { error = "Dat adres klopt niet."; return }
         if choice == "door" {
             var req = URLRequest(url: url.appendingPathComponent("healthz")); req.timeoutInterval = 8
-            guard let (_, res) = try? await URLSession.shared.data(for: req), (res as? HTTPURLResponse)?.statusCode == 200 else { error = "Geen deurserver gevonden op dit adres."; return }
+            guard let (_, res) = try? await Net.session.data(for: req), (res as? HTTPURLResponse)?.statusCode == 200 else { error = "Geen deurserver gevonden op dit adres."; return }
             UserDefaults.standard.set(url.absoluteString, forKey: "serverURL")
             model.finishDoorSetup()
             return
         }
         do {
-            _ = try await DoorApi(base: url).login(username: user.trimmingCharacters(in: .whitespaces).lowercased(), password: pass)
+            try await DoorApi(base: url).verify(username: user.trimmingCharacters(in: .whitespaces).lowercased(), password: pass)
             UserDefaults.standard.set(url.absoluteString, forKey: "serverURL")
             guard Keychain.save(username: user.trimmingCharacters(in: .whitespaces).lowercased(), password: pass) else { error = "Opslaan in de Sleutelhanger mislukte."; return }
             pass = ""

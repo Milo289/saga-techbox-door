@@ -145,6 +145,15 @@ struct WebContainer: UIViewRepresentable {
             return top
         }
 
+        // https with the server's own authority: accept it when the user trusted its fingerprint (see Net.swift)
+        func webView(_ web: WKWebView, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+            let (d, c) = Pins.decide(challenge)
+            if d == .cancelAuthenticationChallenge, let host = challenge.protectionSpace.host as String?, let fp = Pins.takePending(host) {
+                Task { @MainActor in DoorStore.shared.askTrust(host: host, fingerprint: fp) }
+            }
+            completionHandler(d, c)
+        }
+
         // a failed load (server off, wrong network) shows a retry page instead of a blank screen
         func webView(_ web: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             let html = """

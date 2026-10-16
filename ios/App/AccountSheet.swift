@@ -82,7 +82,7 @@ struct AccountSheet: View {
         guard let base = DoorApi.normalize(server) ?? DoorApi.configured()?.base else { message = "Vul eerst een serveradres in."; good = false; return }
         let name = user.trimmingCharacters(in: .whitespaces).lowercased()
         do {
-            _ = try await DoorApi(base: base).login(username: name, password: pass)
+            try await DoorApi(base: base).verify(username: name, password: pass)
             guard Keychain.save(username: name, password: pass) else { message = "Opslaan in de Sleutelhanger mislukte."; good = false; return }
             UserDefaults.standard.set(base.absoluteString, forKey: "serverURL")
             pass = ""

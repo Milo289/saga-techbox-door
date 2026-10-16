@@ -28,6 +28,10 @@ test('https with the own CA: off by default, on by setting, trusted only with th
   const ok = await get((await call(srv, 'GET', '/api/https', undefined, tok)).json.port, '/api/where', caPem);
   assert.equal(ok.status, 200);
   await assert.rejects(get((await call(srv, 'GET', '/api/https', undefined, tok)).json.port, '/api/where'), /self.signed|unable to verify|certificate/i);
+  // the server sends its authority after its own certificate, so an app can show the fingerprint
+  const sent = await new Promise((resolve, reject) => { const s = require('tls').connect({ host: '127.0.0.1', port: (srv.https || port), rejectUnauthorized: false }, () => { const c = s.getPeerCertificate(true); s.end(); resolve(c); }); s.on('error', reject); });
+  assert.ok(sent.issuerCertificate && sent.issuerCertificate.fingerprint256, 'the chain has the authority');
+  assert.equal(sent.issuerCertificate.fingerprint256, (await call(srv, 'GET', '/api/https', undefined, tok)).json.fingerprint);
   const prof = await call(srv, 'GET', '/ca.mobileconfig');
   assert.equal(prof.status, 200);
   const ren = await call(srv, 'POST', '/api/https/renew', {}, tok);

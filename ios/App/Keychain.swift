@@ -45,7 +45,28 @@ enum Keychain {
         return (account, password)
     }
 
+    // the long-lived session key, kept apart from the password: with two-step verification the app must not need the code again every time
+    private static var tokenService: String { service + ".token" }
+    static func saveToken(_ token: String) {
+        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: tokenService]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecAttrAccount as String] = "session"; add[kSecValueData as String] = Data(token.utf8); add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        if SecItemAdd(add as CFDictionary, nil) != errSecSuccess { UserDefaults.standard.set(token, forKey: "debug.token") }
+    }
+    static func loadToken() -> String? {
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: tokenService, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        var item: CFTypeRef?
+        if SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess, let d = item as? Data, let t = String(data: d, encoding: .utf8) { return t }
+        return UserDefaults.standard.string(forKey: "debug.token")
+    }
+    static func deleteToken() {
+        SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: tokenService] as CFDictionary)
+        UserDefaults.standard.removeObject(forKey: "debug.token")
+    }
+
     static func delete() {
+        deleteToken()
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
         SecItemDelete(query as CFDictionary)
         #if DEBUG && targetEnvironment(simulator)

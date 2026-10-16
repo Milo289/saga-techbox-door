@@ -62,6 +62,7 @@ struct MacRoot: View {
             }
         }
         .preferredColorScheme(appearance.colorScheme)
+        .securitySheets(store)
         .task { configured = await Task.detached { DoorApi.configured() != nil && Keychain.load() != nil }.value }
     }
 }
@@ -145,7 +146,7 @@ struct MacConnect: View {
         guard let url = DoorApi.normalize(server) else { error = "Dat adres klopt niet."; return }
         let name = user.trimmingCharacters(in: .whitespaces).lowercased()
         do {
-            _ = try await DoorApi(base: url).login(username: name, password: pass)
+            try await DoorApi(base: url).verify(username: name, password: pass)
             guard Keychain.save(username: name, password: pass) else { error = "Opslaan in de Sleutelhanger mislukte."; return }
             UserDefaults.standard.set(name, forKey: "accountName")
             UserDefaults.standard.set(url.absoluteString, forKey: "serverURL")

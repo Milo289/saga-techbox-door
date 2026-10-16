@@ -21,6 +21,9 @@ final class DoorStore: ObservableObject {
     @Published private(set) var events: [EventLine] = []
     @Published private(set) var lastLatencyMs: Int?
     @Published var banner: String?
+    struct TrustPrompt: Identifiable { let host: String; let fingerprint: String; var id: String { host + fingerprint } }
+    @Published var trustPrompt: TrustPrompt?
+    @Published var needsCode: String?
 
     private var token: String?
     private var stream: Task<Void, Never>?
@@ -79,6 +82,8 @@ final class DoorStore: ObservableObject {
                 break
             } catch let f as DoorApi.Failure {
                 if case .wrongLogin = f { connection = .offline("Inloggen mislukt — controleer je gegevens"); running = false; break }
+                if case .needs2fa(let mfa) = f { needsCode = mfa; connection = .offline("Er is een code nodig"); running = false; break }
+                if case .untrusted(let host, let fp) = f { trustPrompt = TrustPrompt(host: host, fingerprint: fp); connection = .offline("Het certificaat moet nog worden vertrouwd"); running = false; break }
                 connection = .offline(f.localizedDescription)
                 failures += 1
             } catch {
@@ -93,7 +98,7 @@ final class DoorStore: ObservableObject {
     private func ensureToken() async throws {
         if token != nil { return }
         guard let api = DoorApi.configured() else { throw DoorApi.Failure.noServer }
-        token = try await api.session()
+        do { token = try await api.session() } catch DoorApi.Failure.needs2fa(let m) { needsCode = m; throw DoorApi.Failure.needs2fa(m) }
         log("login", "Ingelogd")
     }
 
@@ -107,12 +112,15 @@ final class DoorStore: ObservableObject {
         if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
         let t0 = Date()
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await Net.session.data(for: req)
             lastLatencyMs = Int(Date().timeIntervalSince(t0) * 1000)
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             if UserDefaults.standard.bool(forKey: Pref.verboseLog) { log("api", "\(method) \(path) → \(code) (\(lastLatencyMs ?? 0) ms)") }
             return (code, data)
-        } catch { throw DoorApi.Failure.offline }
+        } catch {
+            if let host = req.url?.host, let fp = Pins.takePending(host) { throw DoorApi.Failure.untrusted(host: host, fingerprint: fp) }
+            throw DoorApi.Failure.offline
+        }
     }
 
     /// One call to the server with your own login. Logs in again once if the session ended.
@@ -135,6 +143,19 @@ final class DoorStore: ObservableObject {
         return out
     }
 
+    // MARK: security questions the connection can ask
+    func askTrust(host: String, fingerprint: String) { trustPrompt = TrustPrompt(host: host, fingerprint: fingerprint) }
+    func acceptTrust() { if let p = trustPrompt { Pins.trust(host: p.host, fingerprint: p.fingerprint) }; trustPrompt = nil; restart() }
+    func declineTrust() { trustPrompt = nil; connection = .offline("Het certificaat is niet vertrouwd") }
+    func cancelCode() { needsCode = nil; connection = .offline("Inloggen is niet afgerond") }
+    func submitCode(_ code: String) async throws {
+        guard let mfa = needsCode, let api = DoorApi.configured() else { return }
+        let token = try await api.finish2fa(mfa: mfa, code: code.trimmingCharacters(in: .whitespaces))
+        Keychain.saveToken(token)
+        needsCode = nil
+        restart()
+    }
+
     func refresh() async throws {
         let json = try await call("GET", "api/admin-state")
         state = json; hasState = true; Palette.apply(json.settings)
@@ -149,7 +170,7 @@ final class DoorStore: ObservableObject {
         var req = URLRequest(url: comps.url!)
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         req.timeoutInterval = 60 * 60
-        let (bytes, resp) = try await URLSession.shared.bytes(for: req)
+        let (bytes, resp) = try await Net.session.bytes(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if code == 401 { self.token = nil; throw DoorApi.Failure.offline }
         if code != 200 { throw DoorApi.Failure.server("De live verbinding gaf een fout (\(code)).") }

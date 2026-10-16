@@ -1264,7 +1264,7 @@ function monitors(now) {
   const rss = process.memoryUsage().rss;
   if (rss > 900 * 1048576) raise('memory', `De server gebruikt veel geheugen (${Math.round(rss / 1048576)} MB). Een herstart kan helpen.`, { cooldownMin: 360 });
   else if (rss < 650 * 1048576) resolveAlert('memory', true);
-  if (httpsInfo && httpsServer && Date.parse(httpsInfo.expires) - Date.now() < 20 * 864e5) { try { httpsInfo = pki.ensure(path.join(DATA_DIR, 'tls'), 'Saga Techbox'); httpsServer.setSecureContext({ key: httpsInfo.key, cert: httpsInfo.cert }); log('beveiliging', 'Het servercertificaat is vernieuwd', 'systeem'); } catch {} }
+  if (httpsInfo && httpsServer && Date.parse(httpsInfo.expires) - Date.now() < 20 * 864e5) { try { httpsInfo = pki.ensure(path.join(DATA_DIR, 'tls'), 'Saga Techbox'); httpsServer.setSecureContext({ key: httpsInfo.key, cert: httpsInfo.cert + httpsInfo.caPem }); log('beveiliging', 'Het servercertificaat is vernieuwd', 'systeem'); } catch {} }
   if (maxLag > 2000) raise('lag', `De server reageerde ${Math.round(maxLag)} ms te laat. De computer is overbelast.`, { cooldownMin: 120, notify: false });
   else if (maxLag < 300) resolveAlert('lag', true);
   maxLag = 0;
@@ -1390,7 +1390,7 @@ function applyHttps() {
   if (httpsServer) return;
   try {
     httpsInfo = pki.ensure(path.join(DATA_DIR, 'tls'), 'Saga Techbox');
-    const srv = https.createServer({ key: httpsInfo.key, cert: httpsInfo.cert, connectionsCheckingInterval: 2000 }, handle);
+    const srv = https.createServer({ key: httpsInfo.key, cert: httpsInfo.cert + httpsInfo.caPem, connectionsCheckingInterval: 2000 }, handle);
     tuneTimeouts(srv);
     srv.on('error', (e) => { httpsOn = false; httpsServer = null; raise('https', e.code === 'EADDRINUSE' ? `Poort ${state.system.httpsPort} voor https is al in gebruik.` : `Https kon niet starten: ${e.message}`, { cooldownMin: 360 }); });
     srv.listen(state.system.httpsPort, HOSTLESS, () => { httpsOn = true; resolveAlert('https', true); console.log(`Veilig (https) op poort ${state.system.httpsPort}`); });
@@ -1896,7 +1896,7 @@ const adminRoutes = {
     if (!state.system.https) throw bad('Zet https eerst aan.');
     try { fs.rmSync(path.join(DATA_DIR, 'tls', 'server.crt')); } catch {}
     httpsInfo = pki.ensure(path.join(DATA_DIR, 'tls'), 'Saga Techbox');
-    if (httpsServer) httpsServer.setSecureContext({ key: httpsInfo.key, cert: httpsInfo.cert });
+    if (httpsServer) httpsServer.setSecureContext({ key: httpsInfo.key, cert: httpsInfo.cert + httpsInfo.caPem });
     log('beveiliging', `${id.name} vernieuwde het servercertificaat`);
     return httpsStatus();
   },

@@ -73,6 +73,8 @@ targetTemplates:
       - path: App/Theme.swift
       - path: App/Discovery.swift
       - path: App/Extras.swift
+      - path: App/Net.swift
+      - path: App/SecurityUI.swift
       - path: App/FormSettings.swift
     settings:
       base:
