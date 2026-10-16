@@ -1186,6 +1186,30 @@
   const bytes = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
   const confirmWord = (what) => (prompt(`${what}\n\nDit kan niet ongedaan worden gemaakt. Typ WISSEN om door te gaan.`) || '').trim().toUpperCase() === 'WISSEN';
 
+  // ---------- moving everything from another door server to this one ----------
+  const transferDraft = { url: '', username: '', password: '', code: '' };
+  function transferCard() {
+    const out = h('div', { class: 'muted', style: 'margin-top:10px' });
+    const f = (key, label, props = {}) => [h('label', {}, label), h('input', { value: transferDraft[key], 'data-keep': 'transfer-' + key, autocapitalize: 'none', spellcheck: 'false', ...props, oninput: (e) => { transferDraft[key] = e.target.value; } })];
+    const go = h('button', { class: 'white', onclick: async () => {
+      if (!transferDraft.url.trim() || !transferDraft.username.trim() || !transferDraft.password) { out.textContent = 'Vul het adres, de gebruikersnaam en het wachtwoord van de oude server in.'; return; }
+      if (!confirm('De gegevens van deze server worden vervangen door die van de oude server. Er wordt eerst een back-up van deze server gemaakt. Doorgaan?')) return;
+      go.disabled = true; out.textContent = 'Bezig met overzetten…';
+      try {
+        const r = await api('/api/transfer/pull', { ...transferDraft });
+        transferDraft.password = ''; transferDraft.code = '';
+        out.textContent = `Klaar. ${r.requests} bezoekersverzoeken, ${r.people} personen${r.full ? `, ${r.users} account(s)` : ''} overgenomen.${r.full ? '' : ' De oude server is ouder: accounts en sleutels zijn niet meegekomen. Maak die hier opnieuw aan.'}`;
+        S = await api('/api/admin-state'); toast('Gegevens overgezet');
+      } catch (e) { out.textContent = ''; }
+      go.disabled = false;
+    } }, 'Gegevens overzetten');
+    return h('div', { class: 'card' }, h('h2', {}, 'Gegevens overzetten'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Neem alles over van een andere deurserver: instellingen, bezoekers, personen, afspraken, het logboek en (van een server met deze versie) ook de accounts. Handig als je naar een nieuwe computer of een nieuwe Linux-schijf gaat. Vul hieronder in hoe je op de oude server inlogt (het hoofdaccount of een account dat gegevens mag exporteren).'),
+      h('div', { class: 'form' }, ...f('url', 'Adres van de oude server', { placeholder: 'bijv. 192.168.2.32:8080' }), ...f('username', 'Gebruikersnaam'), ...f('password', 'Wachtwoord', { type: 'password', autocomplete: 'off' }), ...f('code', 'Tweestapscode (alleen als nodig)', { autocomplete: 'off' }), h('span', {}), go),
+      out,
+      h('p', { class: 'muted', style: 'font-size:13px;margin-bottom:0' }, 'Let op: wat nu op deze server staat wordt vervangen (een back-up wordt eerst gemaakt, zie hierboven). Wachtwoorden en sleutels reizen leesbaar over het netwerk; doe dit dus op je eigen netwerk. Daarna moeten collega’s opnieuw inloggen.'));
+  }
+
   function systemView() {
     if (!sysData) { loadSystem().catch(() => {}); return [h('div', { class: 'card' }, h('p', { class: 'muted', style: 'margin:0' }, 'Laden…'))]; }
     const d = sysDraft;
@@ -1792,7 +1816,7 @@
       ].filter(Boolean);
     },
 
-    system() { return systemView(); },
+    system() { return [...systemView(), sysData ? transferCard() : null].filter(Boolean); },
 
     // ---------- Ontwerp: change how the door screen looks and what it says ----------
     design() {

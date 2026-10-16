@@ -2008,6 +2008,39 @@ const adminRoutes = {
   },
   'POST /api/test-notify': async () => ({ results: await notifyExternal(null, `Testmelding van ${state.settings.name}`) }),
   'GET /api/export': () => { const { users, apiKeys, sessions, rootLock, ...rest } = state; return { ...rest, integ: { ...rest.integ, lock: { ...rest.integ.lock, headerValue: '' } } }; }, // accounts and keys never leave the server
+  // ----- moving everything from another door server to this one (only the main account) -----
+  // a complete copy of this server's data, with the accounts; the secrets travel readable, so use it on your own network or over https
+  'GET /api/transfer/export': (b, id) => { const { sessions, rootLock, ...rest } = state; return { ...rest, transfer: true }; },
+  'POST /api/transfer/pull': async (b, id) => {
+    let base = str(b.url, 200);
+    if (!base) throw bad('Vul het adres van de oude server in.');
+    if (!/^https?:\/\//i.test(base)) base = 'http://' + base;
+    base = base.replace(/\/+$/, '');
+    if (!outboundOk(base)) throw bad('Dat adres kan niet gebruikt worden.');
+    const call = async (method, p, body, token) => {
+      let res;
+      try { res = await fetch(base + p, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) }); }
+      catch { throw bad('Geen verbinding met de oude server. Klopt het adres, staat hij aan en is het hetzelfde netwerk?'); }
+      let json = null; try { json = await res.json(); } catch {}
+      return { status: res.status, json };
+    };
+    const login = await call('POST', '/api/login', { username: str(b.username, 40), password: typeof b.password === 'string' ? b.password.slice(0, 200) : '' });
+    if (login.status === 429) throw bad('De oude server blokkeert je even wegens te veel pogingen. Wacht 10 minuten.');
+    let token = login.json && login.json.token;
+    if (!token && login.json && login.json.needs2fa) {
+      if (!str(b.code, 40)) throw bad('Dit account gebruikt tweestapsverificatie: vul ook de code in.');
+      const second = await call('POST', '/api/login/2fa', { mfa: login.json.mfa, code: str(b.code, 40) });
+      token = second.json && second.json.token;
+      if (!token) throw bad((second.json && second.json.error) || 'Die code klopt niet.');
+    }
+    if (!token) throw bad((login.json && login.json.error) || 'Inloggen op de oude server lukte niet.');
+    let full = true, data = await call('GET', '/api/transfer/export', null, token);
+    if (data.status === 404 || data.status === 403) { full = false; data = await call('GET', '/api/export', null, token); } // an older server: everything except the accounts
+    await call('POST', '/api/logout', {}, token);
+    if (data.status !== 200 || !data.json) throw bad(data.status === 403 ? 'Dit account op de oude server mag geen gegevens exporteren. Log in met een account dat dat wel mag (bijvoorbeeld het hoofdaccount).' : 'De oude server gaf geen gegevens terug.');
+    const out = applyTransfer(data.json, id);
+    return { ok: true, full, ...out };
+  },
   'POST /api/import': (b) => {
     if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
     const d = freshState();
@@ -2015,6 +2048,25 @@ const adminRoutes = {
     log('system', 'Back-up teruggezet');
   },
 };
+
+// replaces the data of this server with the data of another one; this server keeps its own system settings and sessions
+function applyTransfer(data, id) {
+  if (!data || data.version !== 2 || !data.settings) throw bad('Dit zijn geen gegevens van een deurserver');
+  writeBackup('voor-overzetten'); // so it can be undone
+  const accounts = data.transfer === true && Array.isArray(data.users);
+  state = {
+    ...freshState(), ...data, positions: cleanPositions(data.positions), blocks: cleanBlocks(data.blocks), blocked: cleanBlocked(data.blocked), customBell: cleanBell(data.customBell), power: power.clean(data.power),
+    settings: coerce(DEFAULT_SETTINGS, data.settings), system: state.system, sessions: state.sessions, rootLock: state.rootLock, alerts: state.alerts, devices: state.devices, sightings: state.sightings, integ: state.integ,
+    users: accounts ? data.users : state.users, apiKeys: accounts && Array.isArray(data.apiKeys) ? data.apiKeys : state.apiKeys, rootTotp: accounts ? data.rootTotp || null : state.rootTotp, rootPasskeys: accounts && Array.isArray(data.rootPasskeys) ? data.rootPasskeys : state.rootPasskeys,
+  };
+  if (data.integ && typeof data.integ === 'object') state.integ = integ.clean(data.integ);
+  state.settings = { ...state.settings, ...Object.fromEntries(['hours', 'customButtons', 'notifyRules', 'autoReplies'].filter((k) => data.settings[k] !== undefined).map((k) => [k, data.settings[k]])) };
+  state.settings.hours = { ...state.settings.hours, ...schedule.cleanHoursExtra(data.settings.hours) };
+  state.settings.customButtons = schedule.cleanCustomButtons(state.settings.customButtons); state.settings.notifyRules = schedule.cleanNotifyRules(state.settings.notifyRules); state.settings.autoReplies = schedule.cleanAutoReplies(state.settings.autoReplies);
+  decryptSecrets();
+  securityEvent(`${id.name} zette de gegevens van een andere server over naar deze server${accounts ? ' (met accounts)' : ''}.`);
+  return { requests: state.requests.length, people: state.people.length, users: state.users.length, accounts };
+}
 
 // ----- system (only the main account) -----
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
@@ -2111,7 +2163,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/calendar': 'settings', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'GET /api/calendar': 'settings', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
