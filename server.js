@@ -3,6 +3,7 @@
 // Three states: Open, Closed, Busy — each optionally "until" a time, plus planned "busy during" blocks
 // and optional opening hours. The server computes what the door should show; screens just render it.
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
@@ -11,6 +12,7 @@ const os = require('os');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const integ = require('./integrations.js'); // microcontrollers, door lock + NFC tags, camera events, automations (all opt-in)
+const pki = require('./pki.js'); // an own certificate authority, so https needs no domain
 const security = require('./security.js'); // encrypted secrets, two-step codes, tamper-evident log, protected backups
 const power = require('./power.js'); // switching the screen / computer off and on by a schedule (opt-in)
 
@@ -76,7 +78,7 @@ const DEFAULT_SETTINGS = {
   mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false, digest: false, digestAt: '18:00' },
 };
 // System settings: only the main account can change these (see the Systeem tab).
-const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, attack: { burst: 240, perSec: 30, strikes: 80, banMinutes: 10, maxSse: 30 }, require2fa: 'off', backupPassword: '', backupCopyDir: '', allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
+const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, attack: { burst: 240, perSec: 30, strikes: 80, banMinutes: 10, maxSse: 30 }, require2fa: 'off', backupPassword: '', backupCopyDir: '', https: false, httpsPort: 8443, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
 function normIp(ip) { ip = String(ip || '').replace(/^::ffff:/, ''); return ip === '::1' ? '127.0.0.1' : ip; } // "this computer" is one address, in IPv4 or IPv6
 function ipv4ToInt(ip) { const m = String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/); return m && m.slice(1).every((x) => Number(x) <= 255) ? ((Number(m[1]) << 24) | (Number(m[2]) << 16) | (Number(m[3]) << 8) | Number(m[4])) >>> 0 : null; }
 function validIpRule(r) { const [ip, bits] = String(r).split('/'); return (ipv4ToInt(ip) !== null && (bits === undefined || (/^\d{1,2}$/.test(bits) && Number(bits) <= 32))) || (/^[0-9a-f:]+$/i.test(ip) && ip.includes(':') && bits === undefined); }
@@ -112,6 +114,7 @@ function cleanSystem(b = {}) {
     attack: { burst: num(b.attack && b.attack.burst, 20, 5000, 240), perSec: num(b.attack && b.attack.perSec, 2, 500, 30), strikes: num(b.attack && b.attack.strikes, 10, 1000, 80), banMinutes: num(b.attack && b.attack.banMinutes, 1, 1440, 10), maxSse: num(b.attack && b.attack.maxSse, 3, 500, 30) },
     require2fa: ['off', 'root', 'privileged'].includes(b.require2fa) ? b.require2fa : 'off',
     backupPassword: str(b.backupPassword, 300), backupCopyDir: str(b.backupCopyDir, 300),
+    https: !!b.https, httpsPort: num(b.httpsPort, 1024, 65535, 8443),
     retentionDays: num(b.retentionDays, 0, 3650, 0), autoBackup: b.autoBackup === undefined ? true : !!b.autoBackup, backupKeep: num(b.backupKeep, 1, 90, DEFAULT_SYSTEM.backupKeep),
   };
 }
@@ -881,6 +884,7 @@ function adminState(id) {
     sightings: full('cameras') ? state.sightings.slice(0, 50) : [],
     health: healthChecks(full),
     security: full('settings') ? securityChecks() : undefined,
+    https: full('settings') ? httpsStatus() : undefined,
     alerts: state.alerts.slice(0, 10),
     people: full('people') ? state.people : [],
     peopleRev: state.peopleRev || 0,
@@ -1232,6 +1236,7 @@ function monitors(now) {
   const rss = process.memoryUsage().rss;
   if (rss > 900 * 1048576) raise('memory', `De server gebruikt veel geheugen (${Math.round(rss / 1048576)} MB). Een herstart kan helpen.`, { cooldownMin: 360 });
   else if (rss < 650 * 1048576) resolveAlert('memory', true);
+  if (httpsInfo && httpsServer && Date.parse(httpsInfo.expires) - Date.now() < 20 * 864e5) { try { httpsInfo = pki.ensure(path.join(DATA_DIR, 'tls'), 'Saga Techbox'); httpsServer.setSecureContext({ key: httpsInfo.key, cert: httpsInfo.cert }); log('beveiliging', 'Het servercertificaat is vernieuwd', 'systeem'); } catch {} }
   if (maxLag > 2000) raise('lag', `De server reageerde ${Math.round(maxLag)} ms te laat. De computer is overbelast.`, { cooldownMin: 120, notify: false });
   else if (maxLag < 300) resolveAlert('lag', true);
   maxLag = 0;
@@ -1341,11 +1346,35 @@ function serveFile(res, file, req) {
 const bad = (msg) => Object.assign(new Error(msg), { code: 400 });
 const findReq = (id) => { const r = state.requests.find((x) => x.id === id); if (!r) throw bad('Dat verzoek bestaat niet meer'); return r; };
 
+// ---------- https with an own certificate authority ----------
+let httpsServer = null, httpsInfo = null;
+const HOSTLESS = process.env.HOST || undefined;
+function tuneTimeouts(srv) { srv.headersTimeout = Number(process.env.DOOR_HEADER_TIMEOUT_MS) || 15000; srv.requestTimeout = Math.max(srv.headersTimeout, 30000); srv.keepAliveTimeout = 5000; srv.maxHeadersCount = 60; }
+function applyHttps() {
+  const want = state.system.https && process.env.DOOR_HTTPS !== 'off';
+  if (!want) { if (httpsServer) { try { httpsServer.close(); httpsServer.closeAllConnections(); } catch {} } httpsServer = null; httpsOn = false; return; }
+  if (httpsServer) return;
+  try {
+    httpsInfo = pki.ensure(path.join(DATA_DIR, 'tls'), 'Saga Techbox');
+    const srv = https.createServer({ key: httpsInfo.key, cert: httpsInfo.cert, connectionsCheckingInterval: 2000 }, handle);
+    tuneTimeouts(srv);
+    srv.on('error', (e) => { httpsOn = false; httpsServer = null; raise('https', e.code === 'EADDRINUSE' ? `Poort ${state.system.httpsPort} voor https is al in gebruik.` : `Https kon niet starten: ${e.message}`, { cooldownMin: 360 }); });
+    srv.listen(state.system.httpsPort, HOSTLESS, () => { httpsOn = true; resolveAlert('https', true); console.log(`Veilig (https) op poort ${state.system.httpsPort}`); });
+    httpsServer = srv;
+  } catch (e) { raise('https', `Https kon niet starten: ${e.message}`, { cooldownMin: 360 }); }
+}
+function httpsStatus() {
+  const on = !!httpsServer && httpsOn;
+  const info = httpsInfo || (state.system.https ? null : null);
+  return { enabled: !!state.system.https, running: on, port: state.system.httpsPort, fingerprint: info ? info.caFingerprint : '', names: info ? info.names : pki.namesFor(), expires: info ? info.expires : '', urls: on ? lanNames().map((h) => `https://${h}:${state.system.httpsPort}`) : [] };
+}
+const lanNames = () => [`saga-deur.local`, ...Object.values(os.networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => a.address)];
+
 // the addresses at which this server can be reached (shown on the start screen of the Linux image)
 function where(local) {
   const addresses = [];
   for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) if (a.family === 'IPv4' && !a.internal) addresses.push(`http://${a.address}:${PORT}`);
-  const out = { name: state.settings.name, hostname: os.hostname(), port: PORT, version: APP_VERSION, addresses, mdns: `http://${os.hostname()}.local:${PORT}` };
+  const out = { name: state.settings.name, hostname: os.hostname(), port: PORT, version: APP_VERSION, https: httpsOn ? { port: state.system.httpsPort, urls: lanNames().map((h) => `https://${h}:${state.system.httpsPort}`) } : null, addresses, mdns: `http://${os.hostname()}.local:${PORT}` };
   // the start password is only handed out to a screen on this computer itself (the start screen of the Linux image), never over the network
   if (local && state.users.some((u) => u.starter && u.factory && !u.disabled)) out.starter = { user: 'admin', password: starterPassword() };
   return out;
@@ -1786,6 +1815,23 @@ const adminRoutes = {
     }
     throw bad('Dit los je op in de instellingen zelf.');
   },
+  'GET /api/https': () => httpsStatus(),
+  'POST /api/https/settings': (b, id) => {
+    const wasOn = !!httpsServer, oldPort = state.system.httpsPort;
+    state.system = cleanSystem({ ...state.system, https: !!b.enabled, ...(b.port ? { httpsPort: b.port } : {}) });
+    if (wasOn && oldPort !== state.system.httpsPort) { try { httpsServer.close(); httpsServer.closeAllConnections(); } catch {} httpsServer = null; httpsOn = false; }
+    applyHttps();
+    securityEvent(`${id.name} zette https ${state.system.https ? 'aan' : 'uit'}`);
+    return httpsStatus();
+  },
+  'POST /api/https/renew': (b, id) => {
+    if (!state.system.https) throw bad('Zet https eerst aan.');
+    try { fs.rmSync(path.join(DATA_DIR, 'tls', 'server.crt')); } catch {}
+    httpsInfo = pki.ensure(path.join(DATA_DIR, 'tls'), 'Saga Techbox');
+    if (httpsServer) httpsServer.setSecureContext({ key: httpsInfo.key, cert: httpsInfo.cert });
+    log('beveiliging', `${id.name} vernieuwde het servercertificaat`);
+    return httpsStatus();
+  },
   'GET /api/form-schema': () => ({ groups: formSchema() }),
   'POST /api/form-settings': (b) => { const n = applyFormValues(b && typeof b.values === 'object' && b.values ? b.values : {}); state.settings.form = sanitizeForm(state.settings.form); log('instellingen', `Bezoekersformulier aangepast (${n} ${n === 1 ? 'instelling' : 'instellingen'})`); return { ok: true, groups: formSchema() }; },
   'POST /api/login/ticket': (b, id) => {
@@ -1980,7 +2026,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/https': 'settings', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -2107,7 +2153,7 @@ function handleVisit(req, b) {
   return { id: r.id, reply: r.reply, mailTo: r.email && mailOn() ? maskEmail(r.email) : '' };
 }
 
-const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (req, res) => {
+const handle = async (req, res) => {
   { // flood protection comes first, before anything else is looked at
     const wait = limited(clientIp(req), req.url && req.url.startsWith('/events') ? 5 : 1);
     if (wait) { res.writeHead(429, { 'Retry-After': String(wait), 'Content-Type': 'text/plain', Connection: 'close' }); return res.end('Te veel verzoeken — probeer het zo opnieuw'); }
@@ -2126,6 +2172,11 @@ const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (r
     if (p === '/healthz') return send(res, 200, { ok: true });
     if (p === '/api/where') return send(res, 200, where(isLoopback(req.socket.remoteAddress && normIp(req.socket.remoteAddress)) && !req.headers['x-forwarded-for'] && !req.headers['x-real-ip'] && !req.headers['cf-connecting-ip'])); // for the start screen and for apps that look for the server
     if (p === '/start') return serveFile(res, 'start.html', req);
+    if ((p === '/ca.crt' || p === '/ca.mobileconfig') && httpsInfo) {
+      const iphone = p === '/ca.mobileconfig';
+      res.writeHead(200, { 'Content-Type': iphone ? 'application/x-apple-aspen-config' : 'application/x-x509-ca-cert', 'Content-Disposition': `attachment; filename="${iphone ? 'saga-techbox.mobileconfig' : 'saga-techbox-ca.crt'}"` });
+      return res.end(iphone ? pki.mobileconfig(httpsInfo.caDer, 'Saga Techbox') : httpsInfo.caPem);
+    }
     if (p === '/help' || p === '/handleiding') return serveFile(res, 'help.html', req);
     if (p === '/events') {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
@@ -2300,7 +2351,8 @@ const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (r
     if (internal) { console.error('internal error on', req.method, p, e && e.stack || e); log('fout', `Interne fout bij ${req.method} ${p}: ${e.message}`, 'systeem'); return send(res, 500, { error: 'Er ging iets mis in de server.' }); }
     send(res, e.logout ? 401 : e.code === 429 ? 429 : 400, { error: e.message });
   }
-});
+};
+const server = http.createServer({ connectionsCheckingInterval: 2000 }, handle);
 
 // Opt-in public download page: lists the files in data/downloads (put installers there yourself). Off unless switched on in Ontwerp.
 function serveDownloads(req, res, p) {
@@ -2339,6 +2391,7 @@ server.maxHeadersCount = 60;
 const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, process.env.HOST || undefined, () => {
+    applyHttps();
     console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)  — inloggen met account`);
     resolve(PORT);
   });

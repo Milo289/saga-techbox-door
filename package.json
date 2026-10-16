@@ -31,6 +31,8 @@
       "server.js",
       "power.js",
       "integrations.js",
+      "security.js",
+      "pki.js",
       "discover.js",
       "seal.js",
       "access.js",
