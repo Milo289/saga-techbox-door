@@ -37,6 +37,10 @@ static class Program
             var creds = Credentials.Load();
             if (creds == null) throw new Exception("de opgeslagen inlog kon niet worden teruggelezen");
             var c = DoorClient.Shared; c.Start();
+            // test aids: answer the questions the connection can ask (SAGA_TEST_CODE = two-step code, SAGA_TEST_TRUST = trust the certificate)
+            for (int i = 0; i < 50 && !c.HasState && c.PendingMfa == null && c.PendingTrust == null; i++) await Task.Delay(100);
+            if (c.PendingTrust != null && Environment.GetEnvironmentVariable("SAGA_TEST_TRUST") != null) { c.TrustAndRetry(); for (int i = 0; i < 50 && !c.HasState && c.PendingMfa == null; i++) await Task.Delay(100); }
+            if (c.PendingMfa != null && Environment.GetEnvironmentVariable("SAGA_TEST_CODE") is { Length: > 0 } totp) await c.SubmitCodeAsync(totp);
             for (int i = 0; i < 150 && !c.HasState; i++) await Task.Delay(100);
             if (!c.HasState) throw new Exception("geen verbinding met de server: " + c.Connection);
             await c.SetStatusAsync("busy", 5);
