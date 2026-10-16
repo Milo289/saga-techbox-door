@@ -17,6 +17,15 @@ struct AllSettingsView: View {
     @State private var error: String?
 
     var body: some View {
+        #if DEBUG
+        // test aid for development builds only: open one group at once (DEUR_GROUP=hours)
+        if let id = ProcessInfo.processInfo.environment["DEUR_GROUP"], let g = groups.first(where: { $0.id.str == id }) { GroupEditor(group: g, draft: draft) } else { list }
+        #else
+        list
+        #endif
+    }
+
+    private var list: some View {
         List {
             if loading { HStack { ProgressView(); Text("Laden…").foregroundStyle(.secondary) } }
             if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
@@ -59,6 +68,7 @@ struct GroupEditor: View {
             Section { ForEach(Array(group.fields.array.enumerated()), id: \.offset) { _, f in FieldRow(field: f, draft: draft) } }
                 footer: { if !group.help.str.isEmpty { Text(group.help.str) } }
         }
+        .formStyle(.grouped)
         .navigationTitle(group.title.str)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -155,12 +165,12 @@ struct ScalarEditor: View {
         case "password":
             VStack(alignment: .leading, spacing: 4) {
                 Text(label).font(.subheadline)
-                SecureField("", text: Binding(get: { str }, set: { value = $0 })).autocorrectionDisabledCompat()
+                SecureField("", text: Binding(get: { str }, set: { value = $0 })).textFieldStyle(.roundedBorder).autocorrectionDisabledCompat()
             }
         default:
             VStack(alignment: .leading, spacing: 4) {
                 Text(label).font(.subheadline)
-                TextField(spec.placeholder.str, text: Binding(get: { str }, set: { value = String($0.prefix(spec.max.int ?? 200)) }), axis: .vertical).lineLimit(1...3).autocorrectionDisabledCompat()
+                TextField(spec.placeholder.str, text: Binding(get: { str }, set: { value = String($0.prefix(spec.max.int ?? 200)) }), axis: .vertical).lineLimit(1...3).textFieldStyle(.roundedBorder).autocorrectionDisabledCompat()
             }
         }
     }
