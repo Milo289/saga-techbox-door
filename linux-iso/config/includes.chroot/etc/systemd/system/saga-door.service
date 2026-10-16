@@ -9,6 +9,15 @@ Environment=PORT=8080 HOST=0.0.0.0 DATA_DIR=/var/lib/saga-door NODE_ENV=producti
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=3
+# the server needs little: no new privileges, no home folders, no kernel changes, only network and local sockets
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

@@ -19,7 +19,20 @@ Dit programma draait in je eigen netwerk, maar moet ook een aanval kunnen weerst
 | Een gemanipuleerde update | De updater controleert elke download op de SHA-256-controlesom van de release (`SHA256SUMS.txt`) en gebruikt hem anders niet. |
 | Een link die een ander programma start | De desktop-app opent alleen http- en https-adressen. |
 | Rechten omzeilen | Elke beschermde route weigert een account dat alleen mag kijken; dit wordt bij elke bouw getest voor alle routes. |
+| Geheimen in het bestand met gegevens | Wachtwoorden en sleutels (e-mail, meldingen, back-upwachtwoord, tweestapssleutels, agendalink) staan versleuteld (AES-256-GCM) op de schijf; de sleutel staat apart in `secret.key`. |
+| Alleen een wachtwoord is genoeg | Tweestapsverificatie met een code uit een app (RFC 6238) of een herstelcode; een code werkt maar één keer; het hoofdaccount kan het verplicht stellen voor zichzelf of voor iedereen met veel rechten. |
+| Wachtwoord vergeten of uitgelekt | Passkeys: inloggen met vingerafdruk, gezicht of toestelcode (WebAuthn, alleen met https en een naam in plaats van een IP-adres). |
+| Een onbekend apparaat dat inlogt | Elke gebruiker ziet de eigen apparaten en kan ze uitloggen; een nieuw apparaat geeft een melding. |
+| Het logboek aanpassen | Elke regel is aan de vorige vastgemaakt (SHA-256-ketting); je kunt het controleren en exporteren, en een gewijzigde regel wordt gemeld. |
+| Een back-up die in verkeerde handen komt | Back-ups kunnen met een wachtwoord worden versleuteld (`.sbk`) en automatisch een tweede kopie in een andere map krijgen. |
+| Afluisteren op het netwerk | Https met een eigen certificaat-autoriteit (geen domein nodig). De apps vragen één keer of je de vingerafdruk vertrouwt (zoals bij SSH) en accepteren daarna alleen dat certificaat. |
+| Scripts van binnenuit (XSS) | De pagina’s staan alleen eigen scripts en stijlen toe die in het bestand zelf staan, herkend aan hun vingerafdruk (geen `unsafe-inline` voor scripts). |
+| Een rol te lang laten hebben | Tijdelijke extra rechten die vanzelf stoppen (voor een invaller). |
+| Handmatig blokkeren | Een blokkeerlijst met instelbare aanvalsgrenzen en het opheffen van blokkades, in het paneel en de apps. |
 | Een crash of vol geheugen | Fouten stoppen de server niet, worden gemeld, en geheugen wordt opgeruimd. |
+
+## Beveiligingsscore
+Bij Beveiliging in het paneel (en in de apps) staat een score van 0 tot 100 met per punt wat er mist en hoe je het oplost: startaccount, tweestapsverificatie, https, versleutelde back-ups, aanvalsbeveiliging, logboek en sleutels.
 
 ## Hoe het getest is
 `tests/security.test.js` valt de eigen server aan met bekende technieken en moet elke keer slagen. De test staat bij de rest in `npm test` en draait ook in de automatische bouw.

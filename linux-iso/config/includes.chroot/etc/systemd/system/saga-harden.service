@@ -1,0 +1,14 @@
+[Unit]
+Description=Saga Techbox: lock the console password and keep remote login switched off
+After=live-config.service
+Wants=live-config.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# the live system gives its user a well-known password; the door screen starts without one, so lock it
+ExecStart=-/usr/sbin/usermod -L deur
+ExecStart=-/usr/bin/systemctl mask --now ssh.service ssh.socket telnet.socket
+
+[Install]
+WantedBy=multi-user.target

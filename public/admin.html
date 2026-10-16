@@ -1106,6 +1106,15 @@
       const grid = h('div', {}, permGrid(d));
       const role = h('select', { onchange: (e) => { d.role = e.target.value; d.perms = (S.rolePresets[d.role] || []).filter(can); grid.replaceChildren(permGrid(d)); } },
         ...['beheerder', 'medewerker', 'receptionist', 'kijker'].map((r) => h('option', { value: r, selected: d.role === r }, `${ROLE_NAMES[r]} — ${S.rolePresets[r].length} ${S.rolePresets[r].length === 1 ? 'recht' : 'rechten'}`)));
+      // temporary extra rights: they end by themselves
+      if (!d.gr) d.gr = (d.grants || []).map((g) => ({ perm: g.perm, minutes: Math.max(1, Math.ceil((g.until - Date.now()) / 60000)) }));
+      const grantBox = h('div', {});
+      const permPick = h('select', {}, ...Object.entries(S.permLabels).filter(([k]) => can(k) && k !== 'system').map(([k, l]) => h('option', { value: k }, l)));
+      const minPick = h('select', {}, ...[[30, '30 minuten'], [60, '1 uur'], [240, '4 uur'], [1440, '1 dag'], [10080, '1 week']].map(([v, l]) => h('option', { value: v }, l)));
+      const drawGrants = () => grantBox.replaceChildren(
+        ...d.gr.map((g, i) => h('div', { class: 'row', style: 'margin:4px 0;gap:8px' }, h('span', { class: 'tag' }, S.permLabels[g.perm] || g.perm), h('span', { class: 'muted' }, `nog ${g.minutes >= 1440 ? Math.round(g.minutes / 1440) + ' dag(en)' : g.minutes >= 60 ? Math.round(g.minutes / 60) + ' uur' : g.minutes + ' min'}`), h('button', { class: 'sm ghost danger', type: 'button', onclick: () => { d.gr.splice(i, 1); drawGrants(); } }, 'Intrekken'))),
+        h('div', { class: 'row', style: 'gap:8px;margin-top:6px;flex-wrap:wrap' }, permPick, minPick, h('button', { class: 'sm', type: 'button', onclick: () => { d.gr.push({ perm: permPick.value, minutes: Number(minPick.value) }); drawGrants(); } }, 'Tijdelijk geven')));
+      drawGrants();
       editor = h('div', { class: 'editor' }, h('h2', { style: 'margin:0;text-transform:none;letter-spacing:0;font-size:16px;color:var(--fg)' }, d.id ? `Wijzig ${d.name}` : 'Nieuwe gebruiker'),
         h('div', { class: 'form' },
           h('label', {}, 'Gebruikersnaam'), h('input', { value: d.username, autocapitalize: 'none', spellcheck: 'false', placeholder: 'bijv. anna', oninput: (e) => { d.username = e.target.value; } }),
@@ -1113,9 +1122,10 @@
           h('label', {}, 'Wachtwoord'), pw,
           h('label', {}, 'Rol'), h('div', {}, role, h('div', { class: 'muted', style: 'margin-top:4px' }, 'Een rol vult de rechten hieronder alvast in. Je kunt ze daarna zelf aanpassen.')),
           h('label', {}, 'Rechten'), grid,
+          h('label', {}, 'Tijdelijk extra'), h('div', {}, grantBox, h('div', { class: 'muted', style: 'margin-top:4px' }, 'Een recht dat vanzelf stopt, bijvoorbeeld voor een invaller. Je kunt alleen geven wat je zelf hebt.')),
           h('label', {}, 'Account'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: d.disabled, onchange: (e) => { d.disabled = e.target.checked; } }), 'Uitgeschakeld (kan niet inloggen)')),
         h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => {
-          await api('/api/users/save', { id: d.id, username: d.username, name: d.name, role: d.role, perms: d.perms, password: d.password, disabled: d.disabled });
+          await api('/api/users/save', { id: d.id, username: d.username, name: d.name, role: d.role, perms: d.perms, password: d.password, disabled: d.disabled, grants: d.gr });
           userDraft = null; toast(d.id ? 'Gebruiker opgeslagen' : 'Gebruiker aangemaakt'); refresh();
         } }, 'Opslaan'), h('button', { class: 'ghost', onclick: () => { userDraft = null; renderAll(true); } }, 'Annuleren')));
     }

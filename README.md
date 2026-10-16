@@ -295,3 +295,12 @@ De iPhone- en iPad-app hebben nu ook: **snelle acties** (eigen knoppen als “Lu
 - **Beta installeren:** download de bestanden bij de release `v3.3.0-beta.1` op GitHub (Releases → Pre-release). De Dev-apps zijn de voorgestelde manier om dit te proberen.
 
 Wat nog ontbreekt: echte *passkeys* (een inlog met Face ID of Touch ID op het web). Die werken alleen op een veilige verbinding (https); op een gewoon adres in je eigen netwerk (`http://192.168…`) staat de browser dat niet toe. De QR-code is daarvoor het alternatief.
+
+## Versie 3.4.0 (developer beta) — veiliger, handiger, slimmer
+**Beveiliging:** beveiligingsscore, tweestapsverificatie (app-code en herstelcodes), passkeys, apparaten per gebruiker, versleutelde geheimen en back-ups (met tweede kopie), logboek met ketting (controleren en exporteren), blokkeerlijst en aanvalsinstellingen, tijdelijke extra rechten, strenge CSP en **https zonder domein** met een eigen certificaat-autoriteit (`/ca.crt`, iPhone-profiel `/ca.mobileconfig`; de apps vragen één keer of je de vingerafdruk vertrouwt). Zie SECURITY.md.
+
+**Webpaneel:** tabblad Beveiliging, zoeken, kaarten dichtklappen, uitleg (?) per kaart, Eenvoudig/Alles, één opslaanbalk voor alle wijzigingen, startwizard, telefoonindeling, themaknop, filter en “lijst afhandelen” bij bezoekers, ongedaan maken na een statuswijziging, kopieerknoppen.
+
+**Meer mogelijkheden:** eigen knoppen op het deurscherm (één tik, eventueel met tekst en eigen antwoord), openingstijden per dag met pauzes en vrije dagen, meldingen per soort en persoon met stille uren, slimme antwoorden per status/soort/dag/tijd, een agendalink (ICS) en een weekoverzicht per e-mail.
+
+**Apps:** Apple-instellingen in zes onderdelen met zoeken, Mijn account (rechten in gewone taal, wachtwoord, tweestapsverificatie met QR, apparaten, QR om een ander apparaat in te laten loggen), beveiliging van de server, meerdere servers met status, rondleiding, instellingen bewaren en terugzetten, slimmere bezoekerslijst, eigen geluiden, diagnose delen (Dev). Windows/Linux: code bij inloggen, https-vertrouwen, venster onthouden, opstarten bij inloggen. Linux-schijf: firewall, afgeschermde server, strengere kernel-instellingen. Proxmox: `tools/proxmox-test.sh`.

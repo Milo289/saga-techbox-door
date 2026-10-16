@@ -20,3 +20,4 @@ libpam-systemd
 dbus
 dbus-x11
 qemu-guest-agent
+nftables
