@@ -13,8 +13,44 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var phase
     @State private var tab = "status"
 
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private let pages: [(id: String, title: String, symbol: String)] = [("status", "Status", "door.left.hand.open"), ("inbox", "Bezoekers", "bell.fill"), ("manage", "Beheer", "slider.horizontal.3"), ("settings", "Instellingen", "gearshape.fill")]
+
+    @ViewBuilder private func page(_ id: String) -> some View {
+        switch id {
+        case "inbox": InboxView(store: store)
+        case "manage": ManageView(store: store, model: model)
+        case "settings": AppSettingsView(store: store, model: model)
+        case "dev": DeveloperView(store: store)
+        default: StatusView(store: store)
+        }
+    }
+
+    /// iPad (and a big iPhone turned sideways): a sidebar on the left, the page on the right. A small screen keeps the tab bar.
+    private var sidebarLayout: some View {
+        NavigationSplitView {
+            List(selection: Binding(get: { Optional(tab) }, set: { if let v = $0 { tab = v } })) {
+                ForEach(pages, id: \.id) { p in
+                    Label(p.title, systemImage: p.symbol).tag(p.id).badge(p.id == "inbox" && badge ? store.newCount : 0)
+                }
+                if Build.isDeveloperApp || devMode { Label("Ontwikkelaar", systemImage: "hammer.fill").tag("dev") }
+            }
+            .navigationTitle("Deur Beheer")
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 8) {
+                    Circle().fill(Palette.color(store.mode)).frame(width: 10, height: 10)
+                    Text(store.hasState ? "\(store.name): \(store.label)" : "Verbinden…").font(.footnote).foregroundStyle(.secondary)
+                    Spacer()
+                }.padding(14)
+            }
+        } detail: { page(tab) }
+        .tint(Palette.accent)
+    }
+
     var body: some View {
         ZStack {
+            if sizeClass == .regular { sidebarLayout } else {
             TabView(selection: $tab) {
                 StatusView(store: store).tag("status")
                     .tabItem { Label("Status", systemImage: "door.left.hand.open") }
@@ -31,6 +67,7 @@ struct MainTabView: View {
                 }
             }
             .tint(Palette.accent)
+            }
             BannerView(store: store)
             if store.can("power"), let pend = store.state.power.pending.at.date {
                 VStack {

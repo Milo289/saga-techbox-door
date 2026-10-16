@@ -591,11 +591,42 @@
     return kb;
   }
 
+  // ---------- what the admin made compulsory (Instellingen → Bezoekersformulier) ----------
+  const FORM_DEF = { name: { bell: 'hidden', reason: 'optional', message: 'optional', appointment: 'required', callback: 'required' }, email: { bell: 'hidden', reason: 'hidden', message: 'auto', appointment: 'auto', callback: 'hidden' }, phone: { callback: 'required' } };
+  const FORM_OK = { name: ['hidden', 'optional', 'required'], email: ['hidden', 'auto', 'optional', 'required'], phone: ['optional', 'required'] };
+  const fm = (f, type) => { const m = S?.settings?.form?.[f]?.[type]; return FORM_OK[f].includes(m) ? m : (FORM_DEF[f]?.[type] || 'hidden'); };
+  const formCfg = () => S?.settings?.form || {};
+  const showEmail = (type) => { const m = fm('email', type); return m === 'optional' || m === 'required' || (m === 'auto' && !!S?.mailOn); };
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // the fields for a name and an e-mail address (as far as they are asked), the consent box and the privacy note, with their checks
+  function personBlock(type) {
+    const nm = fm('name', type), em = fm('email', type), cfg = formCfg();
+    const star = (t, m) => (m === 'required' ? t + ' *' : t);
+    const name = nm !== 'hidden' ? field('input', { placeholder: star(nm === 'required' ? tx('yourName') : tx('yourNameOpt'), nm), maxlength: 60 }) : null;
+    const email = showEmail(type) ? field('input', { type: 'email', placeholder: star(em === 'required' ? 'E-mailadres' : 'E-mail (optioneel) — dan krijg je het antwoord ook per mail', em), maxlength: 120 }) : null;
+    let box = null;
+    if (cfg.consent && (name || email)) {
+      const input = h('input', { type: 'checkbox', style: 'width:26px;height:26px;flex:none' });
+      box = { input, el: h('label', { style: 'display:flex;gap:12px;align-items:center;text-align:left;margin:10px 0;font-size:.95em' }, input, h('span', {}, cfg.consentText || 'Ik ga akkoord.')) };
+    }
+    return {
+      els: [name, email, box && box.el, cfg.privacyNote ? h('div', { class: 'muted', style: 'font-size:.85em;margin:6px 0' }, cfg.privacyNote) : null].filter(Boolean),
+      values: () => ({ name: name ? name.value : '', email: email ? email.value.trim() : '', consent: box ? box.input.checked : undefined }),
+      check: () => {
+        if (name && nm === 'required' && !name.value.trim()) return 'Vul je naam in';
+        if (email) { const v = email.value.trim(); if (em === 'required' && !v) return 'Vul je e-mailadres in'; if (v && !EMAIL_RE.test(v)) return 'Dat e-mailadres klopt niet'; }
+        if (box && !box.input.checked && ((name && name.value.trim()) || (email && email.value.trim()))) return 'Vink eerst aan dat je akkoord gaat.';
+        return '';
+      },
+    };
+  }
+
   // ---------- sending ----------
   let sending = false;
   async function sendVisit(payload, errEl, btn) {
     if (sending) return;
     sending = true; if (btn) btn.disabled = true;
+    if (payload.type === 'bell' && !payload._rang) { chime('bell'); lastLocalRing = Date.now(); payload._rang = true; } // the bell sounds here too when it was sent from a form
     try {
       const res = await fetch('/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, via: VISIT ? 'phone' : 'door' }) });
       const out = await res.json().catch(() => ({}));
@@ -611,7 +642,7 @@
   function showSent(payload, mailTo) {
     openSheet('done',
       h('div', { class: 'badge pop' }, payload.type === 'bell' ? icon('bell') : icon('check')),
-      h('h3', {}, payload.type === 'bell' ? tx('sentBell') : payload.type === 'appointment' ? tx('sentAppt') : payload.type === 'callback' ? tx('callbackSent') : tx('sent')),
+      h('h3', {}, formCfg().thanksText ? formCfg().thanksText : payload.type === 'bell' ? tx('sentBell') : payload.type === 'appointment' ? tx('sentAppt') : payload.type === 'callback' ? tx('callbackSent') : tx('sent')),
       payload.type === 'appointment' ? h('p', { class: 'muted' }, tx('forTime', { at: atText(payload.at) })) : null,
       mailTo ? h('p', { class: 'muted' }, tx('mailNote', { mail: mailTo })) : null,
       h('div', { id: 'replyBox', class: 'wait-line' }, h('div', { class: 'spin' }), tx('waiting')),
@@ -637,9 +668,12 @@
   function ringBell() {
     if (!bellAllowed()) return toast(tx('toastBellOff'));
     if (bellWait() > 0) return toast(tx('toastWait', { s: bellWait() }));
+    if (fm('name', 'bell') !== 'hidden' || ['optional', 'required'].includes(fm('email', 'bell'))) {
+      return whoAreYou({ title: tx('bell'), send: tx('bell'), payload: { type: 'bell' }, back: closeSheet });
+    }
     lastLocalRing = Date.now();
     chime('bell');
-    sendVisit({ type: 'bell' });
+    sendVisit({ type: 'bell', _rang: true });
   }
 
   function formButtons(label, onSend) {
@@ -649,26 +683,27 @@
   }
 
   function openReason(reason) {
-    const name = field('input', { placeholder: tx('yourNameOpt'), maxlength: 60 });
+    const pb = personBlock('reason');
     const err = h('div', { class: 'err' });
-    openSheet('', h('h3', {}, reason), name, keyboard(), err,
-      formButtons(tx('send'), (b) => sendVisit({ type: 'reason', reason, name: name.value }, err, b)));
+    openSheet('', h('h3', {}, reason), ...pb.els, keyboard(), err,
+      formButtons(tx('send'), (b) => { const e = pb.check(); if (e) { err.textContent = e; return; } sendVisit({ type: 'reason', reason, ...pb.values() }, err, b); }));
   }
 
   // Terugbellen: name, phone number, and when it suits
   function openCallback() {
-    const name = field('input', { placeholder: tx('yourName'), maxlength: 60 });
-    const phone = field('input', { type: 'tel', placeholder: tx('callbackPhone'), maxlength: 20 });
+    const pb = personBlock('callback');
+    const phoneMode = fm('phone', 'callback');
+    const phone = field('input', { type: 'tel', placeholder: phoneMode === 'required' ? tx('callbackPhone') + ' *' : tx('callbackPhone'), maxlength: 20 });
     const err = h('div', { class: 'err' });
     let when = '';
     const chips = ['Zo snel mogelijk', 'Vanmiddag', 'Morgen'].map((o) => h('button', { class: 'topic', onclick: (e) => { when = when === o ? '' : o; chips.forEach((x) => x.classList.toggle('sel', x === e.currentTarget && !!when)); bumpIdle(); } }, o));
     const go = h('button', { class: 'btn go' }, tx('send'));
     go.onclick = () => {
-      if (!name.value.trim()) { err.textContent = 'Vul je naam in'; return; }
-      if (!/^[0-9+\-() ]{6,20}$/.test(phone.value.trim())) { err.textContent = 'Dat telefoonnummer klopt niet'; return; }
-      sendVisit({ type: 'callback', name: name.value, phone: phone.value.trim(), when }, err, go);
+      const e = pb.check(); if (e) { err.textContent = e; return; }
+      if ((phoneMode === 'required' || phone.value.trim()) && !/^[0-9+\-() ]{6,20}$/.test(phone.value.trim())) { err.textContent = 'Dat telefoonnummer klopt niet'; return; }
+      sendVisit({ type: 'callback', ...pb.values(), phone: phone.value.trim(), when }, err, go);
     };
-    openSheet('', h('h3', {}, tx('callback')), h('p', { class: 'muted' }, tx('callbackHint')), name, phone, h('div', { class: 'topics' }, ...chips), keyboard(), err,
+    openSheet('', h('h3', {}, tx('callback')), h('p', { class: 'muted' }, tx('callbackHint')), ...pb.els, phone, h('div', { class: 'topics' }, ...chips), keyboard(), err,
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), go));
   }
 
@@ -676,7 +711,7 @@
   function openQuestion() {
     let topic = '';
     const topics = S.settings.topics || [];
-    const msg = field('textarea', { placeholder: tx('tellMore'), maxlength: 500 });
+    const msg = field('textarea', { placeholder: tx('tellMore'), maxlength: formCfg().maxMessageLength || 500 });
     const extra = h('div', { class: topics.length ? 'hidden' : '' }, msg, keyboard());
     const err = h('div', { class: 'err' });
     const next = h('button', { class: 'btn go', disabled: !!topics.length }, tx('next'));
@@ -792,17 +827,14 @@
   }
 
   function nameForm(opt) {
-    const name = field('input', { placeholder: opt.payload.type === 'appointment' ? tx('yourName') : tx('yourNameOpt'), maxlength: 60 });
-    const email = S.mailOn ? field('input', { type: 'email', placeholder: 'E-mail (optioneel) — dan krijg je het antwoord ook per mail', maxlength: 120 }) : null;
+    const pb = personBlock(opt.payload.type);
     const err = h('div', { class: 'err' });
     const go = h('button', { class: 'btn go' }, opt.send);
     go.onclick = () => {
-      if (opt.payload.type === 'appointment' && !name.value.trim()) { err.textContent = 'Vul je naam in'; return; }
-      const em = email ? email.value.trim() : '';
-      if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { err.textContent = 'Dat e-mailadres klopt niet'; return; }
-      sendVisit({ ...opt.payload, name: name.value, email: em }, err, go);
+      const e = pb.check(); if (e) { err.textContent = e; return; }
+      sendVisit({ ...opt.payload, ...pb.values() }, err, go);
     };
-    openSheet('', h('h3', {}, opt.title), opt.summary ? h('div', { class: 'picked' }, h('span', {}, opt.summary)) : null, name, email, keyboard(), err,
+    openSheet('', h('h3', {}, opt.title), opt.summary ? h('div', { class: 'picked' }, h('span', {}, opt.summary)) : null, ...pb.els, keyboard(), err,
       h('button', { class: 'link', onclick: () => profileForm(opt) }, 'Profiel maken — dan hoef je dit niet steeds in te vullen'),
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => (S.hasPeople ? numberPad(opt) : opt.back()) }, tx('back')), go));
   }

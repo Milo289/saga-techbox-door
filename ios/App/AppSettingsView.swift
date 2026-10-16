@@ -49,6 +49,7 @@ struct AppSettingsView: View {
 
                 Section {
                     NavigationLink { QuickEditor() } label: { Label("Snelle acties", systemImage: "bolt.fill") }
+                    if store.can("settings") { NavigationLink { FormSettingsView(store: store) } label: { Label("Bezoekersformulier", systemImage: "list.clipboard") } }
                     Toggle(isOn: $quietOn) { Label("Stille uren", systemImage: "moon.zzz.fill") }
                     if quietOn {
                         DatePicker("Van", selection: Binding(get: { minutesToDate(quietFrom) }, set: { quietFrom = dateToMinutes($0) }), displayedComponents: .hourAndMinute)

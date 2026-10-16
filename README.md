@@ -284,3 +284,14 @@ De iPhone- en iPad-app hebben nu ook: **snelle acties** (eigen knoppen als “Lu
 - **Echte systeemmeldingen** in de Windows- en Linux-app (bezoekers, waarschuwingen, verbinding kwijt), met respect voor de stille uren.
 - **Handleiding in gewone taal** op `/help` (en met een knop in de Controle-kaart en op het startscherm): beginnen, elke dag, bezoekers, wat te doen als er iets misgaat, veilig houden.
 - **Toegankelijkheid:** schermlezers lezen de status van het deurscherm voor zodra die verandert.
+
+## Versie 3.3.0 (developer beta) — het bezoekersformulier en inloggen met een QR-code
+**Dit is een voorlopige versie voor ontwikkelaars (een “pre-release” op GitHub).** De gewone updater biedt hem niet aan: alleen wie hem zelf downloadt, krijgt hem. Een gewone versie volgt pas als dit goed werkt.
+
+- **Bezoekersformulier:** per knop (aanbellen, reden, vraagje, tijd boeken, terugbellen) bepaal je of **naam** en **e-mailadres** niet gevraagd worden, leeg mogen blijven, of **verplicht** zijn (en het telefoonnummer bij terugbellen). Daarnaast: eerst **toestemming** laten aanvinken met je eigen tekst, een korte privacytekst, de maximale lengte van een bericht, de wachttijd tussen verzoeken en tussen keren aanbellen, en een eigen tekst na het versturen. De regels gelden op het deurscherm én op de bezoekerspagina, en de server controleert ze ook zelf (je kunt ze dus niet omzeilen).
+- **Overal dezelfde instellingen:** de server beschrijft deze instellingen; het bedieningspaneel, de Mac-, iPhone-, iPad-, Windows- en Linux-apps tekenen ze zelf. Een nieuwe optie verschijnt dus overal tegelijk, zonder dat een app vernieuwd hoeft te worden.
+- **Inloggen met een QR-code:** in het bedieningspaneel (“Inloggen op een ander apparaat”) maak je een code die twee minuten en één keer werkt. Scan hem met je telefoon of een andere computer en je bent ingelogd, ook buiten je eigen netwerk, zonder je wachtwoord te typen. Het inlogformulier is verder geschikt voor wachtwoordmanagers (iCloud-sleutelhanger, Chrome, 1Password), die het wachtwoord zelf invullen.
+- **iPad:** een zijbalk in plaats van de tabbalk als er ruimte is.
+- **Beta installeren:** download de bestanden bij de release `v3.3.0-beta.1` op GitHub (Releases → Pre-release). De Dev-apps zijn de voorgestelde manier om dit te proberen.
+
+Wat nog ontbreekt: echte *passkeys* (een inlog met Face ID of Touch ID op het web). Die werken alleen op een veilige verbinding (https); op een gewoon adres in je eigen netwerk (`http://192.168…`) staat de browser dat niet toe. De QR-code is daarvoor het alternatief.

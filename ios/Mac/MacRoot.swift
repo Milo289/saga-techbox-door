@@ -2,10 +2,10 @@ import SwiftUI
 import AppKit
 
 enum MacPage: String, CaseIterable, Identifiable {
-    case status, inbox, manage, activity, dev
+    case status, inbox, manage, form, activity, dev
     var id: String { rawValue }
-    var title: String { switch self { case .status: return "Status"; case .inbox: return "Bezoekers"; case .manage: return "Beheer"; case .activity: return "Activiteit"; case .dev: return "Ontwikkelaar" } }
-    var symbol: String { switch self { case .status: return "door.left.hand.open"; case .inbox: return "bell.fill"; case .manage: return "slider.horizontal.3"; case .activity: return "list.bullet.rectangle"; case .dev: return "hammer.fill" } }
+    var title: String { switch self { case .status: return "Status"; case .inbox: return "Bezoekers"; case .manage: return "Beheer"; case .form: return "Bezoekersformulier"; case .activity: return "Activiteit"; case .dev: return "Ontwikkelaar" } }
+    var symbol: String { switch self { case .status: return "door.left.hand.open"; case .inbox: return "bell.fill"; case .manage: return "slider.horizontal.3"; case .form: return "list.clipboard"; case .activity: return "list.bullet.rectangle"; case .dev: return "hammer.fill" } }
 }
 
 /// First the connection screen, then the app: sidebar on the left, the chosen page on the right.
@@ -46,6 +46,7 @@ struct MacRoot: View {
                         case .status: MacStatus(store: store)
                         case .inbox: MacInbox(store: store)
                         case .manage: MacManage(store: store)
+                        case .form: FormSettingsView(store: store)
                         case .activity: MacActivity(store: store)
                         case .dev: MacDev(store: store)
                         }

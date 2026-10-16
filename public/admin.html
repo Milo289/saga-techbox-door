@@ -232,8 +232,8 @@
 <div id="login" class="card hidden">
   <h2>Bedieningspaneel</h2>
   <form id="userForm" class="lf">
-    <input id="lu" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Gebruikersnaam">
-    <input id="lp" type="password" autocomplete="current-password" placeholder="Wachtwoord">
+    <input id="lu" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Gebruikersnaam">
+    <input id="lp" name="password" type="password" autocomplete="current-password" placeholder="Wachtwoord">
     <label class="check" style="font-size:14px"><input type="checkbox" id="remember"><span id="rememberText">Onthoud mij op dit apparaat</span></label>
     <button class="white" id="loginBtn" type="submit">Inloggen</button>
   </form>
@@ -278,6 +278,7 @@
 <div id="toast"></div>
 
 <script src="/tones.js"></script>
+<script src="/qr.js"></script>
 <script>
 (() => {
   'use strict';
@@ -487,6 +488,17 @@
     es.onerror = () => $('conn').classList.remove('ok');
   }
   async function start() {
+    // a one-time code from a QR code (#ticket=…): this device is logged in without typing anything
+    const m = /[#&]ticket=([0-9a-f]{32})/.exec(location.hash || '');
+    if (m) {
+      history.replaceState(null, '', location.pathname + location.search);
+      try {
+        const r = await fetch('/api/login/ticket/use', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: m[1] }) });
+        const out = await r.json();
+        if (r.ok && out.token) { TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', ''); }
+        else { showLogin(out.error || 'Die code werkt niet meer. Maak een nieuwe.'); return; }
+      } catch { showLogin('Geen verbinding'); return; }
+    }
     try { S = await api('/api/admin-state'); } catch { return; }
     lastMsg = Date.now();
     $('login').classList.add('hidden'); $('shell').classList.remove('hidden');
@@ -635,6 +647,55 @@
         h('label', {}, 'Andere computers wakker maken'), h('div', {}, h('div', { class: 'muted', style: 'margin-bottom:8px' }, 'Wake-on-LAN: deze server stuurt een wekpakket naar een computer in hetzelfde netwerk (die moet dat in zijn BIOS aan hebben staan).'), wolRows,
           h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { d.wol.push({ name: '', mac: '' }); drawWol(); } }, '+ Computer toevoegen'))),
         h('span', {}), h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => { try { await api('/api/power/settings', d); powerDraft = null; S = await api('/api/admin-state'); toast('Energie opgeslagen'); renderAll(true); } catch {} } }, 'Energie opslaan'))));
+  }
+
+  // ----- Bezoekersformulier: drawn from the description the server sends (the apps do the same, so a new option appears everywhere at once) -----
+  let formCardBox = null;
+  function formCard() {
+    const box = h('div', { class: 'card' }, h('h2', {}, 'Bezoekersformulier'), h('p', { class: 'muted' }, 'Laden…'));
+    formCardBox = box;
+    api('/api/form-schema').then((schema) => {
+      const values = {};
+      const draw = () => {
+        const parts = [h('h2', {}, 'Bezoekersformulier', h('span', { class: 'sp' }), h('button', { class: 'white sm', onclick: async () => { try { const r = await api('/api/form-settings', { values }); toast('Opgeslagen'); for (const k of Object.keys(values)) delete values[k]; schema.groups = r.groups; draw(); } catch {} } }, 'Opslaan')),
+          h('p', { class: 'muted', style: 'margin-top:0' }, 'Wat bezoekers op het deurscherm en de bezoekerspagina moeten invullen, per knop. Deze instellingen staan ook in de apps.')];
+        for (const g of schema.groups) {
+          const form = h('div', { class: 'form' });
+          for (const f of g.fields) {
+            form.append(h('label', {}, f.label));
+            if (f.type === 'choice') form.append(h('select', { onchange: (e) => { values[f.key] = e.target.value; } }, ...f.options.map(([v, l]) => h('option', { value: v, selected: f.value === v }, l))));
+            else if (f.type === 'toggle') form.append(h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!f.value, onchange: (e) => { values[f.key] = e.target.checked; } }), 'Aan'));
+            else if (f.type === 'number') form.append(h('input', { type: 'number', min: f.min, max: f.max, value: f.value, style: 'width:110px', oninput: (e) => { values[f.key] = Number(e.target.value); } }));
+            else form.append(h('input', { value: f.value || '', maxlength: f.max || 200, oninput: (e) => { values[f.key] = e.target.value; } }));
+          }
+          parts.push(h('h3', { style: 'margin:16px 0 4px' }, g.title), g.help ? h('p', { class: 'muted', style: 'margin:0 0 8px' }, g.help) : null, form);
+        }
+        box.replaceChildren(...parts.filter(Boolean));
+      };
+      draw();
+    }).catch(() => { box.replaceChildren(h('h2', {}, 'Bezoekersformulier'), h('p', { class: 'muted' }, 'Dit is alleen zichtbaar met het recht “Instellingen wijzigen”.')); });
+    return box;
+  }
+
+  // ----- log in another device by scanning a code: no typing, no password, valid for two minutes, usable once -----
+  function qrLoginCard() {
+    const out = h('div', { class: 'muted' }, 'Handig voor je telefoon of een andere computer: je scant een code en bent ingelogd, zonder je wachtwoord te typen.');
+    let timer = null;
+    const show = async () => {
+      clearInterval(timer);
+      try {
+        const t = await api('/api/login/ticket', {});
+        const url = `${location.origin}/admin#ticket=${t.ticket}`;
+        const left = h('div', { class: 'muted', style: 'text-align:center' });
+        const svg = h('div', { style: 'width:220px;margin:10px auto;background:#fff;padding:6px;border-radius:12px' });
+        svg.innerHTML = QR.svg(url, { border: 1 });
+        out.replaceChildren(svg, left, h('div', { class: 'muted', style: 'text-align:center' }, 'Scan dit met de camera van het andere apparaat. Maak geen foto en laat hem niemand anders scannen.'));
+        let sec = t.expiresIn;
+        const tick = () => { left.textContent = sec > 0 ? `Nog ${sec} seconden geldig` : 'Verlopen'; if (sec-- <= 0) { clearInterval(timer); out.replaceChildren(h('div', { class: 'muted' }, 'De code is verlopen.')); } };
+        tick(); timer = setInterval(tick, 1000);
+      } catch {}
+    };
+    return h('div', { class: 'card' }, h('h2', {}, 'Inloggen op een ander apparaat'), out, h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'sm', onclick: show }, 'Toon een QR-code')));
   }
 
   // ----- Controle: a plain checklist of what is set up and what is still missing -----
@@ -1541,6 +1602,8 @@
         appCard(),
 
         healthCard(),
+        formCard(),
+        qrLoginCard(),
         h('div', { class: 'card' }, h('h2', {}, 'Deur'),
           h('div', { class: 'form' },
             h('label', {}, 'Naam'), text(st, 'name', { maxlength: 60 }),

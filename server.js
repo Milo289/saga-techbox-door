@@ -39,6 +39,14 @@ const DEFAULT_SETTINGS = {
   sound: { bell: 'classic', reply: 'soft', custom: false }, // custom = an own bell sound has been uploaded (the file itself is not in the settings)
   away: { enabled: false, until: '', message: '' }, // absence mode: closed until the end of this date (YYYY-MM-DD)
   weather: { enabled: false, city: '', lat: 0, lon: 0 },
+  // what visitors must fill in, per button; plus consent, limits and texts of the visitor page (edited with the generic form below)
+  form: {
+    name: { bell: 'hidden', reason: 'optional', message: 'optional', appointment: 'required', callback: 'required' },
+    email: { bell: 'hidden', reason: 'hidden', message: 'auto', appointment: 'auto', callback: 'hidden' },
+    phone: { callback: 'required' },
+    consent: false, consentText: 'Ik ga ermee akkoord dat mijn gegevens kort worden bewaard, zodat er geantwoord kan worden.', privacyNote: '',
+    maxMessageLength: 500, visitCooldownSec: 1, bellCooldownSec: 45, thanksText: '',
+  },
   watch: { screenMinutes: 0 }, // warn me when no door screen has been connected for this many minutes (0 = off)
   startup: { status: 'hours', message: '' }, // what the door shows after the server (re)starts: follow the opening hours, or open / closed / busy
   downloads: { enabled: false }, // a public page /get where people can download the apps you put in the data/downloads folder
@@ -100,6 +108,71 @@ function cleanSystem(b = {}) {
     allowedIps: (Array.isArray(b.allowedIps) ? b.allowedIps : []).map((x) => str(x, 50)).filter(validIpRule).slice(0, 40),
     retentionDays: num(b.retentionDays, 0, 3650, 0), autoBackup: b.autoBackup === undefined ? true : !!b.autoBackup, backupKeep: num(b.backupKeep, 1, 90, DEFAULT_SYSTEM.backupKeep),
   };
+}
+
+// ---------- the visitor form: what is asked, what is required ----------
+const FORM_TYPES = [['bell', 'Aanbellen'], ['reason', 'Een reden kiezen'], ['message', 'Een vraagje'], ['appointment', 'Een tijd boeken'], ['callback', 'Terugbellen']];
+const FORM_DEFAULT = { name: { bell: 'hidden', reason: 'optional', message: 'optional', appointment: 'required', callback: 'required' }, email: { bell: 'hidden', reason: 'hidden', message: 'auto', appointment: 'auto', callback: 'hidden' }, phone: { callback: 'required' } };
+const FORM_OPTIONS = {
+  name: [['hidden', 'Niet vragen'], ['optional', 'Mag leeg blijven'], ['required', 'Verplicht']],
+  email: [['hidden', 'Niet vragen'], ['auto', 'Alleen vragen als e-mail aan staat'], ['optional', 'Mag leeg blijven'], ['required', 'Verplicht']],
+  phone: [['optional', 'Mag leeg blijven'], ['required', 'Verplicht']],
+};
+function formMode(field, type) {
+  const f = state.settings.form;
+  const m = f && f[field] && f[field][type];
+  if (FORM_OPTIONS[field] && FORM_OPTIONS[field].some((o) => o[0] === m)) return m;
+  return (FORM_DEFAULT[field] && FORM_DEFAULT[field][type]) || 'hidden';
+}
+const clampInt = (v, min, max, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : d; };
+const bellCooldown = () => clampInt(state.settings.form && state.settings.form.bellCooldownSec, 5, 600, 45) * 1000;
+const visitCooldown = () => clampInt(state.settings.form && state.settings.form.visitCooldownSec, 1, 60, 1) * 1000;
+const maxMessage = () => clampInt(state.settings.form && state.settings.form.maxMessageLength, 50, 1000, 500);
+// the description of these settings is sent to every app, so each app can show them without being changed for new options
+function formSchema() {
+  const f = state.settings.form, groups = [];
+  const req = { id: 'required', title: 'Wat moeten bezoekers invullen?', help: 'Per knop op het deurscherm en de bezoekerspagina. “Verplicht” betekent dat het niet verstuurd kan worden zonder.', fields: [] };
+  for (const [t, label] of FORM_TYPES) {
+    req.fields.push({ key: `form.name.${t}`, label: `${label}: naam`, type: 'choice', options: FORM_OPTIONS.name, value: formMode('name', t) });
+    if (t !== 'bell' || true) req.fields.push({ key: `form.email.${t}`, label: `${label}: e-mailadres`, type: 'choice', options: FORM_OPTIONS.email, value: formMode('email', t) });
+  }
+  req.fields.push({ key: 'form.phone.callback', label: 'Terugbellen: telefoonnummer', type: 'choice', options: FORM_OPTIONS.phone, value: formMode('phone', 'callback') });
+  groups.push(req);
+  groups.push({ id: 'privacy', title: 'Privacy', help: 'Gezichten, namen en nummers zijn persoonsgegevens. Met toestemming vragen ben je netjes in orde.', fields: [
+    { key: 'form.consent', label: 'Eerst toestemming laten aanvinken', type: 'toggle', value: !!f.consent },
+    { key: 'form.consentText', label: 'Tekst van de toestemming', type: 'text', max: 200, value: f.consentText },
+    { key: 'form.privacyNote', label: 'Korte privacytekst onder het formulier', type: 'text', max: 200, value: f.privacyNote },
+  ] });
+  groups.push({ id: 'limits', title: 'Grenzen', help: 'Tegen spam en per ongeluk aanbellen.', fields: [
+    { key: 'form.maxMessageLength', label: 'Maximale lengte van een bericht (tekens)', type: 'number', min: 50, max: 1000, value: maxMessage() },
+    { key: 'form.visitCooldownSec', label: 'Wachttijd tussen twee verzoeken van één apparaat (seconden)', type: 'number', min: 1, max: 60, value: visitCooldown() / 1000 },
+    { key: 'form.bellCooldownSec', label: 'Wachttijd tussen twee keer aanbellen, voor iedereen (seconden)', type: 'number', min: 5, max: 600, value: bellCooldown() / 1000 },
+  ] });
+  groups.push({ id: 'texts', title: 'Teksten', fields: [{ key: 'form.thanksText', label: 'Tekst na het versturen (leeg = standaard)', type: 'text', max: 120, value: f.thanksText }] });
+  return groups;
+}
+function sanitizeForm(f) {
+  const out = structuredClone(DEFAULT_SETTINGS.form);
+  for (const field of ['name', 'email', 'phone']) for (const t of Object.keys(FORM_DEFAULT[field])) { const m = f && f[field] && f[field][t]; out[field][t] = FORM_OPTIONS[field].some((o) => o[0] === m) ? m : FORM_DEFAULT[field][t]; }
+  out.consent = !!(f && f.consent); out.consentText = str(f && f.consentText, 200) || DEFAULT_SETTINGS.form.consentText; out.privacyNote = str(f && f.privacyNote, 200);
+  out.maxMessageLength = clampInt(f && f.maxMessageLength, 50, 1000, 500); out.visitCooldownSec = clampInt(f && f.visitCooldownSec, 1, 60, 1); out.bellCooldownSec = clampInt(f && f.bellCooldownSec, 5, 600, 45);
+  out.thanksText = str(f && f.thanksText, 120);
+  return out;
+}
+function applyFormValues(values) {
+  const f = state.settings.form;
+  const set = (path, v) => { const [, a, b] = path.split('.'); if (b) f[a][b] = v; else f[a] = v; };
+  let n = 0;
+  for (const g of formSchema()) for (const fld of g.fields) {
+    if (!(fld.key in values)) continue;
+    const v = values[fld.key];
+    if (fld.type === 'choice') { if (!fld.options.some((o) => o[0] === v)) throw bad(`Ongeldige keuze voor “${fld.label}”`); set(fld.key, v); }
+    else if (fld.type === 'toggle') set(fld.key, v === true || v === 'true');
+    else if (fld.type === 'number') { const x = Math.round(Number(v)); if (!Number.isFinite(x)) throw bad(`“${fld.label}” moet een getal zijn`); set(fld.key, Math.max(fld.min, Math.min(fld.max, x))); }
+    else set(fld.key, str(v, fld.max || 200));
+    n++;
+  }
+  return n;
 }
 
 const PRIVATE_SETTINGS = ['ntfyServer', 'ntfyTopic', 'webhookUrl', 'quickReplies', 'autoReplyText', 'closedReply', 'autoReplyMinutes', 'mail'];
@@ -517,7 +590,7 @@ function publicState() {
     settings,
     view: computeView(now),
     replies: state.requests.filter((r) => r.reply && now - r.repliedAt < 15 * 60e3).map((r) => ({ id: r.id, reply: r.reply })),
-    bellReadyAt: lastBellAt + BELL_COOLDOWN,
+    bellReadyAt: lastBellAt + bellCooldown(),
     mailOn: mailOn(),
     hasPeople: state.people.length > 0,
     positions: state.positions || {},
@@ -669,6 +742,9 @@ function newSession(userId, req, remember) {
   state.sessions = state.sessions.filter((x) => Date.now() - x.lastSeen < (x.ttl || state.system.sessionDays) * 864e5).slice(-200);
   return token;
 }
+
+// one-time codes with which an already logged-in device logs in another one (a QR code): valid for two minutes, usable once
+const loginTickets = new Map();
 
 // plain-language checks shown as a checklist in the control panel
 function healthChecks(full) {
@@ -1039,6 +1115,7 @@ function pruneMaps(now) {
   cut(failures, state.system.blockMinutes * 60e3); cut(visitLog, 3600e3); cut(lastVisit, 3600e3); cut(lookups, 60e3); cut(profileHits, 3600e3);
   if (alertCooldown.size > 100) alertCooldown.clear();
   pruneSecurity(now);
+  for (const [k, t] of loginTickets) if (t.until < now) loginTickets.delete(k);
 }
 // quiet self-checks: disk, memory, event-loop delay, and (if wanted) a door screen that has gone away
 function monitors(now) {
@@ -1355,6 +1432,7 @@ const adminRoutes = {
     for (const m of MODES) if (!/^#[0-9a-f]{6}$/i.test(String(merged.colorsLight[m]))) merged.colorsLight[m] = '';
     if (!/^#[0-9a-f]{6}$/i.test(String(merged.accent))) merged.accent = '';
     if (merged.palette !== 'custom' && !PALETTES.some((x) => x.id === merged.palette)) merged.palette = 'standard';
+    merged.form = sanitizeForm(merged.form);
     const mo = merged.moderation;
     if (!['flag', 'mask', 'block'].includes(mo.action)) mo.action = 'mask';
     mo.maxPerHour = Math.max(1, Math.min(500, Math.round(Number(mo.maxPerHour)) || 20));
@@ -1500,6 +1578,15 @@ const adminRoutes = {
     if (b.faces) raw.faces = b.faces;
     state.integ = integ.clean(raw);
     log('koppeling', 'Koppelingen opgeslagen');
+  },
+  'GET /api/form-schema': () => ({ groups: formSchema() }),
+  'POST /api/form-settings': (b) => { const n = applyFormValues(b && typeof b.values === 'object' && b.values ? b.values : {}); state.settings.form = sanitizeForm(state.settings.form); log('instellingen', `Bezoekersformulier aangepast (${n} ${n === 1 ? 'instelling' : 'instellingen'})`); return { ok: true, groups: formSchema() }; },
+  'POST /api/login/ticket': (b, id) => {
+    if (!id.userId) throw bad('Dit kan alleen met een gewoon account.');
+    const ticket = crypto.randomBytes(16).toString('hex');
+    loginTickets.set(ticket, { userId: id.userId, until: Date.now() + 120e3, by: id.name });
+    log('login', `${id.name} maakte een code om een ander apparaat in te laten loggen`, id.name, !!id.root);
+    return { ticket, expiresIn: 120 };
   },
   'POST /api/alerts/test': () => { raise('test', 'Dit is een testwaarschuwing. Als je dit leest, werken de waarschuwingen.', { cooldownMin: 0 }); },
   'POST /api/alerts/clear': () => { for (const a of state.alerts) if (!a.resolvedAt) a.resolvedAt = Date.now(); log('waarschuwing', 'Waarschuwingen gewist', undefined); },
@@ -1676,7 +1763,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -1728,13 +1815,12 @@ const visitLog = new Map();
 const lastVisit = new Map();
 const lookups = new Map();
 const profileHits = new Map();
-const BELL_COOLDOWN = 45 * 1000; // the doorbell can ring at most once every 45 seconds (for everyone)
 let lastBellAt = 0;
 function handleVisit(req, b) {
   const ip = clientIp(req);
   const now = Date.now();
   // light flood protection (the door screen is one device, so keep this short)
-  if (now - (lastVisit.get(ip) || 0) < 1200) throw Object.assign(new Error('Een moment…'), { code: 429 });
+  if (now - (lastVisit.get(ip) || 0) < visitCooldown()) throw Object.assign(new Error('Een moment…'), { code: 429 });
 
   const via = b.via === 'phone' ? 'phone' : 'door'; // the door screen is one shared device; phones are one person each
   const mod = state.settings.moderation;
@@ -1748,17 +1834,14 @@ function handleVisit(req, b) {
   const allowed = { bell: v.doorbell, reason: v.reasons, appointment: v.appointments, message: v.messages, callback: v.callback };
   if (!allowed[b.type]) throw bad('Die optie staat uit');
   if (b.type === 'bell' && view.mode !== 'open' && !v.bellWhenBlocked) throw bad('De bel staat nu uit — kies een reden');
-  if (b.type === 'bell' && now - lastBellAt < BELL_COOLDOWN) {
-    const wait = Math.ceil((lastBellAt + BELL_COOLDOWN - now) / 1000);
+  if (b.type === 'bell' && now - lastBellAt < bellCooldown()) {
+    const wait = Math.ceil((lastBellAt + bellCooldown() - now) / 1000);
     throw Object.assign(new Error(`Er is net aangebeld — over ${wait} s kun je weer bellen`), { code: 429 });
   }
   if (b.type === 'message' && !str(b.message) && !str(b.topic)) throw bad('Kies een onderwerp of typ je vraag');
   if (b.type === 'appointment' && !(ts(b.at) > now)) throw bad('Kies een tijd');
   const phone = str(b.phone, 24).replace(/\s+/g, ' ');
-  if (b.type === 'callback') {
-    if (!/^[0-9+\-() ]{6,20}$/.test(phone)) throw bad('Dat telefoonnummer klopt niet');
-    if (!str(b.name, 60) && !(b.nr)) throw bad('Vul je naam in');
-  }
+  if (b.type === 'callback' && (formMode('phone', 'callback') === 'required' || phone) && !/^[0-9+\-() ]{6,20}$/.test(phone)) throw bad('Dat telefoonnummer klopt niet');
 
   // a known number fills in name and e-mail (looked up here, never trusted from the browser)
   const person = b.nr ? state.people.find((x) => x.nr.toLowerCase() === str(b.nr, 20).toLowerCase()) : null;
@@ -1766,8 +1849,12 @@ function handleVisit(req, b) {
   if (person && person.pending) throw bad('Je profiel wacht nog op goedkeuring.');
   const typedEmail = str(b.email, 120);
   if (typedEmail && !isEmail(typedEmail)) throw bad('Dat e-mailadres klopt niet');
+  // what the admin made compulsory for this button (a known number counts as name and e-mail)
+  if (formMode('name', b.type) === 'required' && !(person ? person.name : str(b.name, 60)).trim()) throw bad('Vul je naam in');
+  if (formMode('email', b.type) === 'required' && !(person ? person.email : typedEmail)) throw bad('Vul je e-mailadres in');
+  if (state.settings.form.consent && (str(b.name, 60) || typedEmail || phone) && b.consent !== true) throw bad('Vink eerst aan dat je akkoord gaat.');
   const r = {
-    id: newId(), type: b.type, name: person ? person.name : str(b.name, 60), reason: str(b.reason, 80), message: str(b.message, 500),
+    id: newId(), type: b.type, name: person ? person.name : str(b.name, 60), reason: str(b.reason, 80), message: str(b.message, maxMessage()),
     topic: str(b.topic, 60), nr: person ? person.nr : '',
     email: b.mail === false ? '' : person ? person.email : typedEmail,
     at: b.type === 'appointment' ? ts(b.at) : null,
@@ -1775,7 +1862,6 @@ function handleVisit(req, b) {
     ip, via,
     statusAtTime: view.label, createdAt: now, state: 'new', reply: '', repliedAt: 0,
   };
-  if (b.type === 'appointment' && !r.name) throw bad('Vul je naam in');
   if (mod.filter) { // the bad-word filter looks at everything a visitor typed
     const flags = [];
     for (const k of ['name', 'message', 'reason', 'when']) {
@@ -1855,6 +1941,24 @@ const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (r
       if (lg) return send(res, lg.code, { error: lg.error });
       const token = newSession(user.userId, req, !!b.remember);
       log('login', `${user.name} ingelogd (${ip})`, user.name, !!user.root);
+      save();
+      return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
+    }
+    if (req.method === 'POST' && p === '/api/login/ticket/use') {
+      const ip = clientIp(req);
+      if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
+      const b = await readBody(req);
+      const t = loginTickets.get(String(b.ticket || ''));
+      loginTickets.delete(String(b.ticket || '')); // once, whatever the outcome
+      if (!t || t.until < Date.now()) { authFail(ip); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Deze code is verlopen of al gebruikt. Maak een nieuwe.' }); }
+      let user = null;
+      if (t.userId === 'root') user = rootIdentity();
+      else { const u = state.users.find((x) => x.id === t.userId && !x.disabled); if (u) user = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: effectivePerms(u) }; }
+      if (!user) return send(res, 401, { error: 'Dit account bestaat niet meer.' });
+      const lg = gate(user, ip);
+      if (lg) return send(res, lg.code, { error: lg.error });
+      const token = newSession(user.userId, req, true);
+      log('login', `${user.name} ingelogd op een nieuw apparaat met een code (${ip}) — gemaakt door ${t.by}`, user.name, !!user.root);
       save();
       return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
     }

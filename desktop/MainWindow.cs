@@ -83,7 +83,7 @@ public sealed class MainWindow : Window
         _nav.Children.Clear();
         bool configured = Credentials.Load() != null;
         if (!configured || _page == "settings" && false) { _content.Content = ConnectPage(); return; }
-        foreach (var (id, label) in new[] { ("status", "Status"), ("inbox", "Bezoekers"), ("manage", "Beheer"), ("settings", "Instellingen") }.Concat(Program.IsDev ? new[] { ("dev", "Ontwikkelaar") } : Array.Empty<(string, string)>()))
+        foreach (var (id, label) in new[] { ("status", "Status"), ("inbox", "Bezoekers"), ("manage", "Beheer") }.Concat(C.Can("settings") ? new[] { ("form", "Bezoekersformulier") } : Array.Empty<(string, string)>()).Concat(new[] { ("settings", "Instellingen") }).Concat(Program.IsDev ? new[] { ("dev", "Ontwikkelaar") } : Array.Empty<(string, string)>()))
         {
             bool on = _page == id;
             var text = id == "inbox" && C.NewCount > 0 ? $"{label}  ({C.NewCount})" : label;
@@ -91,7 +91,7 @@ public sealed class MainWindow : Window
             b.HorizontalAlignment = HorizontalAlignment.Stretch; b.HorizontalContentAlignment = HorizontalAlignment.Left;
             _nav.Children.Add(b);
         }
-        _content.Content = _page switch { "inbox" => InboxPage(), "manage" => ManagePage(), "settings" => SettingsPage(), "dev" => DevPage(), _ => StatusPage() };
+        _content.Content = _page switch { "inbox" => InboxPage(), "manage" => ManagePage(), "form" => FormPage(), "settings" => SettingsPage(), "dev" => DevPage(), _ => StatusPage() };
     }
 
     DateTime? _offlineSince; bool _toldOffline, _firstAlerts = true;
@@ -460,5 +460,75 @@ public sealed class MainWindow : Window
         var info = Ui.Card(Ui.Stack(4, Ui.Text("Verbinding", 16, true), Ui.Text($"Server: {C.Server}", 13, false, Ui.Muted), Ui.Text($"Reactietijd: {C.LatencyMs} ms", 13, false, Ui.Muted),
             Ui.Text($"Rechten: {string.Join(", ", C.Perms)}", 13, false, Ui.Muted), Ui.Text($"App: {typeof(MainWindow).Assembly.GetName().Version} · {System.Runtime.InteropServices.RuntimeInformation.OSDescription}", 13, false, Ui.Muted)));
         return Ui.Page(console, data, log, info);
+    }
+
+    // ---------- the visitor form: drawn from the description the server sends (so a new option shows up without a new app) ----------
+    JsonArray? _formGroups; string _formError = ""; bool _formLoading;
+    readonly Dictionary<string, JsonNode?> _formEdits = new();
+
+    Control FormPage()
+    {
+        if (_formGroups == null)
+        {
+            if (!_formLoading) { _formLoading = true; _ = LoadForm(); }
+            return Ui.Page(Ui.Text("Bezoekersformulier", 26, true), Ui.Text(_formError != "" ? _formError : "Laden…", 14, false, Ui.Muted));
+        }
+        var cards = new List<Control?> { Ui.Text("Bezoekersformulier", 26, true), Ui.Text("Wat bezoekers op het deurscherm en de bezoekerspagina moeten invullen, per knop.", 14, false, Ui.Muted) };
+        foreach (var g in _formGroups)
+        {
+            var rows = new StackPanel { Spacing = 8 };
+            foreach (var f in (g?["fields"] as JsonArray) ?? new JsonArray())
+            {
+                var key = DoorClient.Str(f?["key"]); var type = DoorClient.Str(f?["type"]);
+                Control input;
+                if (type == "choice")
+                {
+                    var opts = (f?["options"] as JsonArray)?.Select(o => (Key: DoorClient.Str(o?[0]), Label: DoorClient.Str(o?[1]))).ToList() ?? new();
+                    var cur = _formEdits.TryGetValue(key, out var e) ? e?.GetValue<string>() : DoorClient.Str(f?["value"]);
+                    var box = new ComboBox { ItemsSource = opts.Select(o => o.Label).ToList(), SelectedIndex = Math.Max(0, opts.FindIndex(o => o.Key == cur)), Width = 300 };
+                    box.SelectionChanged += (_, _) => { if (box.SelectedIndex >= 0) _formEdits[key] = JsonValue.Create(opts[box.SelectedIndex].Key); };
+                    input = box;
+                }
+                else if (type == "toggle")
+                {
+                    var on = _formEdits.TryGetValue(key, out var e) ? e?.GetValue<bool>() ?? false : f?["value"]?.GetValue<bool>() ?? false;
+                    var cb = new CheckBox { IsChecked = on, Content = "Aan", Foreground = Ui.White };
+                    cb.IsCheckedChanged += (_, _) => _formEdits[key] = JsonValue.Create(cb.IsChecked == true);
+                    input = cb;
+                }
+                else if (type == "number")
+                {
+                    var num = new NumericUpDown { Minimum = f?["min"]?.GetValue<int>() ?? 0, Maximum = f?["max"]?.GetValue<int>() ?? 1000, Value = _formEdits.TryGetValue(key, out var e) ? e?.GetValue<int>() : f?["value"]?.GetValue<int>() ?? 0, Width = 140, FormatString = "0" };
+                    num.ValueChanged += (_, ev) => _formEdits[key] = JsonValue.Create((int)(ev.NewValue ?? 0));
+                    input = num;
+                }
+                else
+                {
+                    var tb = Ui.Input(_formEdits.TryGetValue(key, out var e) ? e?.GetValue<string>() ?? "" : DoorClient.Str(f?["value"]), "", t => _formEdits[key] = JsonValue.Create(t)).W(420);
+                    input = tb;
+                }
+                rows.Children.Add(Ui.Stack(4, Ui.Text(DoorClient.Str(f?["label"]), 13), input));
+            }
+            cards.Add(Ui.Card(Ui.Stack(10, Ui.Text(DoorClient.Str(g?["title"]), 16, true), DoorClient.Str(g?["help"]) != "" ? Ui.Text(DoorClient.Str(g?["help"]), 12, false, Ui.Muted) : null!, rows)));
+        }
+        cards.Add(Ui.Btn(_formEdits.Count > 0 ? $"Opslaan ({_formEdits.Count})" : "Opslaan", () => Run("Opgeslagen", SaveForm), Ui.Accent, "#000000").Also(b => b.IsEnabled = _formEdits.Count > 0).Also(b => b.HorizontalAlignment = HorizontalAlignment.Left));
+        return Ui.Page(cards.ToArray());
+    }
+
+    async Task LoadForm()
+    {
+        try { _formGroups = (await C.CallAsync("GET", "/api/form-schema"))?["groups"] as JsonArray; _formError = ""; }
+        catch (Exception e) { _formError = e.Message; }
+        _formLoading = false;
+        Dispatcher.UIThread.Post(Redraw);
+    }
+
+    async Task SaveForm()
+    {
+        var values = new JsonObject();
+        foreach (var (k, v) in _formEdits) values[k] = v?.DeepClone();
+        await C.CallAsync("POST", "/api/form-settings", new JsonObject { ["values"] = values });
+        _formEdits.Clear(); _formGroups = null;
+        await LoadForm();
     }
 }

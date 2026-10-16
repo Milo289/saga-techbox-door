@@ -218,3 +218,6 @@ jobs:
         with:
           files: out/*
           generate_release_notes: true
+          # a tag with a dash (v3.3.0-beta.1) is a developer beta: shown as a pre-release, so the updater of normal installations (which only looks at the latest stable release) never offers it
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
