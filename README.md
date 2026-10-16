@@ -278,3 +278,9 @@ Zie [SECURITY.md](SECURITY.md): bekende aanvallen zijn op de eigen server losgel
 
 ## Versie 3.1.0 — iPhone en iPad op hetzelfde niveau
 De iPhone- en iPad-app hebben nu ook: **snelle acties** (eigen knoppen als “Lunch · 30 min · Bezet”, te maken in Instellingen), **vandaag in cijfers** op de Status-pagina, **zoeken in bezoekers**, **stille uren**, en **waarschuwingen**: een nieuwe waarschuwing van de server of een server die langer dan anderhalve minuut weg is, verschijnt als bericht (en als melding als de app op de achtergrond nog leeft). Verder is de map met bouwbestanden van de iPhone-app uit de opslagplaats gehaald (die maakte hem onnodig groot).
+
+## Versie 3.2.0 — gecontroleerd op echte systemen
+- **Zelftest op Windows en Linux:** bij elke bouw start GitHub de echte Windows- en Linux-app (en de Dev-versies) op een echte Windows- en Linux-machine, laat ze inloggen op een echte server, de status veranderen en terugzetten, en maakt er een schermafbeelding van. Slaagt dat niet, dan komt de versie niet vrij.
+- **Echte systeemmeldingen** in de Windows- en Linux-app (bezoekers, waarschuwingen, verbinding kwijt), met respect voor de stille uren.
+- **Handleiding in gewone taal** op `/help` (en met een knop in de Controle-kaart en op het startscherm): beginnen, elke dag, bezoekers, wat te doen als er iets misgaat, veilig houden.
+- **Toegankelijkheid:** schermlezers lezen de status van het deurscherm voor zodra die verandert.

@@ -130,6 +130,46 @@ jobs:
       - name: Build the developer app (own name and settings, with an Ontwikkelaar page)
         working-directory: desktop
         run: dotnet publish SagaTechboxBeheer.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DevBuild=true -o out-dev
+      - uses: actions/setup-node@v4
+        if: matrix.rid == 'win-x64' || matrix.rid == 'linux-x64'
+        with:
+          node-version: '20'
+      - name: Smoke test - the real app, on this real system, against a real server
+        if: matrix.rid == 'win-x64' || matrix.rid == 'linux-x64'
+        shell: bash
+        run: |
+          export PORT=8099 DATA_DIR="$RUNNER_TEMP/door-data" DOOR_STARTER_PASSWORD=ci-test-pass-123 HOST=127.0.0.1
+          node server.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          sleep 4
+          curl -fs http://127.0.0.1:8099/healthz
+          export SAGA_TECHBOX_DIR="$RUNNER_TEMP/saga-app" SAGA_TEST_LOGIN="http://127.0.0.1:8099|admin|ci-test-pass-123"
+          EXE=desktop/out/SagaTechboxBeheer; [ -f "$EXE.exe" ] && EXE="$EXE.exe"
+          "$EXE" --selftest "$RUNNER_TEMP/selftest.txt" || true
+          cat "$RUNNER_TEMP/selftest.txt"
+          grep -q "^OK" "$RUNNER_TEMP/selftest.txt"
+          # the developer app too
+          DEV=desktop/out-dev/SagaTechboxBeheer; [ -f "$DEV.exe" ] && DEV="$DEV.exe"
+          export SAGA_TECHBOX_DIR="$RUNNER_TEMP/saga-dev"
+          "$DEV" --selftest "$RUNNER_TEMP/selftest-dev.txt" || true
+          cat "$RUNNER_TEMP/selftest-dev.txt"
+          grep -q "^OK" "$RUNNER_TEMP/selftest-dev.txt"
+      - name: Picture of the window (without a screen), to see that it draws
+        if: matrix.rid == 'win-x64' || matrix.rid == 'linux-x64'
+        continue-on-error: true
+        shell: bash
+        run: |
+          export SAGA_TECHBOX_DIR="$RUNNER_TEMP/saga-app"
+          EXE=desktop/out/SagaTechboxBeheer; [ -f "$EXE.exe" ] && EXE="$EXE.exe"
+          "$EXE" --snapshot "smoke-${{ matrix.rid }}-status.png" --page status || true
+          "$EXE" --snapshot "smoke-${{ matrix.rid }}-manage.png" --page manage || true
+          ls -la smoke-*.png
+      - uses: actions/upload-artifact@v4
+        if: matrix.rid == 'win-x64' || matrix.rid == 'linux-x64'
+        with:
+          name: smoke-${{ matrix.rid }}
+          if-no-files-found: ignore
+          path: |
+            smoke-*.png
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

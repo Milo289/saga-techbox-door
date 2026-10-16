@@ -42,7 +42,7 @@ public sealed class MainWindow : Window
         var watch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         watch.Tick += (_, _) => CheckWarnings();
         watch.Start();
-        C.Visit += v => Dispatcher.UIThread.Post(() => Toast($"{VisitLabel(v)}: {(DoorClient.Str(v["name"]) is { Length: > 0 } n ? n : "iemand")}"));
+        C.Visit += v => Dispatcher.UIThread.Post(() => { var msg = $"{VisitLabel(v)}: {(DoorClient.Str(v["name"]) is { Length: > 0 } n ? n : "iemand")}"; Toast(msg); Notifier.Show("Saga Techbox", msg); });
         C.Ring += () => Dispatcher.UIThread.Post(() => { Toast("Er is aangebeld"); try { if (!AppSettings.Current.Quiet) Console.Beep(); } catch { } });
         Redraw();
     }
@@ -98,14 +98,14 @@ public sealed class MainWindow : Window
     readonly HashSet<string> _seenAlerts = new();
     void CheckWarnings()
     {
-        if (C.HasState && !C.Live) { _offlineSince ??= DateTime.Now; if (!_toldOffline && DateTime.Now - _offlineSince > TimeSpan.FromSeconds(90)) { _toldOffline = true; Toast("Geen verbinding met de deurserver"); Beep(); } }
+        if (C.HasState && !C.Live) { _offlineSince ??= DateTime.Now; if (!_toldOffline && DateTime.Now - _offlineSince > TimeSpan.FromSeconds(90)) { _toldOffline = true; Toast("Geen verbinding met de deurserver"); Notifier.Show("Geen verbinding met de deurserver", C.Connection); Beep(); } }
         else { if (_toldOffline && C.Live) Toast("Weer verbonden"); _offlineSince = null; _toldOffline = false; }
         if (C.State["alerts"] is JsonArray alerts)
             foreach (var a in alerts)
             {
                 if (a?["resolvedAt"] != null) continue;
                 var id = DoorClient.Str(a?["id"]);
-                if (_seenAlerts.Add(id) && !_firstAlerts) { Toast("⚠ " + DoorClient.Str(a?["text"])); Beep(); }
+                if (_seenAlerts.Add(id) && !_firstAlerts) { Toast("⚠ " + DoorClient.Str(a?["text"])); Notifier.Show("Waarschuwing", DoorClient.Str(a?["text"])); Beep(); }
             }
         if (C.HasState) _firstAlerts = false;
     }

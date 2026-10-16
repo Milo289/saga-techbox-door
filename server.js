@@ -1823,6 +1823,7 @@ const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (r
     if (p === '/healthz') return send(res, 200, { ok: true });
     if (p === '/api/where') return send(res, 200, where(isLoopback(req.socket.remoteAddress && normIp(req.socket.remoteAddress)) && !req.headers['x-forwarded-for'] && !req.headers['x-real-ip'] && !req.headers['cf-connecting-ip'])); // for the start screen and for apps that look for the server
     if (p === '/start') return serveFile(res, 'start.html', req);
+    if (p === '/help' || p === '/handleiding') return serveFile(res, 'help.html', req);
     if (p === '/events') {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;

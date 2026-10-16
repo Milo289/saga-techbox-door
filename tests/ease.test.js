@@ -86,3 +86,14 @@ test('warnings: raised, shown in the checklist, cleared; pages are compressed an
   const plain = await fetch(`${srv.url}/admin`, { headers: { 'Accept-Encoding': 'identity' } });
   assert.equal(plain.headers.get('content-encoding'), null);
 });
+
+test('the manual is served and linked', async (t) => {
+  const srv = await startServer({ patch: true });
+  t.after(() => srv.stop());
+  for (const p of ['/help', '/handleiding']) {
+    const r = await call(srv, 'GET', p);
+    assert.equal(r.status, 200, p);
+    assert.match(r.text, /Als er iets misgaat/);
+  }
+  assert.match((await call(srv, 'GET', '/start')).text, /href="\/help"/);
+});

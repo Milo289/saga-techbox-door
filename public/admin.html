@@ -642,7 +642,7 @@
     const list = S.health || [];
     if (!list.length) return null;
     const open = list.filter((x) => !x.ok);
-    return h('div', { class: 'card' }, h('h2', {}, 'Controle', h('span', { class: 'sp' }), h('span', { class: 'tag ' + (open.length ? '' : 'ok') }, open.length ? `${open.length} tip${open.length > 1 ? 's' : ''}` : 'alles in orde')),
+    return h('div', { class: 'card' }, h('h2', {}, 'Controle', h('span', { class: 'sp' }), h('a', { href: '/help', target: '_blank', class: 'muted', style: 'font-size:14px;margin-right:10px' }, 'Handleiding'), h('span', { class: 'tag ' + (open.length ? '' : 'ok') }, open.length ? `${open.length} tip${open.length > 1 ? 's' : ''}` : 'alles in orde')),
       h('div', { class: 'list' }, ...list.map((x) => h('div', { class: 'row' }, h('span', { style: 'width:22px;font-weight:700;color:' + (x.ok ? 'var(--ok,#30d158)' : 'var(--warn,#ff9f0a)') }, x.ok ? '✓' : '!'), h('span', {}, x.text), x.ok ? null : h('span', { class: 'muted' }, '— ' + x.tip)))));
   }
 

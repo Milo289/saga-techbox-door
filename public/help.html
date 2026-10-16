@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Handleiding</title>
+<style>
+  :root{color-scheme:light dark;--bg:#f4f7f6;--card:#fff;--fg:#14202a;--muted:#5d6c75;--acc:#1c9d47}
+  @media(prefers-color-scheme:dark){:root{--bg:#0e1417;--card:#18232a;--fg:#e8eef1;--muted:#98a6ad;--acc:#30d158}}
+  body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 system-ui,sans-serif}
+  main{max-width:780px;margin:0 auto;padding:28px 18px 80px}
+  h1{font-size:34px;margin:0 0 6px} h2{font-size:22px;margin:34px 0 8px} h3{font-size:17px;margin:18px 0 4px}
+  .sub{color:var(--muted);margin-bottom:22px}
+  .card{background:var(--card);border-radius:16px;padding:16px 20px;margin:12px 0}
+  code{background:rgba(127,127,127,.18);padding:1px 6px;border-radius:6px;font-size:.92em}
+  nav a{display:inline-block;margin:0 10px 8px 0;color:var(--acc);text-decoration:none;font-weight:600}
+  li{margin:4px 0} .warn{border-left:4px solid #ff9f0a}
+</style></head><body><main>
+<h1>Handleiding</h1>
+<div class="sub">Saga Techbox Deur, in gewone taal. Geen technische kennis nodig.</div>
+<nav><a href="#start">Beginnen</a><a href="#dag">Elke dag</a><a href="#bezoekers">Bezoekers</a><a href="#kapot">Als er iets misgaat</a><a href="#veilig">Veilig houden</a><a href="#extra">Meer</a></nav>
+
+<h2 id="start">Beginnen</h2>
+<div class="card"><ol>
+  <li><b>De server</b> is de computer waarop het programma draait. Hij moet aan staan zodat de deur werkt. Het adres staat op het startscherm (Linux-schijf), of bovenaan in de app.</li>
+  <li><b>Het deurscherm</b> hangt bij de deur: open het adres van de server op dat scherm (<code>http://…:8080</code>), of kies “Deurscherm” in de app.</li>
+  <li><b>Jij</b> beheert alles in het bedieningspaneel: <code>http://…:8080/admin</code>, of met de app op je Mac, Windows-pc, Linux, iPhone of iPad.</li>
+  <li>Log in. Staat er bovenaan <b>Controle</b> met uitroeptekens? Dat zijn tips, werk ze af.</li>
+</ol></div>
+
+<h2 id="dag">Elke dag</h2>
+<div class="card">
+  <h3>De status zetten</h3>
+  <p>Tik op <b>Open</b>, <b>Gesloten</b> of <b>Bezet</b>. Kies erbij hoe lang (15 min, 30 min, 1 uur, 2 uur) en eventueel een bericht, zoals “Ik ben zo terug”. Daarna springt de deur vanzelf terug naar wat hij hoort te zijn.</p>
+  <h3>Snelle acties</h3>
+  <p>In de apps maak je zelf knoppen als “Lunch · 30 min · Bezet · ‘Even lunch’”. Eén tik is genoeg. Maak ze bij Instellingen → Snelle acties.</p>
+  <h3>Openingstijden</h3>
+  <p>Zet ze aan, dan wisselt de deur zelf tussen Open en Gesloten. Planning voor bijvoorbeeld een vergadering maak je bij “Bezet inplannen”.</p>
+  <h3>Afwezig</h3>
+  <p>Op vakantie? Zet “Afwezig” aan met een datum en een bericht. Daarna gaat alles vanzelf weer door.</p>
+</div>
+
+<h2 id="bezoekers">Bezoekers</h2>
+<div class="card">
+  <p>Iemand tikt op het deurscherm of scant de QR-code met zijn telefoon en belt aan, boekt een tijd, stelt een vraag of laat een terugbelverzoek achter. Jij krijgt het meteen, met geluid.</p>
+  <ul>
+    <li><b>Antwoorden:</b> kies een snel antwoord of typ er zelf een. Het verschijnt op het deurscherm.</li>
+    <li><b>Afhandelen:</b> klaar met iemand? Tik op “Afhandelen”.</li>
+    <li><b>Lastig of grof?</b> Blokkeer die persoon een uur of een dag. Scheldwoorden worden vanzelf herkend en verborgen.</li>
+    <li><b>Stille uren:</b> in de apps kun je geluid en meldingen uitzetten in bepaalde uren (bijvoorbeeld ’s nachts).</li>
+    <li>Mist u meldingen als de app dicht is? Stel op de server <b>ntfy</b> (gratis) of e-mail in; dan komt het op je telefoon.</li>
+  </ul>
+</div>
+
+<h2 id="kapot">Als er iets misgaat</h2>
+<div class="card warn">
+  <p>Het programma controleert zichzelf en <b>waarschuwt je</b> (telefoon of e-mail, en bovenaan de Controle-lijst). Dit zijn de gewone problemen:</p>
+  <h3>Het deurscherm is zwart of toont “Verbinden…”</h3>
+  <p>Staat de server aan, en zit het scherm op hetzelfde netwerk? Open het adres van de server op een telefoon: werkt dat wel, dan ligt het aan het scherm (uit en weer aan zetten helpt meestal). De app herstelt zichzelf en probeert elke paar seconden opnieuw.</p>
+  <h3>Het bedieningspaneel toont “Geen verbinding”</h3>
+  <p>De server is niet bereikbaar. Controleer of de server-computer aan staat en op het netwerk zit. Kijk in de app bij Instellingen of het adres klopt (knop “Zoeken” vindt de server zelf).</p>
+  <h3>“Opslaan lukt niet” of “schijf bijna vol”</h3>
+  <p>Maak ruimte vrij op de computer van de server (bijvoorbeeld oude back-ups wissen). Tot het opgelost is gaan wijzigingen verloren bij een herstart: maak intussen een back-up via Beheer → Systeem.</p>
+  <h3>Ik kan niet meer inloggen</h3>
+  <p>Na te veel foute pogingen wacht het programma tien minuten. Wacht even en probeer het opnieuw. Het hoofdaccount heeft geen “wachtwoord vergeten”: bewaar dat wachtwoord goed.</p>
+  <h3>Alles weer terugzetten</h3>
+  <p>Er wordt elke nacht een back-up gemaakt. Terugzetten doe je bij Beheer → Systeem → Back-ups.</p>
+</div>
+
+<h2 id="veilig">Veilig houden</h2>
+<div class="card">
+  <ul>
+    <li>Verander het <b>startwachtwoord</b> van het account “admin” zodra je binnen bent, of haal het account weg.</li>
+    <li>Geef collega’s de gewone rollen (medewerker, receptionist, kijker). Alleen jij hoeft het slot, de camera’s en de energie-instellingen te kunnen bedienen.</li>
+    <li>Staat de server ook buiten school bereikbaar? Zet hem achter https (zie <b>SECURITY.md</b>).</li>
+    <li>Gezichten van mensen zijn persoonsgegevens: gebruik camera-herkenning alleen met toestemming, bij leerlingen onder de 16 van de ouders.</li>
+  </ul>
+</div>
+
+<h2 id="extra">Meer</h2>
+<div class="card">
+  <ul>
+    <li><b>Energie:</b> laat het deurscherm of de hele computer buiten schooltijd uit en weer aan gaan. Zet het eerst op een testmachine.</li>
+    <li><b>Kleuren en teksten:</b> bij Ontwerp pas je het hele uiterlijk aan, ook de woorden op het scherm.</li>
+    <li><b>Slot en RFID, ESP32, camera’s:</b> alleen als je ze gebruikt, zie <b>docs/APPARATEN.md</b>.</li>
+    <li><b>Apps:</b> Mac, Windows, Linux, iPhone en iPad hebben snelle acties, cijfers van vandaag, zoeken en stille uren.</li>
+  </ul>
+</div>
+</main></body></html>
