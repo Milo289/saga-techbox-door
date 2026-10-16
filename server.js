@@ -11,10 +11,12 @@ const os = require('os');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const integ = require('./integrations.js'); // microcontrollers, door lock + NFC tags, camera events, automations (all opt-in)
+const security = require('./security.js'); // encrypted secrets, two-step codes, tamper-evident log, protected backups
 const power = require('./power.js'); // switching the screen / computer off and on by a schedule (opt-in)
 
 const PORT = Number(process.env.PORT) || 8080;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const keys = security.keyStore(DATA_DIR);
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const ADMIN_PIN = process.env.ADMIN_PIN || '';
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -74,7 +76,7 @@ const DEFAULT_SETTINGS = {
   mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false, digest: false, digestAt: '18:00' },
 };
 // System settings: only the main account can change these (see the Systeem tab).
-const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
+const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, attack: { burst: 240, perSec: 30, strikes: 80, banMinutes: 10, maxSse: 30 }, require2fa: 'off', backupPassword: '', backupCopyDir: '', allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
 function normIp(ip) { ip = String(ip || '').replace(/^::ffff:/, ''); return ip === '::1' ? '127.0.0.1' : ip; } // "this computer" is one address, in IPv4 or IPv6
 function ipv4ToInt(ip) { const m = String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/); return m && m.slice(1).every((x) => Number(x) <= 255) ? ((Number(m[1]) << 24) | (Number(m[2]) << 16) | (Number(m[3]) << 8) | Number(m[4])) >>> 0 : null; }
 function validIpRule(r) { const [ip, bits] = String(r).split('/'); return (ipv4ToInt(ip) !== null && (bits === undefined || (/^\d{1,2}$/.test(bits) && Number(bits) <= 32))) || (/^[0-9a-f:]+$/i.test(ip) && ip.includes(':') && bits === undefined); }
@@ -99,6 +101,7 @@ function clientIp(req) {
   if (!fwd) return remote;
   return TRUST_PROXY ? normIp(fwd) : 'proxied';
 }
+const maskSystem = (sys) => ({ ...sys, backupPassword: sys.backupPassword ? PASS_MASK : '' });
 function cleanSystem(b = {}) {
   const num = (v, min, max, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : d; };
   return {
@@ -106,6 +109,9 @@ function cleanSystem(b = {}) {
     sessionDays: num(b.sessionDays, 1, 365, DEFAULT_SYSTEM.sessionDays), rememberDays: num(b.rememberDays, 1, 730, DEFAULT_SYSTEM.rememberDays),
     maxAttempts: num(b.maxAttempts, 3, 200, DEFAULT_SYSTEM.maxAttempts), blockMinutes: num(b.blockMinutes, 1, 1440, DEFAULT_SYSTEM.blockMinutes), rateLimit: b.rateLimit === undefined ? true : !!b.rateLimit,
     allowedIps: (Array.isArray(b.allowedIps) ? b.allowedIps : []).map((x) => str(x, 50)).filter(validIpRule).slice(0, 40),
+    attack: { burst: num(b.attack && b.attack.burst, 20, 5000, 240), perSec: num(b.attack && b.attack.perSec, 2, 500, 30), strikes: num(b.attack && b.attack.strikes, 10, 1000, 80), banMinutes: num(b.attack && b.attack.banMinutes, 1, 1440, 10), maxSse: num(b.attack && b.attack.maxSse, 3, 500, 30) },
+    require2fa: ['off', 'root', 'privileged'].includes(b.require2fa) ? b.require2fa : 'off',
+    backupPassword: str(b.backupPassword, 300), backupCopyDir: str(b.backupCopyDir, 300),
     retentionDays: num(b.retentionDays, 0, 3650, 0), autoBackup: b.autoBackup === undefined ? true : !!b.autoBackup, backupKeep: num(b.backupKeep, 1, 90, DEFAULT_SYSTEM.backupKeep),
   };
 }
@@ -196,6 +202,7 @@ const freshState = () => ({
   customBell: null, // an own bell sound { mime, b64, at }
   lastDigestDay: '',
   power: power.defaults(), // energy management (see power.js)
+  rootTotp: null, rootDevices: [], historyHead: '', // two-step codes of the main account, devices it logged in on, the fingerprint of the newest log line
   alerts: [], // warnings: { id, kind, text, at, count, resolvedAt }
   integ: integ.defaults(), devices: [], sightings: [], // see integrations.js
   wakeApplied: 0, // when the wake-up schedule was last put on this computer
@@ -416,12 +423,28 @@ function load() {
   }
 }
 let state = load();
+// values that are never written to disk in plain text
+function secretSlots() {
+  const s = state.settings, slots = [[s.mail, 'pass'], [s, 'ntfyTopic'], [s, 'webhookUrl'], [state.system, 'backupPassword']];
+  if (state.integ && state.integ.lock) slots.push([state.integ.lock, 'headerValue']);
+  for (const u of state.users) if (u.totp) slots.push([u.totp, 'secret']);
+  if (state.rootTotp) slots.push([state.rootTotp, 'secret']);
+  return slots;
+}
+function serializeState(omitSessions) {
+  const slots = secretSlots(), plain = slots.map(([o, k]) => o[k]), sess = state.sessions;
+  slots.forEach(([o, k]) => { if (typeof o[k] === 'string' && o[k]) o[k] = keys.encrypt(o[k]); });
+  if (omitSessions) state.sessions = [];
+  try { return JSON.stringify(state); } finally { slots.forEach(([o, k], i) => { o[k] = plain[i]; }); state.sessions = sess; }
+}
+function decryptSecrets() { for (const [o, k] of secretSlots()) if (typeof o[k] === 'string') o[k] = keys.decrypt(o[k]); }
+decryptSecrets();
 let saveTimer = null, savePending = false, lastBak = 0, saveBroken = false;
 function writeState() {
   savePending = false;
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(STATE_FILE + '.tmp', JSON.stringify(state)); // compact: much faster than indented, and nobody reads this file by hand
+    fs.writeFileSync(STATE_FILE + '.tmp', serializeState()); // compact, with the secrets encrypted: much faster than indented, and nobody reads this file by hand
     // the last good copy, in case anything goes wrong (at most once a minute: copying the whole file at every change is slow)
     try { if (fs.existsSync(STATE_FILE) && Date.now() - lastBak > 60e3) { fs.copyFileSync(STATE_FILE, STATE_FILE + '.bak'); lastBak = Date.now(); } } catch {}
     fs.renameSync(STATE_FILE + '.tmp', STATE_FILE);
@@ -444,8 +467,15 @@ for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { flushSave(); pr
 let actor = ''; // who is doing the current action (shown in the activity log)
 let actorRoot = false;
 function log(type, text, by, root) {
-  state.history.unshift({ at: Date.now(), type, text: str(text, 300), by: by ?? actor, r: !!(root ?? actorRoot) });
+  const e = { at: Date.now(), type, text: str(text, 300), by: by ?? actor, r: !!(root ?? actorRoot) };
+  e.prev = state.historyHead || ''; e.h = security.hashEntry(e.prev, e); state.historyHead = e.h; // every line carries the fingerprint of the one before it
+  state.history.unshift(e);
   state.history.length = Math.min(state.history.length, 500);
+}
+// things the admin wants to hear about at once (the lock, the emergency stop, rights, two-step codes)
+function securityEvent(text) {
+  log('beveiliging', text);
+  notifyExternal(null, `🔐 ${state.settings.name}: ${text}`).catch(() => {});
 }
 
 // ---------- warnings: when something is wrong it is recorded, shown in the control panel and sent to the admin ----------
@@ -651,7 +681,8 @@ function verifyPassword(pw, stored) {
 // While it still has its start password it only works from your own network.
 const START_PERMS = ['view', 'status', 'inbox', 'users'], EMERGENCY_PERMS = ['view', 'status'];
 const inSetup = () => !state.users.some((x) => !x.starter);
-const effectivePerms = (u) => (u.starter ? (inSetup() ? START_PERMS : EMERGENCY_PERMS) : permsOf(u.perms));
+const activeGrants = (u) => (u.grants || []).filter((g) => g.until > Date.now() && ALL_PERMS.includes(g.perm) && g.perm !== 'system');
+const effectivePerms = (u) => (u.starter ? (inSetup() ? START_PERMS : EMERGENCY_PERMS) : permsOf([...(u.perms || []), ...activeGrants(u).map((g) => g.perm)]));
 // The start password is made up at random for every installation (a password that is the same everywhere is the first thing an attacker tries).
 // It is printed once in the console, kept in data/starter-password.txt, and shown on the start screen of the Linux image (only on that screen itself).
 const STARTER_FILE = path.join(DATA_DIR, 'starter-password.txt');
@@ -703,9 +734,12 @@ function identifyFrom(tok, pin) {
     const h = sha(tok), ss = state.sessions.find((x) => x.hash === h);
     if (!ss || Date.now() - ss.lastSeen > (ss.ttl || state.system.sessionDays) * 864e5) return null;
     if (Date.now() - ss.lastSeen > 60e3) { ss.lastSeen = Date.now(); save(); }
-    if (ss.userId === 'root') return { ...rootIdentity(), sessionId: ss.id };
+    if (ss.userId === 'root') { const r = { ...rootIdentity(), sessionId: ss.id }; r.mustSetup2fa = mustSetup2fa(r); return r; }
     const u = state.users.find((x) => x.id === ss.userId);
-    return u && !u.disabled ? { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: effectivePerms(u), sessionId: ss.id } : null;
+    if (!u || u.disabled) return null;
+    const ident = { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: effectivePerms(u), sessionId: ss.id };
+    ident.mustSetup2fa = mustSetup2fa(ident);
+    return ident;
   }
   if (pin && ADMIN_PIN) {
     const a = Buffer.from(String(pin)), b = Buffer.from(ADMIN_PIN);
@@ -730,23 +764,90 @@ function gate(id, ip) {
   if (state.system.allowedIps.length && !ipInList(ip, state.system.allowedIps)) return { code: 403, error: 'Je kunt vanaf dit netwerk niet inloggen.' };
   return null;
 }
-const publicUser = (u) => ({ factory: !!u.factory, starter: !!u.starter, phase: u.starter ? (inSetup() ? 'setup' : 'emergency') : '', id: u.id, username: u.username, name: u.name, role: u.role, perms: effectivePerms(u), disabled: !!u.disabled, createdAt: u.createdAt, lastLogin: u.lastLogin || 0 });
+const publicUser = (u) => ({ factory: !!u.factory, starter: !!u.starter, phase: u.starter ? (inSetup() ? 'setup' : 'emergency') : '', id: u.id, username: u.username, name: u.name, role: u.role, perms: effectivePerms(u), disabled: !!u.disabled, createdAt: u.createdAt, lastLogin: u.lastLogin || 0, grants: activeGrants(u).map((g) => ({ perm: g.perm, until: g.until })), twoStep: !!(u.totp && u.totp.enabled) });
 // ----- screen lock: a 6-digit code per account; a locked session can do nothing but unlock or log out -----
 const lockHashOf = (id) => (id.root ? state.rootLock : (state.users.find((x) => x.id === id.userId) || {}).lockHash) || '';
 const sessionOf = (id) => state.sessions.find((x) => x.id === id.sessionId);
 const MAX_LOCK_FAILS = 5;
 function kick(match) { for (const c of [...clients]) if (match(c)) { try { c.res.end(); } catch {} clients.delete(c); } }
+function deviceName(ua) {
+  ua = String(ua || '');
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac OS X|Macintosh|Darwin/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux|X11/.test(ua) ? 'Linux' : '';
+  const app = /DeurBeheerDev/.test(ua) ? 'Deur Dev' : /DeurBeheer|SagaTechbox/.test(ua) ? 'Deur Beheer' : /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : /Electron/.test(ua) ? 'Desktop-app' : /node|fetch|undici|curl/i.test(ua) ? 'Programma' : 'Onbekend';
+  return os ? `${app} op ${os}` : app;
+}
+// the first login from a device is remembered; a later new device is reported to the admin
+function noteDevice(user, req) {
+  const ua = str(req.headers['user-agent'], 120), fp = sha(ua).slice(0, 16);
+  const holder = user.root ? state : state.users.find((x) => x.id === user.userId);
+  if (!holder) return;
+  const key = user.root ? 'rootDevices' : 'devices';
+  const list = holder[key] || (holder[key] = []);
+  if (list.includes(fp)) return;
+  list.push(fp); if (list.length > 30) list.shift();
+  if (list.length > 1) securityEvent(`${user.name} is ingelogd op een nieuw apparaat: ${deviceName(ua)} (${clientIp(req)})`);
+}
 function newSession(userId, req, remember) {
   const token = 's_' + crypto.randomBytes(32).toString('hex');
-  state.sessions.push({ id: newId(), hash: sha(token), userId, ttl: remember ? state.system.rememberDays : state.system.sessionDays, createdAt: Date.now(), lastSeen: Date.now(), ip: clientIp(req), ua: str(req.headers['user-agent'], 120) });
+  state.sessions.push({ id: newId(), hash: sha(token), userId, ttl: remember ? state.system.rememberDays : state.system.sessionDays, createdAt: Date.now(), lastSeen: Date.now(), ip: clientIp(req), ua: str(req.headers['user-agent'], 120), device: deviceName(req.headers['user-agent']) });
   state.sessions = state.sessions.filter((x) => Date.now() - x.lastSeen < (x.ttl || state.system.sessionDays) * 864e5).slice(-200);
   return token;
 }
+
+// ---------- two-step verification (TOTP) ----------
+const mfaTickets = new Map(); // the moment between the password and the code: five minutes, five tries
+const pending2fa = new Map(); // a secret that is being set up but not yet confirmed
+const totpOf = (user) => (user.root ? state.rootTotp : (state.users.find((u) => u.id === user.userId) || {}).totp);
+function identityOfId(userId) {
+  if (userId === 'root') return rootIdentity();
+  const u = state.users.find((x) => x.id === userId && !x.disabled);
+  return u ? { kind: 'user', userId: u.id, username: u.username, name: u.name || u.username, role: u.role, perms: effectivePerms(u) } : null;
+}
+// a code from the app (each only once) or a recovery code (each only once)
+function checkSecondStep(holder, code) {
+  const step = security.totp.verify(holder.secret, code, holder.lastStep || 0);
+  if (step) { holder.lastStep = step; return true; }
+  const norm = security.normRecovery(code);
+  if (norm.length === 10) { const h = security.sha(norm), i = (holder.recovery || []).indexOf(h); if (i >= 0) { holder.recovery.splice(i, 1); securityEvent('Er is een herstelcode gebruikt om in te loggen.'); return true; } }
+  return false;
+}
+const PRIVILEGED = ['users', 'system', 'unlock', 'api', 'export'];
+// the admin can demand two-step verification for the main account, or for everyone with powerful rights
+function mustSetup2fa(user) {
+  const pol = state.system.require2fa;
+  if (pol === 'off' || !user || user.kind !== 'user') return false;
+  const holder = totpOf(user);
+  if (holder && holder.enabled) return false;
+  if (user.root) return true;
+  return pol === 'privileged' && PRIVILEGED.some((x) => (user.perms || []).includes(x));
+}
+const BEFORE_2FA = new Set(['POST /api/2fa/setup', 'POST /api/2fa/enable', 'GET /api/2fa/status', 'GET /api/admin-state', 'GET /api/me', 'POST /api/password']);
 
 // one-time codes with which an already logged-in device logs in another one (a QR code): valid for two minutes, usable once
 const loginTickets = new Map();
 
 // plain-language checks shown as a checklist in the control panel
+let httpsOn = false; // switched on by the https part (own certificate authority)
+// a score for how well this installation is protected, with a plain explanation for every line
+function securityChecks() {
+  const items = [];
+  const add = (id, weight, ok, text, tip, fix) => items.push({ id, weight, ok: !!ok, text, tip: ok ? '' : tip, fix: ok ? '' : (fix || '') });
+  const starter = state.users.find((u) => u.starter);
+  add('starter', 10, !starter || starter.disabled || !starter.factory, 'Het startaccount is uit of heeft een eigen wachtwoord', 'Zet het startaccount uit als je het niet nodig hebt (alleen het hoofdaccount kan dat).', 'starter');
+  add('twoStep', 20, !!(state.rootTotp && state.rootTotp.enabled), 'Het hoofdaccount heeft tweestapsverificatie', 'Zet het aan: Account → Beveiliging → Tweestapsverificatie.');
+  const powerful = state.users.filter((u) => !u.disabled && !u.starter && PRIVILEGED.some((x) => permsOf(u.perms).includes(x)));
+  add('twoStepOthers', 10, powerful.every((u) => u.totp && u.totp.enabled), 'Accounts met veel rechten hebben tweestapsverificatie', `Dit geldt nog niet voor: ${powerful.filter((u) => !(u.totp && u.totp.enabled)).map((u) => u.username).join(', ')}. Je kunt het verplicht stellen bij Systeem.`);
+  add('https', 10, httpsOn, 'De verbinding is versleuteld (https)', 'Zet https aan bij Beveiliging (eigen certificaat, geen domein nodig).');
+  add('backupEnc', 10, !!state.system.backupPassword, 'Back-ups zijn versleuteld met een wachtwoord', 'Kies een back-upwachtwoord bij Systeem (alleen het hoofdaccount).');
+  const last = state.lastBackupDay ? Date.parse(state.lastBackupDay) : 0;
+  add('backupFresh', 5, last && Date.now() - last < 4 * 864e5, 'Er is de laatste dagen een back-up gemaakt', 'Zet automatische back-ups aan bij Systeem, of maak er nu een.');
+  add('rateLimit', 10, state.system.rateLimit !== false, 'De aanvalsbeveiliging staat aan', 'Zet de aanvalsbeveiliging aan.', 'rateLimit');
+  add('secrets', 5, true, 'Wachtwoorden en sleutels staan versleuteld op de schijf', '');
+  add('audit', 5, security.verifyChain(state.history).ok, 'Het logboek is niet aangepast', 'Het logboek klopt niet meer: iemand heeft het bestand bewerkt. Kijk bij Beveiliging → Logboek.');
+  add('keys', 5, state.apiKeys.every((k) => !k.lastUsed || Date.now() - k.lastUsed < 90 * 864e5), 'Alle API-sleutels worden gebruikt', 'Er zijn sleutels die al maanden niet gebruikt zijn. Verwijder ze bij API-sleutels.');
+  const total = items.reduce((a, i) => a + i.weight, 0), got = items.filter((i) => i.ok).reduce((a, i) => a + i.weight, 0);
+  return { score: Math.round((100 * got) / total), items };
+}
 function healthChecks(full) {
   const s = state.settings, out = [];
   const add = (id, ok, text, tip) => out.push({ id, ok, text, tip: ok ? '' : tip });
@@ -779,6 +880,7 @@ function adminState(id) {
     devices: full('settings') || full('unlock') || full('cameras') ? state.devices : [],
     sightings: full('cameras') ? state.sightings.slice(0, 50) : [],
     health: healthChecks(full),
+    security: full('settings') ? securityChecks() : undefined,
     alerts: state.alerts.slice(0, 10),
     people: full('people') ? state.people : [],
     peopleRev: state.peopleRev || 0,
@@ -789,13 +891,13 @@ function adminState(id) {
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
     requests: full('inbox') ? state.requests : [],
     history: full('audit') ? (full('system') ? state.history : state.history.filter((h) => !h.r && h.type !== 'systeem')) : [],
-    me: { name: id.name, role: id.role, perms: id.perms, kind: id.kind, noPw: !!id.root, canLock: !!id.sessionId, hasLock: !!lockHashOf(id) },
+    me: { name: id.name, role: id.role, perms: id.perms, mustSetup2fa: !!id.mustSetup2fa, twoStep: !!((totpOf(id) || {}).enabled), kind: id.kind, noPw: !!id.root, canLock: !!id.sessionId, hasLock: !!lockHashOf(id) },
     permLabels: PUBLIC_PERM_LABELS, rolePresets: ASSIGNABLE,
     users: full('users') ? state.users.map(publicUser) : undefined,
     sessions: full('users') ? state.sessions.filter((x) => x.userId !== 'root' || id.root).map((x) => ({ id: x.id, userId: x.userId === 'root' ? '' : x.userId, who: x.userId === 'root' ? ROOT_USER : (state.users.find((u) => u.id === x.userId)?.name || '?'), createdAt: x.createdAt, lastSeen: x.lastSeen, ip: x.ip, ua: x.ua, current: x.id === id.sessionId })).sort((a, b) => b.lastSeen - a.lastSeen) : undefined,
     apiKeys: full('api') ? state.apiKeys.map(({ id: kid, name, prefix, perms, createdAt, lastUsed, by }) => ({ id: kid, name, prefix, perms, createdAt, lastUsed, by })) : undefined,
     server: full('users') ? { version: APP_VERSION, uptime: Math.round(process.uptime()), node: process.version, platform: `${process.platform} ${process.arch}`, dataDir: DATA_DIR, clients: clients.size, authMode: authMode(), pin: !!ADMIN_PIN } : undefined,
-    system: full('system') ? state.system : undefined,
+    system: full('system') ? maskSystem(state.system) : undefined,
     serverTime: Date.now(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     authMode: authMode(),
@@ -1075,6 +1177,7 @@ function tickInner() {
   refreshWeather(false);
   runPowerSchedule(now);
   state.blocked = state.blocked.filter((b) => !b.until || b.until > now - 864e5); // forget old, expired blocks
+  for (const u of state.users) if (u.grants && u.grants.some((g) => g.until <= now)) { u.grants = u.grants.filter((g) => g.until > now); dirty = true; }
   const dg = state.settings.mail;
   if (dg.digest && mailOn() && isEmail(dg.adminTo)) {
     const d = new Date(), day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -1116,6 +1219,7 @@ function pruneMaps(now) {
   if (alertCooldown.size > 100) alertCooldown.clear();
   pruneSecurity(now);
   for (const [k, t] of loginTickets) if (t.until < now) loginTickets.delete(k);
+  for (const [k, t] of mfaTickets) if (t.until < now) mfaTickets.delete(k);
 }
 // quiet self-checks: disk, memory, event-loop delay, and (if wanted) a door screen that has gone away
 function monitors(now) {
@@ -1142,7 +1246,13 @@ setInterval(() => { const n = Date.now(); maxLag = Math.max(maxLag, n - lagLast 
 // ---------- security: flood protection (DDoS), ban list, connection limits ----------
 // Every address gets a bucket of requests that refills steadily. A burst is fine (a page loads a dozen files), a flood is answered with "429 slow down",
 // and an address that keeps hammering is put on a ban list for ten minutes (answered in a few bytes, before anything else is done).
-const RATE = { burst: Number(process.env.DOOR_RATE_BURST) || 240, perSec: Number(process.env.DOOR_RATE_PER_SEC) || 30, strikes: 80, banMs: 10 * 60e3, maxSse: Number(process.env.DOOR_MAX_SSE) || 30 };
+const RATE = {
+  get burst() { return Number(process.env.DOOR_RATE_BURST) || state.system.attack.burst; },
+  get perSec() { return Number(process.env.DOOR_RATE_PER_SEC) || state.system.attack.perSec; },
+  get strikes() { return state.system.attack.strikes; },
+  get banMs() { return state.system.attack.banMinutes * 60e3; },
+  get maxSse() { return Number(process.env.DOOR_MAX_SSE) || state.system.attack.maxSse; },
+};
 const buckets = new Map(), bans = new Map(), strikes = new Map();
 const isLoopback = (ip) => ip === '127.0.0.1' || ip === '::1';
 function limited(ip, cost = 1) {
@@ -1158,8 +1268,8 @@ function limited(ip, cost = 1) {
   const list = (strikes.get(ip) || []).filter((t) => now - t < 60e3); list.push(now); strikes.set(ip, list);
   if (list.length >= RATE.strikes) {
     bans.set(ip, now + RATE.banMs); strikes.delete(ip);
-    log('beveiliging', `${ip} is voor 10 minuten geblokkeerd: te veel verzoeken`, 'systeem');
-    raise('attack', `Een apparaat (${ip}) stuurde veel te veel verzoeken en is tien minuten geblokkeerd. Dit lijkt op een aanval of een kapotte app.`, { cooldownMin: 60 });
+    log('beveiliging', `${ip} is voor ${Math.round(RATE.banMs / 60e3)} minuten geblokkeerd: te veel verzoeken`, 'systeem');
+    raise('attack', `Een apparaat (${ip}) stuurde veel te veel verzoeken en is ${Math.round(RATE.banMs / 60e3)} minuten geblokkeerd. Dit lijkt op een aanval of een kapotte app.`, { cooldownMin: 60 });
     return Math.ceil(RATE.banMs / 1000);
   }
   return 2;
@@ -1189,7 +1299,12 @@ function pruneSecurity(now) {
 
 // ---------- HTTP ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
+// what to do next, in plain words, next to an error
+function hintFor(code) {
+  return ({ 401: 'Log opnieuw in.', 403: 'Vraag de beheerder om dit recht, of probeer het met een ander account.', 423: 'Ontgrendel eerst met je code.', 429: 'Wacht even en probeer het dan opnieuw.', 500: 'Probeer het opnieuw. Blijft het misgaan, kijk dan in het logboek of herstart de server.', 503: 'Het paneel staat in onderhoud. Probeer het later opnieuw.' })[code] || '';
+}
 function send(res, code, obj) {
+  if (code >= 400 && obj && obj.error && !obj.hint) { const h = hintFor(code); if (h) obj = { ...obj, hint: h }; }
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(obj));
 }
@@ -1277,6 +1392,17 @@ const adminRoutes = {
     const u = existing || { id: newId(), createdAt: Date.now(), hash: '' };
     if (existing && id.userId === existing.id && (b.disabled || !perms.includes('users'))) throw bad('Je kunt jezelf niet uitschakelen of je beheerrechten afnemen');
     Object.assign(u, { username, name: str(b.name, 60) || username, role, perms, disabled: !!b.disabled });
+    if (Array.isArray(b.grants)) { // temporary rights: "this permission, for this many minutes"; nobody can hand out more than they have
+      const list = [];
+      for (const g of b.grants.slice(0, 20)) {
+        const perm = str(g && g.perm, 20), minutes = Math.round(Number(g && g.minutes));
+        if (!ALL_PERMS.includes(perm) || perm === 'system' || !(minutes > 0)) continue;
+        if (!can(id, perm)) throw bad('Je kunt geen rechten geven die je zelf niet hebt');
+        list.push({ perm, until: Date.now() + Math.min(minutes, 60 * 24 * 30) * 60e3 });
+      }
+      u.grants = list;
+      if (list.length) securityEvent(`${id.name} gaf ${u.username} tijdelijk extra rechten: ${list.map((g) => g.perm).join(', ')}`);
+    }
     if (u.starter) delete u.starter; // edited by the main account: now an ordinary account
     if (password) { u.hash = hashPassword(password); delete u.factory; }
     if (!existing) state.users.push(u);
@@ -1579,6 +1705,87 @@ const adminRoutes = {
     state.integ = integ.clean(raw);
     log('koppeling', 'Koppelingen opgeslagen');
   },
+  // ----- two-step verification, devices and security (everyone for their own account) -----
+  'GET /api/2fa/status': (b, id) => { const h = totpOf(id) || {}; return { enabled: !!h.enabled, recoveryLeft: (h.recovery || []).length, required: state.system.require2fa !== 'off' && (id.root || state.system.require2fa === 'privileged') }; },
+  'POST /api/2fa/setup': (b, id) => {
+    if (id.kind !== 'user') throw bad('Dit kan alleen met een gewoon account.');
+    if ((totpOf(id) || {}).enabled) throw bad('Tweestapsverificatie staat al aan.');
+    const secret = security.totp.newSecret();
+    pending2fa.set(id.userId, secret);
+    return { secret, uri: security.totp.uri(id.username || id.name, state.settings.name || 'Saga Techbox', secret) };
+  },
+  'POST /api/2fa/enable': (b, id) => {
+    const secret = pending2fa.get(id.userId);
+    if (!secret) throw bad('Begin opnieuw met “Instellen”.');
+    const step = security.totp.verify(secret, b.code, 0);
+    if (!step) throw bad('Die code klopt niet. Let op: de code verandert elke 30 seconden.');
+    const codes = security.recoveryCodes(8);
+    const holder = { secret, enabled: true, lastStep: step, recovery: codes.map((c) => security.sha(security.normRecovery(c))) };
+    if (id.root) state.rootTotp = holder; else state.users.find((u) => u.id === id.userId).totp = holder;
+    pending2fa.delete(id.userId);
+    securityEvent(`${id.name} heeft tweestapsverificatie aangezet.`);
+    return { ok: true, recovery: codes };
+  },
+  'POST /api/2fa/disable': (b, id) => {
+    const h = totpOf(id);
+    if (!h || !h.enabled) throw bad('Tweestapsverificatie staat niet aan.');
+    const pwOk = id.root ? verifyPassword(String(b.password || ''), ROOT_HASH) : verifyPassword(String(b.password || ''), (state.users.find((u) => u.id === id.userId) || {}).hash);
+    if (!pwOk) throw bad('Je wachtwoord klopt niet.');
+    if (!checkSecondStep(h, b.code)) throw bad('Die code klopt niet.');
+    if (id.root) state.rootTotp = null; else delete state.users.find((u) => u.id === id.userId).totp;
+    securityEvent(`${id.name} heeft tweestapsverificatie uitgezet.`);
+  },
+  'POST /api/2fa/recovery': (b, id) => {
+    const h = totpOf(id);
+    if (!h || !h.enabled) throw bad('Tweestapsverificatie staat niet aan.');
+    if (!security.totp.verify(h.secret, b.code, h.lastStep || 0)) throw bad('Die code klopt niet.');
+    const codes = security.recoveryCodes(8); h.recovery = codes.map((c) => security.sha(security.normRecovery(c)));
+    log('beveiliging', `${id.name} maakte nieuwe herstelcodes`);
+    return { ok: true, recovery: codes };
+  },
+  'GET /api/my/sessions': (b, id) => ({ sessions: state.sessions.filter((x) => x.userId === id.userId).sort((a, c) => c.lastSeen - a.lastSeen).map((x) => ({ id: x.id, device: x.device || deviceName(x.ua), ip: x.ip, createdAt: x.createdAt, lastSeen: x.lastSeen, current: x.id === id.sessionId })) }),
+  'POST /api/my/sessions/revoke': (b, id) => {
+    const gone = state.sessions.filter((x) => x.userId === id.userId && x.id !== id.sessionId && (b.others ? true : x.id === b.id));
+    state.sessions = state.sessions.filter((x) => !gone.includes(x));
+    kick((c) => gone.some((g) => g.id === c.sessionId));
+    log('beveiliging', `${id.name} beëindigde ${gone.length} eigen sessie(s)`);
+    return { ok: true, ended: gone.length };
+  },
+  'GET /api/security/bans': () => {
+    const now = Date.now();
+    return { bans: [...bans].filter(([, t]) => t > now).map(([ip, until]) => ({ ip, until })), lockouts: [...failures].map(([ip]) => ({ ip, tries: recentFails(ip).length })).filter((x) => x.tries >= state.system.maxAttempts), attack: state.system.attack };
+  },
+  'POST /api/security/unban': (b) => { const ip = str(b.ip, 60); bans.delete(ip); buckets.delete(ip); strikes.delete(ip); failures.delete(ip); log('beveiliging', `Blokkade van ${ip} opgeheven`); },
+  'POST /api/security/ban': (b, id) => {
+    const ip = str(b.ip, 60);
+    if (!validIpRule(ip) || ip.includes('/')) throw bad('Dat is geen geldig adres.');
+    if (ip === id.ip || isLoopback(ip)) throw bad('Je kunt jezelf niet blokkeren.');
+    bans.set(ip, Date.now() + clampInt(b.minutes, 1, 1440 * 30, 60) * 60e3); log('beveiliging', `${ip} is handmatig geblokkeerd`);
+  },
+  'GET /api/audit/verify': () => ({ ...security.verifyChain(state.history), lines: state.history.length }),
+  'GET /api/audit/export': (b, id, url) => {
+    const rows = state.history.filter((h) => id.root || (!h.r && h.type !== 'systeem'));
+    if (url.searchParams.get('format') === 'json') return { __file: { name: 'logboek.json', text: JSON.stringify(rows, null, 2) } };
+    const q = (t) => '"' + String(t).replace(/"/g, '""') + '"';
+    return { __file: { name: 'logboek.csv', text: 'Tijd,Soort,Wat,Wie,Vingerafdruk\n' + rows.map((h) => [new Date(h.at).toISOString(), h.type, h.text, h.by || '', h.h || ''].map(q).join(',')).join('\n') + '\n' } };
+  },
+  'POST /api/system/restart': (b, id) => {
+    securityEvent(`${id.name} herstart de server`);
+    setTimeout(() => { flushSave(); if (process.listenerCount('saga-restart') > 0) process.emit('saga-restart'); else process.exit(0); }, 400); // a supervisor (systemd, Docker, the desktop app) starts it again
+    return { ok: true };
+  },
+  'POST /api/security/fix': (b, id) => {
+    const what = str(b.id, 30);
+    if (what === 'rateLimit') { state.system = cleanSystem({ ...state.system, rateLimit: true }); log('beveiliging', 'Aanvalsbeveiliging aangezet'); return { ok: true }; }
+    if (what === 'starter') {
+      const st = state.users.find((u) => u.starter);
+      if (!st) return { ok: true };
+      if (!id.root) throw bad('Alleen het hoofdaccount kan het startaccount uitzetten.');
+      st.disabled = true; state.sessions = state.sessions.filter((x) => x.userId !== st.id); kick((c) => c.userId === st.id);
+      securityEvent('Het startaccount is uitgezet.'); return { ok: true };
+    }
+    throw bad('Dit los je op in de instellingen zelf.');
+  },
   'GET /api/form-schema': () => ({ groups: formSchema() }),
   'POST /api/form-settings': (b) => { const n = applyFormValues(b && typeof b.values === 'object' && b.values ? b.values : {}); state.settings.form = sanitizeForm(state.settings.form); log('instellingen', `Bezoekersformulier aangepast (${n} ${n === 1 ? 'instelling' : 'instellingen'})`); return { ok: true, groups: formSchema() }; },
   'POST /api/login/ticket': (b, id) => {
@@ -1680,35 +1887,45 @@ const adminRoutes = {
 
 // ----- system (only the main account) -----
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
-const BACKUP_RE = /^state-\d{4}-\d{2}-\d{2}(_[a-z0-9-]{1,20})?\.json$/;
+const BACKUP_RE = /^state-\d{4}-\d{2}-\d{2}(_[a-z0-9-]{1,20})?\.(json|sbk)$/;
 function listBackups() {
-  try { return fs.readdirSync(BACKUP_DIR).filter((n) => BACKUP_RE.test(n)).map((n) => { const st = fs.statSync(path.join(BACKUP_DIR, n)); return { name: n, size: st.size, at: st.mtimeMs }; }).sort((a, b) => b.at - a.at); } catch { return []; }
+  try { return fs.readdirSync(BACKUP_DIR).filter((n) => BACKUP_RE.test(n)).map((n) => { const st = fs.statSync(path.join(BACKUP_DIR, n)); return { name: n, encrypted: n.endsWith('.sbk'), size: st.size, at: st.mtimeMs }; }).sort((a, b) => b.at - a.at); } catch { return []; }
 }
 function writeBackup(label) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
   const d = new Date();
-  const name = `state-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}${label ? '_' + label : ''}.json`;
-  const { sessions, ...rest } = state; // sessions are never written to a backup
-  fs.writeFileSync(path.join(BACKUP_DIR, name), JSON.stringify(rest), { mode: 0o600 });
+  const pw = state.system.backupPassword;
+  const name = `state-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}${label ? '_' + label : ''}.${pw ? 'sbk' : 'json'}`;
+  let text = serializeState(true); // sessions are never written to a backup; secrets stay encrypted
+  if (pw) text = security.encryptBackup(text, pw);
+  fs.writeFileSync(path.join(BACKUP_DIR, name), text, { mode: 0o600 });
+  const copyDir = state.system.backupCopyDir;
+  if (copyDir) { // a second copy somewhere else (a usb stick, a network folder)
+    try { fs.mkdirSync(copyDir, { recursive: true }); fs.copyFileSync(path.join(BACKUP_DIR, name), path.join(copyDir, name)); resolveAlert('backupcopy', true); }
+    catch (e) { raise('backupcopy', `De kopie van de back-up naar “${copyDir}” lukte niet (${e.code || e.message}).`, { cooldownMin: 360 }); }
+  }
   for (const old of listBackups().slice(state.system.backupKeep)) { try { fs.unlinkSync(path.join(BACKUP_DIR, old.name)); } catch {} }
   return name;
 }
 Object.assign(adminRoutes, {
-  'GET /api/system': (b, id) => ({ system: state.system, backups: listBackups(), yourIp: id.ip || '', serverTime: Date.now() }),
-  'POST /api/system/settings': (b) => { state.system = cleanSystem(b); log('systeem', `Systeeminstellingen gewijzigd${state.system.maintenance ? ' (onderhoudsmodus aan)' : ''}`); },
+  'GET /api/system': (b, id) => ({ system: maskSystem(state.system), backups: listBackups(), yourIp: id.ip || '', serverTime: Date.now() }),
+  'POST /api/system/settings': (b) => { if (b.backupPassword === PASS_MASK) b.backupPassword = state.system.backupPassword; state.system = cleanSystem(b); log('systeem', `Systeeminstellingen gewijzigd${state.system.maintenance ? ' (onderhoudsmodus aan)' : ''}`); },
   'POST /api/system/backups/create': () => { const name = writeBackup('handmatig'); log('systeem', `Back-up gemaakt: ${name}`); return { ok: true, name }; },
   'GET /api/system/backups/download': (b, id, url) => {
     const name = str(url.searchParams.get('name'), 80);
     if (!BACKUP_RE.test(name)) throw bad('Onbekende back-up');
-    return { __file: { name, text: fs.readFileSync(path.join(BACKUP_DIR, name), 'utf8') } };
+    return { __file: { name, text: fs.readFileSync(path.join(BACKUP_DIR, name), 'utf8') } }; // an encrypted backup stays encrypted
   },
   'POST /api/system/backups/restore': (b) => {
     const name = str(b.name, 80);
     if (!BACKUP_RE.test(name)) throw bad('Onbekende back-up');
-    let data; try { data = JSON.parse(fs.readFileSync(path.join(BACKUP_DIR, name), 'utf8')); } catch { throw bad('Die back-up kan niet gelezen worden'); }
+    let text = fs.readFileSync(path.join(BACKUP_DIR, name), 'utf8');
+    if (security.isEncryptedBackup(text)) { try { text = security.decryptBackup(text, str(b.password, 200) || state.system.backupPassword); } catch (e) { throw bad(e.message); } }
+    let data; try { data = JSON.parse(text); } catch { throw bad('Die back-up kan niet gelezen worden'); }
     if (!data || data.version !== 2 || !data.settings) throw bad('Dit is geen geldige back-up');
-    writeBackup('vor-herstel'); // so a restore can be undone
+    writeBackup('voor-herstel'); // so a restore can be undone
     state = { ...freshState(), ...data, settings: coerce(DEFAULT_SETTINGS, data.settings), system: state.system, sessions: state.sessions, lastBackupDay: state.lastBackupDay };
+    decryptSecrets();
     log('systeem', `Back-up teruggezet: ${name}`);
   },
   'POST /api/system/lockdown': (b, id) => {
@@ -1763,7 +1980,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -1939,8 +2156,35 @@ const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (r
       if (!ok) { authFail(ip); noteUserFail(username); log('login', `Mislukte inlogpoging voor “${username}” (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, loginDelayMs(username))); return send(res, 401, { error: 'Gebruikersnaam of wachtwoord klopt niet' }); }
       const lg = gate(user, ip);
       if (lg) return send(res, lg.code, { error: lg.error });
+      const holder = totpOf(user);
+      if (holder && holder.enabled) { // the password was right; now the code from the app
+        const mfa = crypto.randomBytes(16).toString('hex');
+        mfaTickets.set(mfa, { userId: user.userId, until: Date.now() + 5 * 60e3, tries: 0, remember: !!b.remember });
+        return send(res, 200, { needs2fa: true, mfa, recoveryPossible: true });
+      }
       const token = newSession(user.userId, req, !!b.remember);
       log('login', `${user.name} ingelogd (${ip})`, user.name, !!user.root);
+      noteDevice(user, req);
+      save();
+      return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
+    }
+    if (req.method === 'POST' && p === '/api/login/2fa') {
+      const ip = clientIp(req);
+      if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
+      const b = await readBody(req);
+      const t = mfaTickets.get(String(b.mfa || ''));
+      if (!t || t.until < Date.now()) { authFail(ip); return send(res, 401, { error: 'Dit inlogmoment is verlopen. Begin opnieuw met je wachtwoord.' }); }
+      const user = identityOfId(t.userId);
+      const holder = user && totpOf(user);
+      if (!user || !holder || !holder.enabled) { mfaTickets.delete(String(b.mfa)); return send(res, 401, { error: 'Dit account bestaat niet meer.' }); }
+      if (++t.tries > 5) { mfaTickets.delete(String(b.mfa)); authFail(ip); return send(res, 429, { error: 'Te veel foute codes. Begin opnieuw met je wachtwoord.' }); }
+      if (!checkSecondStep(holder, b.code)) { authFail(ip); noteUserFail(user.username || 'root'); log('login', `Foute tweestapscode voor ${user.username} (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, loginDelayMs(user.username || 'root'))); return send(res, 401, { error: 'Die code klopt niet. Probeer de nieuwste code uit je app, of een herstelcode.' }); }
+      mfaTickets.delete(String(b.mfa));
+      const lg = gate(user, ip);
+      if (lg) return send(res, lg.code, { error: lg.error });
+      const token = newSession(user.userId, req, t.remember);
+      log('login', `${user.name} ingelogd met tweestapscode (${ip})`, user.name, !!user.root);
+      noteDevice(user, req);
       save();
       return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
     }
@@ -1958,6 +2202,7 @@ const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (r
       const lg = gate(user, ip);
       if (lg) return send(res, lg.code, { error: lg.error });
       const token = newSession(user.userId, req, true);
+      noteDevice(user, req);
       log('login', `${user.name} ingelogd op een nieuw apparaat met een code (${ip}) — gemaakt door ${t.by}`, user.name, !!user.root);
       save();
       return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
@@ -2019,6 +2264,7 @@ const server = http.createServer({ connectionsCheckingInterval: 2000 }, async (r
       id.ip = ip;
       const g = gate(id, ip);
       if (g) return send(res, g.code, { error: g.error });
+      if (id.mustSetup2fa && !BEFORE_2FA.has(routeKey)) return send(res, 403, { error: 'Stel eerst tweestapsverificatie in (Account → Beveiliging).', setup2fa: true });
       if (id.sessionId && routeKey !== 'POST /api/lock/unlock' && sessionOf(id)?.locked) return send(res, 423, { error: 'Het scherm is vergrendeld', locked: true });
       const body = req.method === 'POST' ? await readBody(req) : {};
       let need = NEED[routeKey];

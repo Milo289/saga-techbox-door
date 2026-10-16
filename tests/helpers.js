@@ -9,17 +9,22 @@ const ROOT = path.join(__dirname, '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // patch: gives the start account extra rights in a throw-away copy of the server, so the settings routes can be tested
-async function startServer({ patch = false, dir, env = {} } = {}) {
+async function startServer({ patch = false, system = false, dir, env = {} } = {}) {
   dir = dir || fs.mkdtempSync(path.join(os.tmpdir(), 'door-test-'));
   let root = ROOT;
   if (patch) {
     root = path.join(dir, 'app');
     fs.mkdirSync(root, { recursive: true });
-    for (const f of ['server.js', 'power.js', 'integrations.js', 'discover.js', 'seal.js', 'access.js', 'package.json']) fs.copyFileSync(path.join(ROOT, f), path.join(root, f));
+    for (const f of ['server.js', 'power.js', 'integrations.js', 'security.js', 'discover.js', 'seal.js', 'access.js', 'package.json']) fs.copyFileSync(path.join(ROOT, f), path.join(root, f));
     fs.cpSync(path.join(ROOT, 'public'), path.join(root, 'public'), { recursive: true });
     const src = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
-    const out = src.replace("START_PERMS = ['view', 'status', 'inbox', 'users']", "START_PERMS = ['view', 'status', 'inbox', 'users', 'settings', 'people', 'audit', 'mail', 'export', 'api', 'power', 'devices', 'unlock', 'cameras']");
+    let out = src.replace("START_PERMS = ['view', 'status', 'inbox', 'users']", "START_PERMS = ['view', 'status', 'inbox', 'users', 'settings', 'people', 'audit', 'mail', 'export', 'api', 'power', 'devices', 'unlock', 'cameras']");
     if (out === src) throw new Error('the test patch no longer matches server.js');
+    if (system) { // also the main-account-only rights (backups, system settings), for tests of those
+      const o2 = out.replace(" && x !== 'system'", "").replace("'devices', 'unlock', 'cameras']", "'devices', 'unlock', 'cameras', 'system']");
+      if (o2 === out) throw new Error('the system patch no longer matches server.js');
+      out = o2;
+    }
     fs.writeFileSync(path.join(root, 'server.js'), out);
   }
   const port = 20000 + Math.floor(Math.random() * 30000);
