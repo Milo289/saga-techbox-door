@@ -103,4 +103,80 @@ function decryptBackup(text, password) {
   try { return Buffer.concat([d.update(raw.subarray(44)), d.final()]).toString('utf8'); } catch { throw new Error('Het wachtwoord van de back-up klopt niet.'); }
 }
 
-module.exports = { keyStore, base32, totp, sha, recoveryCodes, normRecovery, hashEntry, verifyChain, encryptBackup, decryptBackup, isEncryptedBackup };
+// ---------- passkeys (WebAuthn): only what is needed, ES256 (P-256) and "none" attestation ----------
+function cborDecode(buf) {
+  let o = 0;
+  const read = () => {
+    if (o >= buf.length) throw new Error('cbor');
+    const ib = buf[o++], major = ib >> 5, add = ib & 31;
+    let n = add;
+    if (add === 24) n = buf[o++]; else if (add === 25) { n = buf.readUInt16BE(o); o += 2; } else if (add === 26) { n = buf.readUInt32BE(o); o += 4; } else if (add > 26) throw new Error('cbor');
+    switch (major) {
+      case 0: return n;
+      case 1: return -1 - n;
+      case 2: { const b = buf.subarray(o, o + n); o += n; return b; }
+      case 3: { const t = buf.subarray(o, o + n).toString('utf8'); o += n; return t; }
+      case 4: { const a = []; for (let i = 0; i < n; i++) a.push(read()); return a; }
+      case 5: { const m = new Map(); for (let i = 0; i < n; i++) { const k = read(); m.set(k, read()); } return m; }
+      case 7: return add === 20 ? false : add === 21 ? true : null;
+      default: throw new Error('cbor');
+    }
+  };
+  return { value: read(), used: o };
+}
+const b64u = (b) => Buffer.from(b).toString('base64url');
+const fromB64u = (s) => Buffer.from(String(s || ''), 'base64url');
+const SPKI_P256 = Buffer.from('3059301306072a8648ce3d020106082a8648ce3d030107034200', 'hex');
+function coseToSpki(m) {
+  if (!(m instanceof Map) || m.get(1) !== 2 || m.get(3) !== -7 || m.get(-1) !== 1) throw new Error('Deze passkey gebruikt een soort sleutel die niet wordt ondersteund.');
+  const x = m.get(-2), y = m.get(-3);
+  if (!Buffer.isBuffer(x) || !Buffer.isBuffer(y) || x.length !== 32 || y.length !== 32) throw new Error('De sleutel van de passkey is ongeldig.');
+  return Buffer.concat([SPKI_P256, Buffer.from([4]), x, y]);
+}
+function parseAuthData(ad) {
+  if (ad.length < 37) throw new Error('De gegevens van de passkey zijn te kort.');
+  const out = { rpIdHash: ad.subarray(0, 32), flags: ad[32], signCount: ad.readUInt32BE(33) };
+  if (out.flags & 64) {
+    if (ad.length < 55) throw new Error('De gegevens van de passkey zijn te kort.');
+    const idLen = ad.readUInt16BE(53);
+    out.credentialId = ad.subarray(55, 55 + idLen);
+    out.publicKey = cborDecode(ad.subarray(55 + idLen)).value;
+  }
+  return out;
+}
+function checkClient(clientDataJSON, type, challenge, origins) {
+  let c; try { c = JSON.parse(Buffer.from(clientDataJSON).toString('utf8')); } catch { throw new Error('Onleesbare gegevens van de passkey.'); }
+  if (c.type !== type) throw new Error('Dit is niet het goede soort passkey-antwoord.');
+  if (c.challenge !== challenge) throw new Error('Deze passkey-poging is verlopen. Probeer opnieuw.');
+  if (!origins.includes(c.origin)) throw new Error('De passkey hoort bij een ander adres dan waar je nu bent.');
+  return c;
+}
+const rpHash = (rpId) => crypto.createHash('sha256').update(rpId).digest();
+// a new passkey: returns the credential id and the public key (SPKI, base64url)
+function verifyRegistration({ clientDataJSON, attestationObject }, { challenge, rpId, origins }) {
+  checkClient(fromB64u(clientDataJSON), 'webauthn.create', challenge, origins);
+  const att = cborDecode(fromB64u(attestationObject)).value;
+  const ad = att instanceof Map && att.get('authData');
+  if (!Buffer.isBuffer(ad)) throw new Error('De passkey miste gegevens.');
+  const p = parseAuthData(ad);
+  if (!p.rpIdHash.equals(rpHash(rpId))) throw new Error('De passkey hoort bij een ander adres.');
+  if (!(p.flags & 1) || !(p.flags & 4)) throw new Error('De passkey moet met je vingerafdruk, gezicht of toestelcode worden bevestigd.');
+  if (!p.credentialId) throw new Error('De passkey miste een sleutel.');
+  return { id: b64u(p.credentialId), publicKey: b64u(coseToSpki(p.publicKey)), signCount: p.signCount };
+}
+// logging in: checks the signature; returns the new counter
+function verifyAssertion({ clientDataJSON, authenticatorData, signature }, { challenge, rpId, origins, publicKey, signCount }) {
+  const cd = fromB64u(clientDataJSON), ad = fromB64u(authenticatorData);
+  checkClient(cd, 'webauthn.get', challenge, origins);
+  const p = parseAuthData(ad);
+  if (!p.rpIdHash.equals(rpHash(rpId))) throw new Error('De passkey hoort bij een ander adres.');
+  if (!(p.flags & 1) || !(p.flags & 4)) throw new Error('De passkey is niet bevestigd met vingerafdruk, gezicht of toestelcode.');
+  const key = crypto.createPublicKey({ key: fromB64u(publicKey), format: 'der', type: 'spki' });
+  const ok = crypto.verify('sha256', Buffer.concat([ad, crypto.createHash('sha256').update(cd).digest()]), key, fromB64u(signature));
+  if (!ok) throw new Error('De handtekening van de passkey klopt niet.');
+  if ((signCount || p.signCount) && p.signCount <= (signCount || 0)) throw new Error('Deze passkey lijkt gekopieerd te zijn en wordt geweigerd.');
+  return { signCount: p.signCount };
+}
+const passkey = { cborDecode, coseToSpki, parseAuthData, verifyRegistration, verifyAssertion, b64u };
+
+module.exports = { passkey, keyStore, base32, totp, sha, recoveryCodes, normRecovery, hashEntry, verifyChain, encryptBackup, decryptBackup, isEncryptedBackup };

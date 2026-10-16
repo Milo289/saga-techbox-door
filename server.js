@@ -205,7 +205,7 @@ const freshState = () => ({
   customBell: null, // an own bell sound { mime, b64, at }
   lastDigestDay: '',
   power: power.defaults(), // energy management (see power.js)
-  rootTotp: null, rootDevices: [], historyHead: '', // two-step codes of the main account, devices it logged in on, the fingerprint of the newest log line
+  rootTotp: null, rootPasskeys: [], rootDevices: [], historyHead: '', // two-step codes of the main account, devices it logged in on, the fingerprint of the newest log line
   alerts: [], // warnings: { id, kind, text, at, count, resolvedAt }
   integ: integ.defaults(), devices: [], sightings: [], // see integrations.js
   wakeApplied: 0, // when the wake-up schedule was last put on this computer
@@ -825,6 +825,25 @@ function mustSetup2fa(user) {
   return pol === 'privileged' && PRIVILEGED.some((x) => (user.perms || []).includes(x));
 }
 const BEFORE_2FA = new Set(['POST /api/2fa/setup', 'POST /api/2fa/enable', 'GET /api/2fa/status', 'GET /api/admin-state', 'GET /api/me', 'POST /api/password']);
+
+// ---------- passkeys: log in with fingerprint / face / device code, no password; needs https (or localhost) and a name, not an IP address ----------
+const passChallenges = new Map(); // challenge -> { until, kind, userId }
+const passkeysOf = (userId) => (userId === 'root' ? state.rootPasskeys : (state.users.find((u) => u.id === userId) || {}).passkeys) || [];
+function passkeyHost(req) {
+  const host = String(req.headers.host || '').toLowerCase();
+  const name = host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0];
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(name) || name.startsWith('[')) throw bad('Passkeys werken niet met een IP-adres. Open de deurserver met de naam (bijvoorbeeld https://saga-deur.local) en probeer opnieuw.');
+  const secure = !!req.socket.encrypted || name === 'localhost' || /\.localhost$/.test(name);
+  if (!secure) throw bad('Passkeys werken alleen met een beveiligde verbinding (https). Zet https aan bij Systeem en installeer het certificaat.');
+  return { rpId: name, origins: [`${req.socket.encrypted ? 'https' : 'http'}://${host}`] };
+}
+function newPassChallenge(kind, userId) {
+  const challenge = crypto.randomBytes(32).toString('base64url');
+  passChallenges.set(challenge, { until: Date.now() + 5 * 60e3, kind, userId });
+  if (passChallenges.size > 500) for (const [k, v] of passChallenges) if (v.until < Date.now()) passChallenges.delete(k);
+  return challenge;
+}
+const takeChallenge = (c, kind) => { const t = passChallenges.get(String(c || '')); passChallenges.delete(String(c || '')); if (!t || t.until < Date.now() || t.kind !== kind) throw bad('Deze passkey-poging is verlopen. Probeer opnieuw.'); return t; };
 
 // one-time codes with which an already logged-in device logs in another one (a QR code): valid for two minutes, usable once
 const loginTickets = new Map();
@@ -1772,6 +1791,30 @@ const adminRoutes = {
     log('beveiliging', `${id.name} maakte nieuwe herstelcodes`);
     return { ok: true, recovery: codes };
   },
+  'GET /api/passkeys': (b, id) => ({ passkeys: passkeysOf(id.userId).map((k) => ({ id: k.id, name: k.name, created: k.created, lastUsed: k.lastUsed || 0 })) }),
+  'POST /api/passkeys/options': (b, id) => {
+    if (id.kind !== 'user') throw bad('Dit kan alleen met een gewoon account.');
+    const { rpId } = passkeyHost(id.req);
+    return { challenge: newPassChallenge('create', id.userId), rpId, rpName: state.settings.name || 'Saga Techbox', user: { id: crypto.createHash('sha256').update('saga:' + id.userId).digest().toString('base64url'), name: id.username, displayName: id.name }, exclude: passkeysOf(id.userId).map((k) => k.id) };
+  },
+  'POST /api/passkeys/add': (b, id) => {
+    const host = passkeyHost(id.req); takeChallenge(b.challenge, 'create');
+    let r; try { r = security.passkey.verifyRegistration(b, { challenge: b.challenge, ...host }); } catch (e) { throw bad(e.message); }
+    const holder = id.root ? state : state.users.find((u) => u.id === id.userId);
+    const list = id.root ? (state.rootPasskeys = state.rootPasskeys || []) : (holder.passkeys = holder.passkeys || []);
+    if (list.length >= 10) throw bad('Je kunt maximaal 10 passkeys hebben.');
+    if (state.users.some((u) => (u.passkeys || []).some((k) => k.id === r.id)) || state.rootPasskeys.some((k) => k.id === r.id)) throw bad('Deze passkey is al in gebruik.');
+    list.push({ id: r.id, publicKey: r.publicKey, signCount: r.signCount, name: str(b.name, 40) || deviceName(id.req.headers['user-agent'] || ''), created: Date.now(), lastUsed: 0, rpId: host.rpId });
+    securityEvent(`${id.name} heeft een passkey toegevoegd.`);
+    return { ok: true };
+  },
+  'POST /api/passkeys/remove': (b, id) => {
+    const list = passkeysOf(id.userId), i = list.findIndex((k) => k.id === b.id);
+    if (i < 0) throw bad('Deze passkey bestaat niet.');
+    list.splice(i, 1);
+    securityEvent(`${id.name} heeft een passkey verwijderd.`);
+    return { ok: true };
+  },
   'GET /api/my/sessions': (b, id) => ({ sessions: state.sessions.filter((x) => x.userId === id.userId).sort((a, c) => c.lastSeen - a.lastSeen).map((x) => ({ id: x.id, device: x.device || deviceName(x.ua), ip: x.ip, createdAt: x.createdAt, lastSeen: x.lastSeen, current: x.id === id.sessionId })) }),
   'POST /api/my/sessions/revoke': (b, id) => {
     const gone = state.sessions.filter((x) => x.userId === id.userId && x.id !== id.sessionId && (b.others ? true : x.id === b.id));
@@ -2026,7 +2069,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/https': 'settings', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/https': 'settings', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -2239,6 +2282,31 @@ const handle = async (req, res) => {
       save();
       return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
     }
+    if (req.method === 'GET' && p === '/api/login/passkey') {
+      let host; try { host = passkeyHost(req); } catch (e) { return send(res, 200, { available: false, why: e.message }); }
+      return send(res, 200, { available: true, challenge: newPassChallenge('get', ''), rpId: host.rpId });
+    }
+    if (req.method === 'POST' && p === '/api/login/passkey') {
+      const ip = clientIp(req);
+      if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
+      const b = await readBody(req);
+      const fail = async (msg) => { authFail(ip); log('login', `Mislukte passkey-poging (${ip})`, 'onbekend'); save(); await new Promise((r) => setTimeout(r, 500)); return send(res, 401, { error: msg || 'Deze passkey werkt niet. Log in met je wachtwoord.' }); };
+      let host; try { host = passkeyHost(req); takeChallenge(b.challenge, 'get'); } catch (e) { return fail(e.message); }
+      let owner = null, key = null;
+      for (const uid of ['root', ...state.users.map((u) => u.id)]) { const k = passkeysOf(uid).find((x) => x.id === b.id); if (k) { owner = uid; key = k; break; } }
+      if (!key) return fail();
+      const user = identityOfId(owner);
+      if (!user) return fail('Dit account bestaat niet meer.');
+      try { key.signCount = security.passkey.verifyAssertion(b, { challenge: b.challenge, ...host, publicKey: key.publicKey, signCount: key.signCount }).signCount; } catch (e) { return fail(e.message); }
+      const lg = gate(user, ip);
+      if (lg) return send(res, lg.code, { error: lg.error });
+      key.lastUsed = Date.now();
+      const token = newSession(user.userId, req, !!b.remember);
+      log('login', `${user.name} ingelogd met een passkey (${ip})`, user.name, !!user.root);
+      noteDevice(user, req);
+      save();
+      return send(res, 200, { token, user: { name: user.name, role: user.role, perms: user.perms } });
+    }
     if (req.method === 'POST' && p === '/api/login/ticket/use') {
       const ip = clientIp(req);
       if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
@@ -2312,7 +2380,7 @@ const handle = async (req, res) => {
       if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
       const id = identify(req, url);
       if (!id) { authFail(ip); return send(res, 401, { error: 'Inloggen is nodig' }); }
-      id.ip = ip;
+      id.ip = ip; id.req = req;
       const g = gate(id, ip);
       if (g) return send(res, g.code, { error: g.error });
       if (id.mustSetup2fa && !BEFORE_2FA.has(routeKey)) return send(res, 403, { error: 'Stel eerst tweestapsverificatie in (Account → Beveiliging).', setup2fa: true });
