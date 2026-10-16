@@ -34,6 +34,7 @@
       "security.js",
       "pki.js",
       "schedule.js",
+      "mdns.js",
       "discover.js",
       "seal.js",
       "access.js",

@@ -12,6 +12,7 @@ const os = require('os');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const integ = require('./integrations.js'); // microcontrollers, door lock + NFC tags, camera events, automations (all opt-in)
+const mdns = require('./mdns.js'); // the name saga-deur.local on the local network
 const schedule = require('./schedule.js'); // hours per day, extra buttons, who is told what, auto replies, calendar
 const pki = require('./pki.js'); // an own certificate authority, so https needs no domain
 const security = require('./security.js'); // encrypted secrets, two-step codes, tamper-evident log, protected backups
@@ -2494,6 +2495,7 @@ const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, process.env.HOST || undefined, () => {
     applyHttps();
+    if (process.env.DOOR_MDNS !== 'off') mdns.start(['saga-deur.local', os.hostname().toLowerCase().replace(/\.local$/, '') + '.local'], (m) => console.log(m));
     console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)  — inloggen met account`);
     resolve(PORT);
   });

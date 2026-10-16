@@ -15,7 +15,7 @@ async function startServer({ patch = false, system = false, dir, env = {} } = {}
   if (patch) {
     root = path.join(dir, 'app');
     fs.mkdirSync(root, { recursive: true });
-    for (const f of ['server.js', 'power.js', 'integrations.js', 'security.js', 'pki.js', 'schedule.js', 'discover.js', 'seal.js', 'access.js', 'package.json']) fs.copyFileSync(path.join(ROOT, f), path.join(root, f));
+    for (const f of ['server.js', 'power.js', 'integrations.js', 'security.js', 'pki.js', 'schedule.js', 'mdns.js', 'discover.js', 'seal.js', 'access.js', 'package.json']) fs.copyFileSync(path.join(ROOT, f), path.join(root, f));
     fs.cpSync(path.join(ROOT, 'public'), path.join(root, 'public'), { recursive: true });
     const src = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
     let out = src.replace("START_PERMS = ['view', 'status', 'inbox', 'users']", "START_PERMS = ['view', 'status', 'inbox', 'users', 'settings', 'people', 'audit', 'mail', 'export', 'api', 'power', 'devices', 'unlock', 'cameras']");
@@ -29,7 +29,7 @@ async function startServer({ patch = false, system = false, dir, env = {} } = {}
   }
   const port = 20000 + Math.floor(Math.random() * 30000);
   const dataDir = path.join(dir, 'data');
-  const child = spawn(process.execPath, [path.join(root, 'server.js')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, HOST: '127.0.0.1', DOOR_STARTER_PASSWORD: 'admin-start-123', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [path.join(root, 'server.js')], { env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, HOST: '127.0.0.1', DOOR_STARTER_PASSWORD: 'admin-start-123', DOOR_MDNS: 'off', ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   child.stdout.on('data', (d) => { log += d; }); child.stderr.on('data', (d) => { log += d; });
   const srv = {
