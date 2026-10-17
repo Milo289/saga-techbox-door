@@ -55,7 +55,7 @@ function certificate({ subjectCn, org, issuerCn, issuerKey, subjectPublicKey, is
   const nb = new Date(Date.now() - 3600e3), na = new Date(Date.now() + days * 864e5);
   const tbs = seq(
     ctx(0, int(2)),                                  // version 3
-    int(crypto.randomBytes(16).map((b, i) => (i === 0 ? b & 0x7f : b))),
+    int(crypto.randomBytes(16).map((b, i) => (i === 0 ? (b & 0x7f) || 0x11 : b))), // a DER number may not start with a zero byte (that was a 1 in 128 chance of an invalid certificate)
     ECDSA_SHA256(), name(issuerCn, org), seq(time(nb), time(na)), name(subjectCn, org),
     spki, ctx(3, seq(...extensions)),
   );

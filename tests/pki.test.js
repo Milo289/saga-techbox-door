@@ -49,3 +49,16 @@ test('a certificate is renewed when the names change', () => {
   assert.ok(new crypto.X509Certificate(b.cert).checkHost('deur.school.example'));
   assert.equal(a.caPem, b.caPem, 'the CA stays, so devices that trust it keep trusting');
 });
+
+test('many certificates in a row are all valid (a serial number must never start with a zero byte)', () => {
+  const crypto = require('crypto');
+  const ca = pki.makeCa('Test');
+  const real = crypto.randomBytes;
+  try {
+    // force the unlucky case: a serial number whose first bytes are zero
+    crypto.randomBytes = (n) => (n === 16 ? Buffer.from('0000000102030405060708090a0b0c0d', 'hex') : real(n));
+    const x = new crypto.X509Certificate(pki.makeServerCert(ca, 'Test', ['localhost']).certPem);
+    assert.ok(x.serialNumber.length > 0);
+  } finally { crypto.randomBytes = real; }
+  for (let i = 0; i < 300; i++) new crypto.X509Certificate(pki.makeServerCert(ca, 'Test', ['localhost']).certPem);
+});
