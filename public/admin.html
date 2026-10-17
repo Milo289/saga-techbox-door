@@ -51,6 +51,7 @@
   nav { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; } nav::-webkit-scrollbar { display: none; } nav button { flex: 0 0 auto; white-space: nowrap; }
   main { min-width: 0; grid-template-columns: minmax(0, 1fr); } main > * { min-width: 0; } .form > * { min-width: 0; } select, input, textarea { max-width: 100%; } html, body { overflow-x: hidden; }
   @media (max-width: 520px) { #saveBar { left: 12px; right: 12px; transform: none; justify-content: space-between; } #saveBar span { flex: 1; } #tools { padding: 8px 12px 0; } }
+
   .card.shut > :not(h2) { display: none !important; }
   .card h2 .caret { padding: 0 6px; margin-right: 6px; border: 0; background: none; color: var(--dim); font-size: 12px; line-height: 1; }
   .card h2 .qm { margin-left: 8px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); color: var(--dim); font-size: 11px; display: inline-flex; align-items: center; justify-content: center; text-transform: none; letter-spacing: 0; }
@@ -234,6 +235,42 @@
   #alertCard.bellpop { box-shadow: 0 0 0 2px var(--fg), 0 24px 70px rgba(0,0,0,.7); }
   #alertCard.bellpop .popicon { background: var(--fg); color: var(--on); animation: shake .45s ease-in-out 4; }
   @keyframes shake { 25% { transform: rotate(-16deg); } 75% { transform: rotate(16deg); } }
+  /* ----- a calmer, fuller look: a sidebar on a big screen, icons, switches, a finder ----- */
+  nav button { display: flex; align-items: center; gap: 9px; }
+  nav button::before { content: ''; width: 18px; height: 18px; flex: none; background: currentColor; -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat; opacity: .9; }
+  .switch { position: relative; display: inline-block; width: 44px; height: 26px; flex: none; }
+  .switch input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+  .switch .sl { position: absolute; inset: 0; border-radius: 999px; background: var(--s3); border: 1px solid var(--line); transition: background .2s; }
+  .switch .sl::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--fg); transition: transform .2s; }
+  .switch input:checked + .sl { background: var(--accent, var(--open)); border-color: transparent; }
+  .switch input:checked + .sl::after { transform: translateX(18px); background: #fff; }
+  .switch input:focus-visible + .sl, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent, var(--open)); outline-offset: 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; } .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--s2); }
+  .recs { display: grid; gap: 10px; width: 100%; } .rec { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--s2); }
+  .rec .rc { display: grid; gap: 4px; font-size: 13px; } .rec .rc .muted { font-size: 12px; }
+  .form.wide { grid-template-columns: minmax(180px, 280px) 1fr; align-items: center; }
+  .form.wide > .ctl.big { grid-column: 2; } .form.wide textarea, .form.wide input:not([type=checkbox]):not([type=color]):not([type=number]):not([type=time]):not([type=date]) { width: 100%; }
+  @media (max-width: 700px) { .form.wide { grid-template-columns: 1fr; } .form.wide > .ctl.big { grid-column: 1; } }
+  #finder { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
+  #finder .fbox { width: min(560px, calc(100vw - 24px)); background: var(--s1); border: 1px solid var(--line); border-radius: 18px; padding: 12px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  #finder input { width: 100%; font-size: 17px; padding: 12px 14px; }
+  #finder .flist { margin-top: 8px; max-height: 50vh; overflow: auto; display: grid; gap: 2px; }
+  #finder .fitem { display: flex; justify-content: space-between; gap: 12px; text-align: left; border: 0; background: none; border-radius: 10px; padding: 10px 12px; } #finder .fitem:hover, #finder .fitem.first { background: var(--s3); }
+  .card { transition: border-color .15s, box-shadow .15s; } .card:hover { border-color: color-mix(in srgb, var(--line) 60%, var(--fg)); }
+  @media (min-width: 1000px) {
+    #shell { display: grid; grid-template-columns: 252px minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100vh; }
+    #powerBar { grid-column: 1 / -1; }
+    .top { grid-column: 1; grid-row: 2; position: sticky; top: 0; height: 100vh; align-self: start; border-bottom: 0; border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 20px 12px 16px; overflow-y: auto; background: var(--s1); backdrop-filter: none; }
+    .bar { flex-wrap: wrap; max-width: none; margin: 0; padding: 0 6px 14px; gap: 8px; }
+    .bar h1 { flex-basis: 100%; font-size: 20px; letter-spacing: -.01em; } .bar .live { flex-basis: 100%; }
+    nav { flex-direction: column; overflow: visible; max-width: none; margin: 4px 0; padding: 0; gap: 2px; }
+    nav button { width: 100%; text-align: left; padding: 10px 12px; border-bottom: 0; border-radius: 10px; color: var(--dim); }
+    nav button:hover { background: var(--s2); border-color: transparent; } nav button.cur { background: var(--s3); color: var(--fg); }
+    nav .badge { margin-left: auto; }
+    #tools { order: 3; max-width: none; margin: 8px 0 0; padding: 8px 6px 0; flex-direction: column; align-items: stretch; }
+    main { grid-column: 2; grid-row: 2; max-width: 1080px; width: 100%; margin: 0; padding: 30px 36px 90px; }
+    #saveBar { left: calc(50% + 126px); }
+  }
 </style>
 </head>
 <body>
@@ -288,7 +325,7 @@
       <a href="/" target="_blank" rel="noopener" title="Deurscherm openen"><button class="sm ghost" id="doorLink"><span class="hide-sm">Deurscherm </span>↗</button></a>
     </div>
     <nav id="tabs"></nav>
-    <div id="tools"><input id="q" type="search" placeholder="Zoek in deze pagina…" aria-label="Zoeken" autocomplete="off"><button class="sm ghost" id="simpleBtn" title="Eenvoudig toont alleen het belangrijkste"></button></div>
+    <div id="tools"><input id="q" type="search" placeholder="Zoek in deze pagina… (/ zoekt overal)" aria-label="Zoeken" autocomplete="off"><button class="sm ghost" id="simpleBtn" title="Eenvoudig toont alleen het belangrijkste"></button></div>
   </div>
   <main id="view"></main>
   <div id="saveBar" class="hidden"><span id="saveTxt"></span><button class="white sm" id="saveAll">Alles opslaan</button><button class="sm ghost" id="saveUndo">Terugzetten</button></div>
@@ -310,7 +347,7 @@
   const can = (p) => !!S?.me?.perms.includes(p);
   let S = null;
   let tab = store.get('doorTab', 'now');
-  if (!['now', 'inbox', 'settings', 'design', 'admin', 'security', 'system'].includes(tab)) tab = 'now';
+  if (!['now', 'inbox', 'settings', 'all', 'design', 'admin', 'security', 'system'].includes(tab)) tab = 'now';
   let inboxFilter = 'open';
   let alertId = null;
   let es = null, lastMsg = 0;
@@ -903,9 +940,9 @@
   function updateTitle() { const n = S ? S.requests.filter((r) => r.state === 'new').length : 0; document.title = (n ? `(${n}) ` : '') + 'Deurbediening'; }
 
   // ---------- frame ----------
-  const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], can('settings') && ['design', 'Ontwerp'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer'], S.me.kind !== 'open' && ['security', 'Beveiliging'], can('system') && ['system', 'Systeem']].filter(Boolean);
+  const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], can('settings') && ['all', 'Alle instellingen'], can('settings') && ['design', 'Ontwerp'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer'], S.me.kind !== 'open' && ['security', 'Beveiliging'], can('system') && ['system', 'Systeem']].filter(Boolean);
   let userDraft = null, keyDraft = null, newKey = null;
-  const editing = () => tab === 'security' || tab === 'settings' || tab === 'design' || tab === 'system' || (tab === 'admin' && (userDraft || keyDraft));
+  const editing = () => tab === 'all' || tab === 'security' || tab === 'settings' || tab === 'design' || tab === 'system' || (tab === 'admin' && (userDraft || keyDraft));
   function setTab(t) { tab = t; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
 
   // never redraw while a finger/mouse button is down, or that click would get lost
@@ -957,7 +994,7 @@
     $('saveTxt').textContent = n === 0 ? '' : 'Je hebt wijzigingen die nog niet zijn opgeslagen';
   }
   const markDirty = (e) => {
-    if (!['settings', 'design', 'system'].includes(tab)) return;
+    if (!['settings', 'design', 'system', 'all'].includes(tab)) return;
     const card = e.target.closest && e.target.closest('.card');
     if (e.target.closest && e.target.closest('#tools')) return;
     if (card && saveButtonOf(card)) dirtyCards.add(card); else if (globalSave() && card) dirtyCards.add('global'); else return;
@@ -997,7 +1034,7 @@
     const unread = S.requests.filter((r) => r.state === 'new').length;
     if (!visibleTabs().some(([k]) => k === tab)) tab = 'now';
     const ub = $('userBtn'); ub.classList.toggle('hidden', S.me.kind === 'open'); ub.textContent = S.me.name; $('lockBtn').classList.toggle('hidden', !S.me.canLock);
-    $('tabs').replaceChildren(...visibleTabs().map(([k, l]) => h('button', { class: tab === k ? 'cur' : '', onclick: () => setTab(k) }, l, k === 'inbox' && unread ? h('span', { class: 'badge' }, unread) : null)));
+    $('tabs').replaceChildren(...visibleTabs().map(([k, l]) => h('button', { class: tab === k ? 'cur' : '', 'data-tab': k, style: `--ic:${tabIcon(k)}`, onclick: () => setTab(k) }, l, k === 'inbox' && unread ? h('span', { class: 'badge' }, unread) : null)));
     updateTitle();
     paintPowerBar();
     if (window.doorApp) window.doorApp.report({ open: S.requests.filter((r) => r.state === 'new' || r.state === 'seen').length, mode: v.mode, label: v.label });
@@ -1687,9 +1724,89 @@
     return h('div', { class: 'card wiz' }, h('h2', {}, `Welkom! Stap ${step + 1} van 3`, h('span', { class: 'sp' }), h('button', { class: 'sm ghost', onclick: done }, 'Sluiten')), ...steps[Math.min(step, 2)]());
   }
 
+  // ---------- Alle instellingen: every setting of the server in one searchable page, drawn from the server's own description ----------
+  let allSchema = null, allDraft = {};
+  const fieldValue = (f) => (f.key in allDraft ? allDraft[f.key] : f.value);
+  function dirtyAll() { markDirty({ target: $('view').firstElementChild || $('view') }); }
+  // one control for one kind of value; get() and set() read and write it
+  function ctl(spec, get, set) {
+    const t = spec.type;
+    const mark = (v) => { set(v); dirtyAll(); };
+    if (t === 'toggle') return h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!get(), onchange: (e) => mark(e.target.checked) }), h('span', { class: 'sl' }));
+    if (t === 'choice') return h('select', { onchange: (e) => mark(e.target.value) }, ...spec.options.map(([v, l]) => h('option', { value: v, selected: String(get()) === v }, l)));
+    if (t === 'number') return h('input', { type: 'number', min: spec.min, max: spec.max, value: get() ?? '', style: 'width:120px', oninput: (e) => mark(e.target.value === '' ? spec.min : Number(e.target.value)) });
+    if (t === 'time') return h('input', { type: 'time', value: get() || '', oninput: (e) => mark(e.target.value) });
+    if (t === 'date') return h('input', { type: 'date', value: get() || '', oninput: (e) => mark(e.target.value) });
+    if (t === 'color') { const v = get() || ''; return h('div', { class: 'row' }, h('input', { type: 'color', value: /^#[0-9a-f]{6}$/i.test(v) ? v : '#30d158', oninput: (e) => mark(e.target.value) }), h('button', { class: 'sm ghost', type: 'button', onclick: (e) => { mark(''); e.target.closest('.row').querySelector('input').value = '#30d158'; toast('Standaardkleur'); } }, v ? 'Standaard' : 'Standaardkleur')); }
+    if (t === 'password') return h('input', { type: 'password', autocomplete: 'new-password', value: get() || '', oninput: (e) => mark(e.target.value) });
+    if (t === 'lines') return h('textarea', { rows: Math.min(10, Math.max(3, (get() || []).length + 1)), oninput: (e) => mark(e.target.value.split('\n')) }, (get() || []).join('\n'));
+    if (t === 'multi') { const on = new Set((get() || []).map(String)); return h('div', { class: 'chips' }, ...spec.options.map(([v, l]) => h('label', { class: 'chip' }, h('input', { type: 'checkbox', checked: on.has(v), onchange: (e) => { if (e.target.checked) on.add(v); else on.delete(v); mark([...on]); } }), l))); }
+    if (t === 'dayhours') {
+      const holder = h('span', { class: 'row' });
+      const cur = () => get();
+      const draw = () => { const c = cur(); holder.replaceChildren(...(c && !c.off ? [h('input', { type: 'time', value: c.from, oninput: (e) => { c.from = e.target.value; mark({ ...c }); } }), h('span', { class: 'muted' }, 'tot'), h('input', { type: 'time', value: c.to, oninput: (e) => { c.to = e.target.value; mark({ ...c }); } })] : [])); };
+      const c0 = cur(); const mode = !c0 ? 'normal' : c0.off ? 'off' : 'own';
+      draw();
+      return h('div', { class: 'row', style: 'flex-wrap:wrap' }, h('select', { onchange: (e) => { const v = e.target.value; mark(v === 'normal' ? null : v === 'off' ? { off: true } : { from: '09:00', to: '17:00' }); draw(); } }, ...[['normal', 'Zoals de rest'], ['own', 'Eigen tijden'], ['off', 'Gesloten']].map(([v, l]) => h('option', { value: v, selected: mode === v }, l))), holder);
+    }
+    if (t === 'records') {
+      const box = h('div', { class: 'recs' });
+      const rows = () => get() || [];
+      const draw = () => box.replaceChildren(
+        ...rows().map((r, i) => h('div', { class: 'rec' },
+          ...spec.columns.map((c) => h('label', { class: 'rc' }, h('span', { class: 'muted' }, c.label), ctl(c, () => r[c.key], (v) => { r[c.key] = v; set(rows()); }))),
+          h('button', { class: 'sm ghost danger', type: 'button', onclick: () => { const a = rows(); a.splice(i, 1); mark(a); draw(); } }, 'Weg'))),
+        h('button', { class: 'sm', type: 'button', onclick: () => { const a = rows(); a.push({ ...spec.blank }); mark(a); draw(); } }, '+ ' + (spec.addLabel || 'Toevoegen')));
+      draw();
+      return box;
+    }
+    return h('input', { value: get() ?? '', placeholder: spec.placeholder || '', maxlength: spec.max || 200, oninput: (e) => mark(e.target.value) });
+  }
+  const loadAll = () => api('/api/settings-schema').then((r) => { allSchema = r.groups; allDraft = {}; if (tab === 'all') renderAll(true); }).catch(() => {});
+  function allSettingsView() {
+    if (!allSchema) { loadAll(); return [h('div', { class: 'card' }, h('p', { class: 'muted', style: 'margin:0' }, 'Laden…'))]; }
+    const cards = allSchema.map((g) => h('div', { class: 'card', 'data-group': g.id }, h('h2', {}, g.title),
+      g.help ? h('p', { class: 'muted', style: 'margin-top:0' }, g.help) : null,
+      h('div', { class: 'form wide' }, ...g.fields.flatMap((f) => {
+        const big = f.type === 'records' || f.type === 'lines' || f.type === 'multi';
+        return [h('label', { 'data-key': f.key, title: f.key }, f.label), h('div', { class: big ? 'ctl big' : 'ctl' }, ctl(f, () => fieldValue(f), (v) => { allDraft[f.key] = v; }))];
+      }))));
+    return [h('div', { class: 'card' }, h('p', { class: 'muted', style: 'margin:0' }, 'Alles wat de server kan instellen, op één pagina. Zoek hierboven op een woord (bijvoorbeeld “mail”, “pauze” of “kleur”). Wijzigingen worden bewaard met de knop onderaan.')), ...cards,
+      h('div', { class: 'save' }, h('button', { class: 'white', onclick: async () => { try { await api('/api/settings-schema/save', { values: allDraft }); toast('Opgeslagen'); S = await api('/api/admin-state'); await loadAll(); } catch {} } }, 'Instellingen opslaan'))];
+  }
+
+  // ---------- quick finder (Ctrl/⌘ + K or "/"): jump to a page or a setting ----------
+  async function openFinder() {
+    if ($('finder')) return;
+    if (can('settings') && !allSchema) await api('/api/settings-schema').then((r) => { allSchema = r.groups; }).catch(() => {});
+    const input = h('input', { placeholder: 'Ga naar… of zoek een instelling', autofocus: true }), list = h('div', { class: 'flist' });
+    const items = [...visibleTabs().map(([k, l]) => ({ label: l, hint: 'Pagina', go: () => setTab(k) })), ...(allSchema || []).flatMap((g) => g.fields.map((f) => ({ label: f.label, hint: g.title, go: () => { setTab('all'); setTimeout(() => { $('q').value = f.label.slice(0, 40); applyFilter(); }, 50); } })))];
+    const close = () => { const e = $('finder'); if (e) e.remove(); };
+    const draw = () => { const q = input.value.trim().toLowerCase(); const hits = items.filter((i) => !q || (i.label + ' ' + i.hint).toLowerCase().includes(q)).slice(0, 12); list.replaceChildren(...hits.map((i, n) => h('button', { class: 'fitem' + (n === 0 ? ' first' : ''), onclick: () => { close(); i.go(); } }, h('span', {}, i.label), h('span', { class: 'muted' }, i.hint))), hits.length ? null : h('p', { class: 'muted', style: 'padding:10px' }, 'Niets gevonden.')); };
+    input.oninput = draw; draw();
+    input.onkeydown = (e) => { if (e.key === 'Escape') close(); if (e.key === 'Enter') { const f = list.querySelector('.fitem.first'); if (f) f.click(); } };
+    const box = h('div', { id: 'finder', onclick: (e) => { if (e.target.id === 'finder') close(); } }, h('div', { class: 'fbox' }, input, list));
+    document.body.append(box); input.focus();
+  }
+  document.addEventListener('keydown', (e) => {
+    if (!S || $('shell').classList.contains('hidden')) return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
+    if (((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') || (e.key === '/' && !typing)) { e.preventDefault(); openFinder(); }
+  });
+
+  // small line icons for the pages (drawn as a mask so they take the colour of the text)
+  const TAB_SVG = {
+    now: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/>', inbox: '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0"/>',
+    settings: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>', all: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+    design: '<path d="M12 3a9 9 0 100 18c1.5 0 2-1 1.4-2-.6-1 .1-2.5 1.6-2.5H17a4 4 0 004-4A9 9 0 0012 3z"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16" cy="11" r="1"/>',
+    admin: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.6a3.5 3.5 0 010 6.8M18 14.5a6.5 6.5 0 013.5 5.5"/>', security: '<path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+    system: '<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>',
+  };
+  const tabIcon = (k) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${TAB_SVG[k] || TAB_SVG.now}</svg>`)}")`;
   const nowMain = () => VIEWS.nowMain(), inboxMain = () => VIEWS.inboxMain();
   const VIEWS = {
     security: securityView,
+    all: allSettingsView,
     now() { return [wizardCard(), ...nowMain()].filter(Boolean); },
     inbox() { return inboxMain(); },
     nowMain() {
