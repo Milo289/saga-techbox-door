@@ -48,7 +48,7 @@ async function startServer({ patch = false, system = false, rootPassword = '', d
       await sleep(100);
     }
     await srv.stop();
-    if (attempt < 5 && /EACCES|EADDRINUSE/.test(log)) continue;
+    if (attempt < 5 && /EACCES|EADDRINUSE|al in gebruik|kon niet starten/.test(log)) continue;
     throw new Error('server did not start:\n' + log);
   }
 }
