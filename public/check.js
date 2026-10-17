@@ -255,6 +255,86 @@
       } finally { if (reqId) await post('/api/requests/delete', { id: reqId }); await save({ customButtons: keep.c, notifyRules: keep.n }); }
     });
 
+    // the real save buttons in the panel, pressed the way a person presses them (the panel opens invisibly inside this page)
+    const panel = { fr: null, saved: {} };
+    const openPanel = async () => {
+      if (panel.fr) return panel.fr.contentDocument;
+      for (const k of ['doorToken', 'doorTab', 'doorWizard', 'doorSimple']) { try { panel.saved[k] = localStorage.getItem(k); } catch {} }
+      try { localStorage.setItem('doorToken', TOKEN); localStorage.setItem('doorTab', 'now'); localStorage.setItem('doorWizard', 'done'); localStorage.setItem('doorSimple', '0'); } catch { throw new Error('de browser laat geen opgeslagen gegevens toe (privévenster?)'); }
+      const fr = document.createElement('iframe'); fr.style.cssText = 'position:fixed;left:-3000px;top:0;width:1300px;height:1000px;border:0'; fr.src = '/admin'; document.body.append(fr); panel.fr = fr;
+      await new Promise((res, rej) => { fr.onload = res; setTimeout(() => rej(new Error('het paneel laadde niet')), 15000); });
+      for (let i = 0; i < 60; i++) { const d = fr.contentDocument; if (d && d.querySelector('#view') && d.querySelector('#view').children.length && !d.getElementById('shell').classList.contains('hidden')) return d; await sleep(250); }
+      throw new Error('het paneel liet na het laden niets zien (ingelogd?)');
+    };
+    const closePanel = () => { if (panel.fr) { panel.fr.remove(); panel.fr = null; } for (const [k, v] of Object.entries(panel.saved)) { try { if (v === null || v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch {} } };
+    const goTab = async (d, label) => { const b = [...d.querySelectorAll('nav button')].find((x) => x.textContent.trim().startsWith(label)); must(b, `het tabblad “${label}” staat niet in het paneel`); b.click(); await sleep(1500); };
+    const cardNamed = (d, title) => [...d.querySelectorAll('#view>.card')].find((c) => c.querySelector('h2') && c.querySelector('h2').textContent.includes(title));
+    const type = (input, value) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); };
+    const textInput = (card) => [...card.querySelectorAll('input')].find((i) => (!i.type || i.type === 'text') && !i.disabled);
+    const uiNeed = () => { if (!schema || !schema.length) skip('geen recht voor de instellingen'); };
+    const G2 = 'Opslaanknoppen in het paneel (de echte knoppen)';
+    await t('save', G2, 'Instellingen → grote knop “Instellingen opslaan”', async () => {
+      uiNeed(); const old = fld('name').value, want = 'Opslaantest ' + rand();
+      try {
+        const d = await openPanel(); await goTab(d, 'Instellingen');
+        const card = cardNamed(d, 'Deur'); must(card, 'de kaart “Deur” staat er niet'); type(textInput(card), want); await sleep(300);
+        const btn = d.querySelector('#view .save button.white'); must(btn, 'de knop onderaan staat er niet'); btn.click(); await sleep(2200);
+        const now = (await settingsNow()).name; must(now === want, `de naam is niet bewaard (staat nu op “${now}”)`);
+      } finally { await save({ name: old }); }
+      return 'bewaard en weer teruggezet';
+    });
+    await t('save', G2, 'Instellingen → de balk “Alles opslaan”', async () => {
+      uiNeed(); const old = fld('name').value, want = 'Balktest ' + rand();
+      try {
+        const d = await openPanel(); await goTab(d, 'Instellingen');
+        const card = cardNamed(d, 'Deur'); type(textInput(card), want); await sleep(400);
+        const bar = d.getElementById('saveBar'); must(!bar.classList.contains('hidden'), 'de balk met “Alles opslaan” verscheen niet na een wijziging');
+        d.getElementById('saveAll').click(); await sleep(2500);
+        const now = (await settingsNow()).name; must(now === want, `de naam is niet bewaard via de balk (staat nu op “${now}”)`);
+        must(d.getElementById('saveBar').classList.contains('hidden'), 'de balk bleef staan na het opslaan');
+      } finally { await save({ name: old }); }
+      return 'bewaard, balk verdween weer';
+    });
+    await t('save', G2, 'Instellingen → kaart “Bezoekersformulier” (eigen knop)', async () => {
+      uiNeed(); const old = fld('form.thanksText') ? fld('form.thanksText').value : ((await get('/api/form-schema')).json.groups.flatMap((g) => g.fields).find((f) => f.key === 'form.thanksText') || {}).value || '';
+      const want = 'Dank test ' + rand();
+      try {
+        const d = await openPanel(); await goTab(d, 'Instellingen');
+        const card = cardNamed(d, 'Bezoekersformulier'); must(card, 'de kaart staat er niet');
+        const texts = [...card.querySelectorAll('input')].filter((i) => (!i.type || i.type === 'text')); type(texts[texts.length - 1], want); await sleep(300);
+        const btn = [...card.querySelectorAll('button')].find((b) => /opslaan/i.test(b.textContent)); must(btn, 'de knop staat er niet'); btn.click(); await sleep(2200);
+        const now = ((await get('/api/form-schema')).json.groups.flatMap((g) => g.fields).find((f) => f.key === 'form.thanksText') || {}).value; must(now === want, `niet bewaard (staat nu op “${now}”)`);
+      } finally { await post('/api/form-settings', { values: { 'form.thanksText': old } }); }
+      return 'bewaard en weer teruggezet';
+    });
+    await t('save', G2, 'Systeem → kaart “Toegang” (eigen knop)', async () => {
+      if (!isRoot()) skip('alleen het hoofdaccount (milo)');
+      const before = (await get('/api/system')).json.system, want = before.sessionDays === 30 ? 31 : 30;
+      try {
+        const d = await openPanel(); await goTab(d, 'Systeem');
+        const card = cardNamed(d, 'Toegang'); must(card, 'de kaart staat er niet'); const n = [...card.querySelectorAll('input[type=number]')][0]; must(n, 'het getal staat er niet'); type(n, String(want)); await sleep(300);
+        const btn = [...card.querySelectorAll('h2 button')].find((b) => /opslaan/i.test(b.textContent)); must(btn, 'de knop staat er niet'); btn.click(); await sleep(2200);
+        const now = (await get('/api/system')).json.system.sessionDays; must(now === want, `niet bewaard (staat nu op ${now})`);
+      } finally { await save({ 'system.sessionDays': before.sessionDays }); }
+      return 'bewaard en weer teruggezet';
+    });
+    await t('save', G2, 'Alle instellingen → grote knop en balk', async () => {
+      uiNeed(); const old = fld('note').value;
+      try {
+        const d = await openPanel(); await goTab(d, 'Alle instellingen');
+        const label = d.querySelector('[data-key="note"]'); must(label, 'het veld “Bericht op de deur” staat er niet'); const input = label.nextElementSibling.querySelector('input');
+        const w1 = 'Knoptest ' + rand(); type(input, w1); await sleep(300);
+        const btn = d.querySelector('#view .save button.white'); must(btn, 'de knop onderaan staat er niet'); btn.click(); await sleep(2500);
+        must((await settingsNow()).note === w1, 'niet bewaard met de knop onderaan');
+        await sleep(500); const label2 = d.querySelector('[data-key="note"]'); const input2 = label2.nextElementSibling.querySelector('input');
+        const w2 = 'Balktest ' + rand(); type(input2, w2); await sleep(400);
+        must(!d.getElementById('saveBar').classList.contains('hidden'), 'de balk verscheen niet'); d.getElementById('saveAll').click(); await sleep(2500);
+        must((await settingsNow()).note === w2, 'niet bewaard met de balk');
+      } finally { await save({ note: old }); closePanel(); }
+      return 'beide manieren bewaren, daarna teruggezet';
+    });
+    closePanel();
+
     // calendar, mail
     await t('ext', G.ext, 'Agendalink (ICS)', async () => {
       if (!can('settings')) skip('geen recht'); const was = (await get('/api/calendar')).json; must(was && 'enabled' in was, 'status onbekend');

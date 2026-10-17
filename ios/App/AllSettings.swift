@@ -19,7 +19,7 @@ struct AllSettingsView: View {
     var body: some View {
         #if DEBUG
         // test aid for development builds only: open one group at once (DEUR_GROUP=hours)
-        if let id = ProcessInfo.processInfo.environment["DEUR_GROUP"], let g = groups.first(where: { $0.id.str == id }) { GroupEditor(group: g, draft: draft) } else { list }
+        if let id = ProcessInfo.processInfo.environment["DEUR_GROUP"], let g = groups.first(where: { $0.id.str == id }) { GroupEditor(group: g, draft: draft, saving: saving, error: error, save: { await save() }) } else { list }
         #else
         list
         #endif
@@ -35,7 +35,7 @@ struct AllSettingsView: View {
             }
             Section {
                 ForEach(Array(groups.enumerated()), id: \.offset) { _, g in
-                    NavigationLink { GroupEditor(group: g, draft: draft) } label: {
+                    NavigationLink { GroupEditor(group: g, draft: draft, saving: saving, error: error, save: { await save() }) } label: {
                         HStack { Text(g.title.str); Spacer(); let n = g.fields.array.filter { draft.edits[$0.key.str] != nil }.count; if n > 0 { Text("\(n)").font(.caption.bold()).padding(.horizontal, 7).padding(.vertical, 2).background(Palette.accent, in: Capsule()).foregroundStyle(.black) } }
                     }
                 }
@@ -63,12 +63,21 @@ struct AllSettingsView: View {
 struct GroupEditor: View {
     let group: JSON
     @ObservedObject var draft: SettingsDraft
+    var saving = false
+    var error: String?
+    var save: () async -> Void = {}
     var body: some View {
         Form {
+            if let error { Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) } }
             Section { ForEach(Array(group.fields.array.enumerated()), id: \.offset) { _, f in FieldRow(field: f, draft: draft) } }
                 footer: { if !group.help.str.isEmpty { Text(group.help.str) } }
         }
         .formStyle(.grouped)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button { Task { await save() } } label: { if saving { ProgressView() } else { Text(draft.edits.isEmpty ? "Opslaan" : "Opslaan (\(draft.edits.count))").bold() } }.disabled(draft.edits.isEmpty || saving)
+            }
+        }
         .navigationTitle(group.title.str)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
