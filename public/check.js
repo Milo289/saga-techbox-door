@@ -114,8 +114,15 @@
     // names and https
     await t('name', G.name, 'De naam saga-deur.local is te vinden', async () => {
       if (location.hostname.endsWith('.local')) return 'deze pagina is al via een naam geopend';
+      const before = ((await get('/api/mdns')).json) || {};
       try { await fetch(`http://saga-deur.local:${location.port || 80}/healthz`, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(6000) }); return 'bereikbaar'; }
-      catch { warn('de naam werkt niet vanaf dit apparaat (zie of ping saga-deur.local antwoordt). Het IP-adres werkt wel.'); }
+      catch {
+        await sleep(500); const after = ((await get('/api/mdns')).json) || {};
+        if (!after.enabled) warn('de naam werkt niet vanaf dit apparaat; de server maakt de naam niet zelf bekend (DOOR_MDNS staat uit). Het IP-adres werkt wel.');
+        if (!after.running) warn('de naam werkt niet; het onderdeel dat de naam bekendmaakt draait niet' + (after.error ? ' (' + after.error + ')' : '') + '. Het IP-adres werkt wel.');
+        if ((after.queries || 0) > (before.queries || 0)) warn(`de server heeft de vraag naar de naam gehoord en beantwoord, maar dit apparaat kreeg het antwoord niet (${after.answered} antwoorden). Dat ligt aan het netwerk of de router. Het IP-adres werkt wel.`);
+        warn(`de vraag naar de naam kwam niet aan bij de server (er zijn ${after.queries || 0} vragen gehoord). Het netwerk geeft deze soort berichten (mDNS) niet door tussen dit apparaat en de server; vaak een wifi-router met "client isolation" of "multicast" uit. Het IP-adres werkt wel.`);
+      }
     });
 
     // log in

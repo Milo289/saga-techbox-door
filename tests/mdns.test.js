@@ -33,3 +33,8 @@ test('an old-style question gets the same id back; broken data does not crash', 
   assert.deepEqual(questions(Buffer.from([1, 2, 3])), []);
   assert.deepEqual(questions(Buffer.alloc(40, 0xff)), []);
 });
+
+test('when avahi already answers for IPv6, only the IPv4 address is answered here', () => {
+  assert.equal(answerFor(query('saga-deur.local', 28), ['saga-deur.local'], ['10.0.0.5'], false, false), null);
+  assert.ok(answerFor(query('saga-deur.local', 1), ['saga-deur.local'], ['10.0.0.5'], false, false));
+});

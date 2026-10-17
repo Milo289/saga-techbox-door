@@ -57,3 +57,17 @@ test('automatic reply per status and the calendar link', async (t) => {
   await call(srv, 'POST', '/api/calendar/token', { off: true }, tok);
   assert.equal((await call(srv, 'GET', link.path)).status, 404, 'the old link stops working');
 });
+
+test('the name on the network reports what it hears, for the test page', async (t) => {
+  const srv = await startServer({ patch: true, dir: tmp() }); // the tests switch the announcing off
+  t.after(() => srv.stop());
+  const tok = await login(srv);
+  const r = await call(srv, 'GET', '/api/mdns', undefined, tok);
+  assert.equal(r.status, 200); assert.equal(r.json.enabled, false);
+  for (const k of ['running', 'queries', 'answered', 'names']) assert.ok(k in r.json, k);
+  assert.equal((await call(srv, 'GET', '/api/mdns')).status, 401);
+});
+test('the firewall of the Linux disk lets the multicast membership questions through', () => {
+  const rules = fs.readFileSync(path.join(__dirname, '..', 'linux-iso', 'config', 'includes.chroot', 'etc', 'nftables.conf'), 'utf8');
+  assert.match(rules, /ip protocol igmp accept/); assert.match(rules, /5353/);
+});
