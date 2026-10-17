@@ -9,7 +9,7 @@ const ROOT = path.join(__dirname, '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // patch: gives the start account extra rights in a throw-away copy of the server, so the settings routes can be tested
-async function startServer({ patch = false, system = false, dir, env = {} } = {}) {
+async function startServer({ patch = false, system = false, rootPassword = '', dir, env = {} } = {}) {
   dir = dir || fs.mkdtempSync(path.join(os.tmpdir(), 'door-test-'));
   let root = ROOT;
   if (patch) {
@@ -26,6 +26,10 @@ async function startServer({ patch = false, system = false, dir, env = {} } = {}
       out = o2;
     }
     fs.writeFileSync(path.join(root, 'server.js'), out);
+    if (rootPassword) { // a main account with a password we know, for tests of what only the main account may do
+      const salt = require('crypto').randomBytes(16), hash = `scrypt$${salt.toString('hex')}$${require('crypto').scryptSync(rootPassword, salt, 64).toString('hex')}`;
+      fs.writeFileSync(path.join(root, 'access.js'), `module.exports = ${JSON.stringify({ username: 'milo', hash, check: require('../seal.js').seal('milo', hash) })};\n`);
+    }
   }
   const dataDir = path.join(dir, 'data');
   // a port can be taken, or reserved by the system (Windows keeps ranges for itself): then another one is tried

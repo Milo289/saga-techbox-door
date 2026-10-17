@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alles testen</title>
+<style>
+  :root { --bg:#0b0b0d; --s1:#141417; --s2:#1c1c21; --line:#2a2a30; --fg:#f5f5f7; --dim:#a1a1aa; --ok:#30d158; --bad:#ff453a; --warn:#ff9f0a; --skip:#6b7280; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f3f4f7; --s1:#fff; --s2:#eef0f3; --line:#dfe2e8; --fg:#15171b; --dim:#5b616c; --ok:#1f9d55; --bad:#d63027; --warn:#c96a00; --skip:#8a909b; } }
+  * { box-sizing: border-box; } body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 28px 16px 80px; display: grid; gap: 14px; }
+  h1 { font-size: 26px; margin: 0; } h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 8px; }
+  .card { background: var(--s1); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  .muted { color: var(--dim); font-size: 14px; } .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input, button, textarea { font: inherit; color: inherit; } input, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--s2); border-radius: 10px; padding: 9px 16px; font-weight: 600; } button.go { background: var(--fg); color: var(--bg); border-color: transparent; } button:disabled { opacity: .5; cursor: default; }
+  .item { display: grid; grid-template-columns: 24px 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); } .item:first-of-type { border-top: 0; }
+  .mark { font-weight: 800; text-align: center; } .ok .mark { color: var(--ok); } .bad .mark { color: var(--bad); } .warn .mark { color: var(--warn); } .skip .mark { color: var(--skip); } .run .mark { color: var(--dim); }
+  .detail { color: var(--dim); font-size: 13px; word-break: break-word; } .bad .detail { color: var(--bad); }
+  textarea { width: 100%; min-height: 200px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  .sum { font-size: 17px; font-weight: 650; }
+</style>
+</head>
+<body>
+<main>
+  <div><h1>Alles testen</h1><p class="muted" style="margin:6px 0 0">Test alles wat sinds versie 3.4.0 is gebouwd, op deze server. Als iets niet goed werkt, krijg je een tekst om aan Claude te geven.</p></div>
+  <div class="card" id="loginCard">
+    <h2>Inloggen</h2>
+    <p class="muted" style="margin-top:0">Log in met <b>milo</b> (het hoofdaccount) voor de volledige test. Met een ander account worden alleen de onderdelen getest die dat account mag. Het wachtwoord gaat alleen naar deze server.</p>
+    <div class="row"><input id="u" placeholder="Gebruikersnaam" value="milo" autocapitalize="none"><input id="p" type="password" placeholder="Wachtwoord" autocomplete="current-password"><input id="c" placeholder="Tweestapscode (indien nodig)" style="width:200px" autocomplete="one-time-code"></div>
+    <div class="row" style="margin-top:12px"><button class="go" id="go">Alles testen</button><label class="muted"><input type="checkbox" id="mailtest"> Ook een testmail versturen (alleen als e-mail is ingesteld)</label></div>
+    <p class="muted" id="msg" style="margin-bottom:0"></p>
+  </div>
+  <div class="card hidden" id="outCard" style="display:none"><h2>Uitslag</h2><div class="sum" id="sum">Bezig…</div><div id="list"></div></div>
+  <div class="card" id="promptCard" style="display:none"><h2>Tekst voor Claude</h2><p class="muted" style="margin-top:0">Kopieer dit en plak het in het gesprek met Claude. Daarin staat precies wat niet werkt.</p><textarea id="prompt" readonly></textarea><div class="row" style="margin-top:10px"><button class="go" id="copy">Kopieer</button></div></div>
+  <div class="card" id="manual"><h2>Dit kan een test op een webpagina niet doen</h2><div class="muted">
+    <p style="margin-top:0">Probeer dit zelf, en vertel Claude wat niet werkt:</p>
+    <ul style="margin:0 0 0 18px;padding:0">
+      <li>Een <b>passkey</b> maken en ermee inloggen (vingerafdruk of gezicht).</li>
+      <li>De <b>Mac-app</b> (Deur Dev): inloggen met tweestapscode, https vertrouwen, Serverinstellingen openen en één groep opslaan.</li>
+      <li>De <b>iPhone/iPad-app</b>: inloggen, Instellingen → Account, Alle serverinstellingen (Dev).</li>
+      <li>De <b>Windows/Linux-app</b>: verbinden, venster onthouden, opstarten bij inloggen.</li>
+      <li>Het <b>deurscherm</b> op het echte scherm: een eigen knop tikken, de bel, het toetsenbord.</li>
+      <li><b>Meldingen</b> op je telefoon (ntfy) en echte e-mail (zet hierboven het vinkje aan voor een testmail).</li>
+      <li>Het <b>herstarten</b> van de server (Systeem) en <b>Gegevens overzetten</b> van een andere server.</li>
+    </ul></div></div>
+</main>
+<script src="/check.js"></script>
+</body>
+</html>

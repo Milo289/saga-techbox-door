@@ -1576,7 +1576,7 @@
     const sec = S.security;
     if (!sec) { box.append(h('p', { class: 'muted' }, 'De score is te zien met het recht “Instellingen wijzigen”.')); return box; }
     const tone = sec.score >= 80 ? 'var(--open)' : sec.score >= 50 ? 'var(--busy)' : 'var(--closed)';
-    box.append(h('div', { class: 'row', style: 'align-items:baseline;gap:10px' }, h('b', { style: `font-size:40px;color:${tone}` }, sec.score), h('span', { class: 'muted' }, 'van 100')));
+    box.append(h('div', { class: 'row', style: 'align-items:baseline;gap:10px' }, h('b', { style: `font-size:40px;color:${tone}` }, sec.score), h('span', { class: 'muted' }, 'van 100'), h('span', { class: 'sp' }), h('a', { href: '/check', target: '_blank', rel: 'noopener' }, h('button', { class: 'sm' }, 'Alles testen'))));
     for (const i of sec.items) {
       box.append(h('div', { class: 'row', style: 'gap:8px;margin:6px 0;align-items:flex-start' },
         h('span', { style: `color:${i.ok ? 'var(--open)' : 'var(--busy)'};width:18px` }, i.ok ? '✓' : '!'),

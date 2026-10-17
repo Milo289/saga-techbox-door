@@ -2317,6 +2317,7 @@ const handle = async (req, res) => {
     if (p === '/healthz') return send(res, 200, { ok: true });
     if (p === '/api/where') return send(res, 200, where(isLoopback(req.socket.remoteAddress && normIp(req.socket.remoteAddress)) && !req.headers['x-forwarded-for'] && !req.headers['x-real-ip'] && !req.headers['cf-connecting-ip'])); // for the start screen and for apps that look for the server
     if (p === '/start') return serveFile(res, 'start.html', req);
+    if (p === '/check') return serveFile(res, 'check.html', req); // the test page: tries everything and says what does not work
     if (p === '/calendar.ics') {
       const tok = url.searchParams.get('token') || '';
       if (!state.icsToken || tok.length !== state.icsToken.length || !crypto.timingSafeEqual(Buffer.from(tok), Buffer.from(state.icsToken))) { authFail(clientIp(req)); return send(res, 404, { error: 'Niet gevonden' }); }

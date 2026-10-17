@@ -312,3 +312,5 @@ Wat nog ontbreekt: echte *passkeys* (een inlog met Face ID of Touch ID op het we
 **Gegevens overzetten:** Systeem → *Gegevens overzetten* haalt alles op van een andere deurserver (instellingen, bezoekers, personen, afspraken, logboek en, als de oude server ook 3.4.0 of nieuwer is, de accounts). Er wordt eerst een back-up van de nieuwe server gemaakt. Alleen het hoofdaccount kan dit.
 
 **Het paneel is vernieuwd:** op een grote monitor staat het menu links met pictogrammen, er is een pagina **Alle instellingen** (alles wat de server kan instellen, doorzoekbaar, met schakelaars en lijsten) en een snelle zoeker met `/` of Ctrl/⌘ + K.
+
+**Alles testen:** open `/check` op je server, log in met `milo` en druk op *Alles testen*. De pagina probeert alles wat sinds 3.4.0 is gebouwd (tweestapsverificatie van begin tot eind met een tijdelijk testaccount, tijdelijke rechten, instellingen opslaan en terugzetten, openingstijden, eigen knoppen, slimme antwoorden, scheldwoorden, agendalink, back-up, gegevens overzetten, https, beveiligingskoppen) en zet alles terug. Mislukt er iets, dan geeft de pagina een kant-en-klare tekst om aan Claude te geven.
