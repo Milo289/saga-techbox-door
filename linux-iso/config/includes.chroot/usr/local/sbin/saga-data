@@ -1,0 +1,36 @@
+#!/bin/sh
+# Gives the server a place that survives a restart. A live system forgets everything, so:
+#  1. a disk or partition with the label "saga-data" is used as it is;
+#  2. otherwise, when exactly ONE whole disk is completely empty (no partitions, no files, not a stick or a cd), it is formatted
+#     with the label "saga-data" and used. A disk that holds anything is never touched.
+# The result is mounted on /var/lib/saga-door, where the server keeps its data (and the updates from the panel).
+DIR=/var/lib/saga-door
+mkdir -p "$DIR"
+if mountpoint -q "$DIR"; then echo "saga-data: $DIR is al een eigen schijf"; exit 0; fi
+
+dev=$(blkid -L saga-data 2>/dev/null || true)
+if [ -z "$dev" ]; then
+  found=""; n=0
+  for d in $(lsblk -dn -o NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}'); do
+    p=/dev/$d
+    [ "$(cat /sys/block/$d/removable 2>/dev/null)" = 1 ] && continue
+    [ "$(cat /sys/block/$d/size 2>/dev/null || echo 0)" -lt 2097152 ] && continue          # smaller than 1 GB
+    [ -n "$(lsblk -n -o NAME "$p" 2>/dev/null | tail -n +2)" ] && continue                 # has partitions
+    [ -n "$(blkid -p "$p" 2>/dev/null)" ] && continue                                        # has a file system or a partition table
+    grep -q "^$p " /proc/mounts && continue
+    found=$p; n=$((n+1))
+  done
+  if [ "$n" = 1 ]; then
+    echo "saga-data: lege schijf $found wordt gebruikt voor de gegevens"
+    mkfs.ext4 -q -L saga-data "$found" || { echo "saga-data: formatteren mislukt"; exit 0; }
+    dev=$found
+  elif [ "$n" -gt 1 ]; then
+    echo "saga-data: meer dan een lege schijf gevonden; geen gekozen (geef een schijf het label saga-data)"
+  else
+    echo "saga-data: geen gegevensschijf gevonden; de gegevens verdwijnen bij een herstart"
+  fi
+fi
+if [ -n "$dev" ]; then
+  if mount "$dev" "$DIR"; then echo "saga-data: schijf $dev in gebruik voor de gegevens"; else echo "saga-data: koppelen van $dev mislukt"; fi
+fi
+exit 0

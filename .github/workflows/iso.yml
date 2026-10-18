@@ -45,8 +45,9 @@ jobs:
         timeout-minutes: 15
         run: |
           sudo apt-get install -y qemu-system-x86 socat imagemagick
+          truncate -s 2G /tmp/blank.img   # an empty disk: the system has to take it into use for its data
           ACCEL=tcg; [ -w /dev/kvm ] && ACCEL=kvm
-          qemu-system-x86_64 -accel $ACCEL -m 3072 -smp 2 -cdrom Saga-Techbox-Deur-OS-amd64.iso -boot d -vga std -display none -serial file:/tmp/serial.log -monitor unix:/tmp/qemu.sock,server,nowait -nic user,hostfwd=tcp::8080-:8080 > /tmp/qemu.log 2>&1 &
+          qemu-system-x86_64 -accel $ACCEL -m 3072 -smp 2 -cdrom Saga-Techbox-Deur-OS-amd64.iso -boot d -vga std -display none -serial file:/tmp/serial.log -monitor unix:/tmp/qemu.sock,server,nowait -drive file=/tmp/blank.img,if=virtio,format=raw -nic user,hostfwd=tcp::8080-:8080 > /tmp/qemu.log 2>&1 &
           QPID=$!
           ok=0
           sleep 15; echo "sendkey ret" | timeout 5 socat - UNIX-CONNECT:/tmp/qemu.sock || true   # in case the boot menu still waits
@@ -60,6 +61,7 @@ jobs:
           timeout 30 convert /tmp/screen.ppm screen-amd64.png || true
           cp /tmp/serial.log serial-amd64.log 2>/dev/null || true
           kill $QPID || true
+          grep -q "saga-data: schijf .* in gebruik" serial-amd64.log || { echo "De lege schijf is niet als gegevensschijf in gebruik genomen"; grep -a "saga-data" serial-amd64.log || true; exit 1; }
           [ "$ok" = 1 ] || { echo "De server antwoordde niet binnen 6 minuten"; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always() && matrix.arch == 'amd64'

@@ -22,6 +22,7 @@ const power = require('./power.js'); // switching the screen / computer off and 
 const PORT = Number(process.env.PORT) || 8080;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const keys = security.keyStore(DATA_DIR);
+const updates = require('./updates');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const ADMIN_PIN = process.env.ADMIN_PIN || '';
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -82,7 +83,7 @@ const DEFAULT_SETTINGS = {
   mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false, digest: false, digestAt: '18:00', weekly: false, weeklyDay: 5 },
 };
 // System settings: only the main account can change these (see the Systeem tab).
-const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, attack: { burst: 240, perSec: 30, strikes: 80, banMinutes: 10, maxSse: 30 }, require2fa: 'off', backupPassword: '', backupCopyDir: '', https: false, httpsPort: 8443, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14 };
+const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, attack: { burst: 240, perSec: 30, strikes: 80, banMinutes: 10, maxSse: 30 }, require2fa: 'off', backupPassword: '', backupCopyDir: '', https: false, httpsPort: 8443, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14, updateChannel: 'stable', updateToken: '' };
 function normIp(ip) { ip = String(ip || '').replace(/^::ffff:/, ''); return ip === '::1' ? '127.0.0.1' : ip; } // "this computer" is one address, in IPv4 or IPv6
 function ipv4ToInt(ip) { const m = String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/); return m && m.slice(1).every((x) => Number(x) <= 255) ? ((Number(m[1]) << 24) | (Number(m[2]) << 16) | (Number(m[3]) << 8) | Number(m[4])) >>> 0 : null; }
 function validIpRule(r) { const [ip, bits] = String(r).split('/'); return (ipv4ToInt(ip) !== null && (bits === undefined || (/^\d{1,2}$/.test(bits) && Number(bits) <= 32))) || (/^[0-9a-f:]+$/i.test(ip) && ip.includes(':') && bits === undefined); }
@@ -107,7 +108,7 @@ function clientIp(req) {
   if (!fwd) return remote;
   return TRUST_PROXY ? normIp(fwd) : 'proxied';
 }
-const maskSystem = (sys) => ({ ...sys, backupPassword: sys.backupPassword ? PASS_MASK : '' });
+const maskSystem = (sys) => ({ ...sys, backupPassword: sys.backupPassword ? PASS_MASK : '', updateToken: sys.updateToken ? PASS_MASK : '' });
 function cleanSystem(b = {}) {
   const num = (v, min, max, d) => { const n = Number(v); return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : d; };
   return {
@@ -117,6 +118,7 @@ function cleanSystem(b = {}) {
     allowedIps: (Array.isArray(b.allowedIps) ? b.allowedIps : []).map((x) => str(x, 50)).filter(validIpRule).slice(0, 40),
     attack: { burst: num(b.attack && b.attack.burst, 20, 5000, 240), perSec: num(b.attack && b.attack.perSec, 2, 500, 30), strikes: num(b.attack && b.attack.strikes, 10, 1000, 80), banMinutes: num(b.attack && b.attack.banMinutes, 1, 1440, 10), maxSse: num(b.attack && b.attack.maxSse, 3, 500, 30) },
     require2fa: ['off', 'root', 'privileged'].includes(b.require2fa) ? b.require2fa : 'off',
+    updateChannel: b.updateChannel === 'beta' ? 'beta' : 'stable', updateToken: str(b.updateToken, 300).replace(/\s/g, ''),
     backupPassword: str(b.backupPassword, 300), backupCopyDir: str(b.backupCopyDir, 300),
     https: !!b.https, httpsPort: num(b.httpsPort, 1024, 65535, 8443),
     retentionDays: num(b.retentionDays, 0, 3650, 0), autoBackup: b.autoBackup === undefined ? true : !!b.autoBackup, backupKeep: num(b.backupKeep, 1, 90, DEFAULT_SYSTEM.backupKeep),
@@ -434,7 +436,7 @@ function load() {
 let state = load();
 // values that are never written to disk in plain text
 function secretSlots() {
-  const s = state.settings, slots = [[state, 'icsToken'], [s.mail, 'pass'], [s, 'ntfyTopic'], [s, 'webhookUrl'], [state.system, 'backupPassword']];
+  const s = state.settings, slots = [[state, 'icsToken'], [s.mail, 'pass'], [s, 'ntfyTopic'], [s, 'webhookUrl'], [state.system, 'backupPassword'], [state.system, 'updateToken']];
   if (state.integ && state.integ.lock) slots.push([state.integ.lock, 'headerValue']);
   for (const u of state.users) if (u.totp) slots.push([u.totp, 'secret']);
   if (state.rootTotp) slots.push([state.rootTotp, 'secret']);
@@ -603,6 +605,9 @@ function freeSlots(now = Date.now()) {
   return out;
 }
 
+const serverUpdater = updates.create({ dataDir: DATA_DIR, appDir: __dirname, currentVersion: APP_VERSION, getToken: () => state.system.updateToken, getChannel: () => state.system.updateChannel, log: (m) => log('systeem', m, 'systeem'), backup: () => writeBackup('voor-update') });
+// a started update that stays up for a minute counts as good (boot.js drops it after three starts that do not)
+if (process.env.SAGA_SUPERVISED === '1') setTimeout(() => { try { fs.rmSync(path.join(DATA_DIR, 'app', 'tries.json'), { force: true }); } catch {} }, 60000).unref();
 // ---------- live updates ----------
 const clients = new Set();
 
@@ -1869,6 +1874,23 @@ const adminRoutes = {
     const q = (t) => '"' + String(t).replace(/"/g, '""') + '"';
     return { __file: { name: 'logboek.csv', text: 'Tijd,Soort,Wat,Wie,Vingerafdruk\n' + rows.map((h) => [new Date(h.at).toISOString(), h.type, h.text, h.by || '', h.h || ''].map(q).join(',')).join('\n') + '\n' } };
   },
+  'GET /api/update': () => ({ ...serverUpdater.status(), channel: state.system.updateChannel, hasToken: !!state.system.updateToken, ...updates.persistence(DATA_DIR), supervised: process.env.SAGA_SUPERVISED === '1', via: process.env.SAGA_SUPERVISED === '1' ? 'boot' : 'other' }),
+  'POST /api/update/settings': (b, id) => {
+    const next = { ...state.system };
+    if (b.channel !== undefined) next.updateChannel = b.channel === 'beta' ? 'beta' : 'stable';
+    if (typeof b.token === 'string' && b.token !== PASS_MASK) next.updateToken = b.token;
+    state.system = cleanSystem(next);
+    log('systeem', `${id.name} wijzigde de update-instellingen`);
+    return { ok: true };
+  },
+  'POST /api/update/check': async () => ({ ...(await serverUpdater.check()), channel: state.system.updateChannel, hasToken: !!state.system.updateToken, ...updates.persistence(DATA_DIR), supervised: process.env.SAGA_SUPERVISED === '1' }),
+  'POST /api/update/apply': async (b, id) => {
+    if (process.env.SAGA_SUPERVISED !== '1') throw bad('Deze server wordt niet door een starter bewaakt (zoals op de Linux-schijf), dus hij kan zichzelf niet bijwerken. Installeer de nieuwe versie op de gewone manier.');
+    const r = await serverUpdater.apply();
+    securityEvent(`${id.name} werkt de server bij naar ${r.version}`);
+    setTimeout(() => { flushSave(); process.exit(0); }, 800); // systemd starts it again, boot.js picks the new code
+    return { ok: true, version: r.version };
+  },
   'POST /api/system/restart': (b, id) => {
     securityEvent(`${id.name} herstart de server`);
     setTimeout(() => { flushSave(); if (process.listenerCount('saga-restart') > 0) process.emit('saga-restart'); else process.exit(0); }, 400); // a supervisor (systemd, Docker, the desktop app) starts it again
@@ -2104,7 +2126,7 @@ function writeBackup(label) {
 }
 Object.assign(adminRoutes, {
   'GET /api/system': (b, id) => ({ system: maskSystem(state.system), backups: listBackups(), yourIp: id.ip || '', serverTime: Date.now() }),
-  'POST /api/system/settings': (b) => { if (b.backupPassword === PASS_MASK) b.backupPassword = state.system.backupPassword; state.system = cleanSystem(b); log('systeem', `Systeeminstellingen gewijzigd${state.system.maintenance ? ' (onderhoudsmodus aan)' : ''}`); },
+  'POST /api/system/settings': (b) => { if (b.backupPassword === PASS_MASK) b.backupPassword = state.system.backupPassword; if (b.updateToken === PASS_MASK || b.updateToken === undefined) b.updateToken = state.system.updateToken; if (b.updateChannel === undefined) b.updateChannel = state.system.updateChannel; state.system = cleanSystem(b); log('systeem', `Systeeminstellingen gewijzigd${state.system.maintenance ? ' (onderhoudsmodus aan)' : ''}`); },
   'POST /api/system/backups/create': () => { const name = writeBackup('handmatig'); log('systeem', `Back-up gemaakt: ${name}`); return { ok: true, name }; },
   'GET /api/system/backups/download': (b, id, url) => {
     const name = str(url.searchParams.get('name'), 80);
@@ -2178,7 +2200,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',

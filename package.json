@@ -35,6 +35,8 @@
       "pki.js",
       "schedule.js",
       "mdns.js",
+      "updates.js",
+      "boot.js",
       "settings-schema.js",
       "check-selftest.js",
       "check-runner.js",

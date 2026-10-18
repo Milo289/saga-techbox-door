@@ -6,6 +6,10 @@ Een Linux-schijf (ISO) die zonder iets te installeren opstart, de deurserver sta
 
 **Gegevens bewaren:** een live-schijf vergeet alles bij een herstart. Maak daarom op dezelfde stick een tweede partitie met de naam `persistence` met daarin een bestand `persistence.conf` met de regel `/var/lib/saga-door union`, en start met “Live system (persistence)”. Of zet de gegevens in de server via Beheer → Back-up.
 
+**Gegevensschijf (aanbevolen voor een vaste server):** geef de computer of virtuele machine een tweede, lege schijf (minstens 1 GB). Bij het opstarten ziet de schijf dat die leeg is, zet er een bestandssysteem op met het label `saga-data` en bewaart daar alle gegevens, ook de updates uit het paneel. Een schijf waar al iets op staat wordt nooit aangeraakt; een schijf met het label `saga-data` wordt gewoon gebruikt. Is er geen tweede schijf, dan verdwijnt alles bij een herstart (het paneel waarschuwt daarvoor).
+
+**Bijwerken:** *Systeem → Server bijwerken* in het paneel zoekt op GitHub naar een nieuwere versie (kies of ook developer betas getoond worden), controleert het bestand, maakt een back-up en herstart. Een nieuwe versie die drie keer niet start wordt vanzelf teruggedraaid. Voor een privé-opslagplaats is een GitHub-toegangscode met leesrechten nodig. De code van de schijf zelf (kiosk, firewall, systeemonderdelen) verandert hiermee niet: daarvoor blijft een nieuwe schijf nodig.
+
 **Zelf bouwen:** `sudo apt-get install live-build && sudo ./linux-iso/build.sh` (Debian of Ubuntu). GitHub bouwt hem ook zelf bij elke release (workflow “Eigen Linux”).
 
 **Beveiliging van de schijf:** de computer beantwoordt alleen wat nodig is (poort 8080 voor het paneel, 8443 voor https, vindbaarheid in het netwerk en ping); alles anders wordt geweigerd door een firewall. Inloggen op afstand (ssh) staat uit, het wachtwoord van de console is vergrendeld, de server draait afgeschermd (geen nieuwe rechten, geen thuismappen, geen kernel-wijzigingen) en het netwerk is strenger afgesteld. Een live-schijf installeert zelf geen updates: haal bij een nieuwe release de nieuwste schijf.

@@ -1,12 +1,12 @@
 [Unit]
 Description=Saga Techbox Deur server
-After=network-online.target
-Wants=network-online.target
+After=network-online.target saga-data.service
+Wants=network-online.target saga-data.service
 
 [Service]
 WorkingDirectory=/opt/saga-door
-Environment=PORT=8080 HOST=0.0.0.0 DATA_DIR=/var/lib/saga-door NODE_ENV=production
-ExecStart=/usr/bin/node server.js
+Environment=PORT=8080 HOST=0.0.0.0 DATA_DIR=/var/lib/saga-door NODE_ENV=production SAGA_SUPERVISED=1
+ExecStart=/usr/bin/node boot.js
 Restart=always
 RestartSec=3
 # the server needs little: no new privileges, no home folders, no kernel changes, only network and local sockets

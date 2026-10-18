@@ -1,5 +1,5 @@
 #!/bin/sh
 set -e
 mkdir -p /var/lib/saga-door
-systemctl enable saga-door.service saga-kiosk.service saga-debug.service NetworkManager.service avahi-daemon.service
+systemctl enable saga-data.service saga-door.service saga-kiosk.service saga-debug.service NetworkManager.service avahi-daemon.service
 systemctl enable nftables.service saga-harden.service

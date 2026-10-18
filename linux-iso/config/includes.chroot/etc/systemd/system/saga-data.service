@@ -1,0 +1,15 @@
+[Unit]
+Description=Saga Techbox data disk (keeps the data and the updates after a restart)
+DefaultDependencies=no
+After=local-fs.target systemd-udev-settle.service
+Before=saga-door.service
+RequiresMountsFor=/var/lib
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/saga-data
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

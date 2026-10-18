@@ -3,7 +3,7 @@ Description=Write start-up information to the serial port (for testing in a virt
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'sleep 75; { echo "==KIOSK"; journalctl -u saga-kiosk --no-pager | tail -40; echo "==XORG"; tail -40 /var/log/Xorg.0.log; echo "==SERVER"; journalctl -u saga-door --no-pager | tail -15; echo "==PROCS"; ps aux | grep -E "Xorg|chromium|openbox" | grep -v grep | cut -c1-150; echo "==END"; } > /dev/ttyS0 2>/dev/null || true'
+ExecStart=/bin/sh -c 'sleep 75; { echo "==KIOSK"; journalctl -u saga-kiosk --no-pager | tail -40; echo "==XORG"; tail -40 /var/log/Xorg.0.log; echo "==DATA"; journalctl -u saga-data --no-pager | tail -6; grep saga-door /proc/mounts; echo "==SERVER"; journalctl -u saga-door --no-pager | tail -15; echo "==PROCS"; ps aux | grep -E "Xorg|chromium|openbox" | grep -v grep | cut -c1-150; echo "==END"; } > /dev/ttyS0 2>/dev/null || true'
 
 [Install]
 WantedBy=multi-user.target

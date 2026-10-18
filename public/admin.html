@@ -1249,6 +1249,45 @@
 
   // ---------- moving everything from another door server to this one ----------
   const transferDraft = { url: '', username: '', password: '', code: '' };
+  // ---------- Server bijwerken: look for a newer version, download it, check it, restart ----------
+  let updInfo = null, updLoading = false, updToken = '', updMsg = '';
+  async function loadUpdate(check) {
+    if (updLoading) return; updLoading = true;
+    try { updInfo = await api(check ? '/api/update/check' : '/api/update', check ? {} : undefined); } catch { updInfo = updInfo || { checked: false }; }
+    updLoading = false; if (tab === 'system') renderAll(true);
+  }
+  function updateCard() {
+    if (!updInfo && !updLoading) loadUpdate(false);
+    const u = updInfo || {};
+    const out = h('div', { class: 'muted', style: 'margin:10px 0' + (u.ok === false ? ';color:#ff8a80' : '') }, updMsg || (u.ok === false ? u.error : u.checked ? (u.newer ? `Er is een nieuwere versie: ${u.version}${u.prerelease ? ' (developer beta)' : ''}.` : `Je hebt de nieuwste versie (${u.current}).`) : `Deze server draait versie ${u.current || '…'}.`));
+    const channel = h('select', { onchange: async (e) => { await api('/api/update/settings', { channel: e.target.value }); updInfo = null; updMsg = ''; loadUpdate(false); toast('Opgeslagen'); } },
+      h('option', { value: 'stable', selected: u.channel !== 'beta' }, 'Alleen gewone versies'), h('option', { value: 'beta', selected: u.channel === 'beta' }, 'Ook developer betas'));
+    const token = h('input', { type: 'password', autocomplete: 'new-password', placeholder: u.hasToken ? 'Er is een toegangscode opgeslagen (leeg laten = houden)' : 'Alleen nodig als de opslagplaats privé is', oninput: (e) => { updToken = e.target.value; } });
+    const check = h('button', { class: 'sm', onclick: async () => {
+      if (updToken) { await api('/api/update/settings', { token: updToken }); updToken = ''; }
+      updMsg = 'Bezig met zoeken…'; renderAll(true); updMsg = ''; await loadUpdate(true);
+    } }, 'Zoek naar updates');
+    const apply = h('button', { class: 'white', disabled: !(u.newer && u.hasBundle), onclick: async () => {
+      if (!confirm(`De server wordt bijgewerkt naar ${u.version}. Er wordt eerst een back-up gemaakt en de server herstart (dat duurt een halve minuut). Doorgaan?`)) return;
+      updMsg = 'Downloaden en controleren…'; renderAll(true);
+      try { await api('/api/update/apply', {}); } catch { updMsg = ''; await loadUpdate(true); return; }
+      updMsg = 'De server herstart met de nieuwe versie…'; renderAll(true);
+      const t0 = Date.now();
+      const wait = async () => {
+        try { const r = await fetch('/api/auth-info', { cache: 'no-store' }); const j = r.ok ? await r.json() : null; if (j && j.version === u.version) { location.reload(); return; } } catch {}
+        if (Date.now() - t0 > 180000) { updMsg = 'De server komt niet terug met de nieuwe versie. Ververs de pagina over een minuut; de server zet zelf de oude versie terug als de nieuwe niet start.'; renderAll(true); return; }
+        setTimeout(wait, 2500);
+      };
+      setTimeout(wait, 4000);
+    } }, u.newer ? `Bijwerken naar ${u.version || ''}` : 'Bijwerken');
+    return h('div', { class: 'card' }, h('h2', {}, 'Server bijwerken'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'De server zoekt zelf op GitHub naar een nieuwere versie, controleert het bestand, maakt een back-up en start daarna opnieuw op met de nieuwe versie. Elke start die niet lukt wordt vanzelf ongedaan gemaakt.'),
+      out,
+      u.live && !u.persistent ? h('p', { style: 'margin:10px 0;color:#ffcc66' }, 'Let op: deze server draait van een live-schijf zonder eigen gegevensschijf. Na een herstart van de computer zijn de gegevens én de update weg. Koppel een lege tweede schijf (de schijf neemt hem dan zelf in gebruik) of maak een back-up.') : null,
+      u.supervised === false ? h('p', { class: 'muted', style: 'margin:10px 0' }, 'Deze server wordt niet door een starter bewaakt (zoals op de Linux-schijf), dus de knop Bijwerken werkt hier niet. Installeer de nieuwe versie op de gewone manier.') : null,
+      h('div', { class: 'form' }, h('label', {}, 'Welke versies'), channel, h('label', {}, 'Toegangscode voor GitHub'), token, h('span', {}, ''), h('div', { class: 'row' }, check, apply)),
+      h('p', { class: 'muted', style: 'font-size:13px;margin-bottom:0' }, 'De controlesom beschermt tegen een beschadigd bestand, niet tegen iemand die de uitgave op GitHub zelf vervangt (er is nog geen ondertekening). De toegangscode (GitHub → Instellingen → Developer settings → Fine-grained token, alleen lezen op deze opslagplaats) wordt versleuteld opgeslagen.'));
+  }
   function transferCard() {
     const out = h('div', { class: 'muted', style: 'margin-top:10px' });
     // a file made by this button on another server, or an ordinary back-up (Instellingen → Meer) of an older one
@@ -1975,7 +2014,7 @@
       ].filter(Boolean);
     },
 
-    system() { return [...systemView(), sysData ? transferCard() : null].filter(Boolean); },
+    system() { return [...systemView(), sysData ? updateCard() : null, sysData ? transferCard() : null].filter(Boolean); },
 
     // ---------- Ontwerp: change how the door screen looks and what it says ----------
     design() {

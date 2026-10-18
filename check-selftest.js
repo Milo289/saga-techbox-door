@@ -13,7 +13,7 @@ const { spawn } = require('child_process');
 const core = require('./public/check-core.js');
 const json = process.argv.includes('--json');
 
-const FILES = ['server.js', 'power.js', 'integrations.js', 'security.js', 'pki.js', 'schedule.js', 'mdns.js', 'settings-schema.js', 'discover.js', 'seal.js', 'access.js', 'package.json'];
+const FILES = ['server.js', 'power.js', 'integrations.js', 'security.js', 'pki.js', 'schedule.js', 'mdns.js', 'updates.js', 'settings-schema.js', 'discover.js', 'seal.js', 'access.js', 'package.json'];
 const freePort = () => new Promise((res, rej) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); s.on('error', rej); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
