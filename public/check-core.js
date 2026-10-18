@@ -137,7 +137,7 @@
     await t('sec', G.sec, 'Beveiligde verbinding (https) en certificaat', async () => {
       if (!can('settings')) skip('geen recht');
       const s = await get('/api/https'); must(s.status === 200, 'status ' + s.status);
-      if (!s.json.enabled) warn('https staat uit (zet het aan bij Beveiliging om dit te testen)');
+      if (!s.json.enabled) skip('https staat uit: dat is een keuze, geen fout. Zet het aan bij Beveiliging om het te testen.');
       must(s.json.running, 'https is aangezet maar draait niet'); must(s.json.fingerprint, 'geen vingerafdruk');
       const ca = await get('/ca.crt'), mc = await get('/ca.mobileconfig');
       must(ca.status === 200 && /BEGIN CERTIFICATE/.test(ca.text), 'ca.crt: ' + ca.status); must(mc.status === 200 && /PayloadContent/.test(mc.text), 'ca.mobileconfig: ' + mc.status);
