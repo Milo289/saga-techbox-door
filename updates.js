@@ -147,7 +147,7 @@ function persistence(dataDir, readMounts = () => fs.readFileSync('/proc/mounts',
   try {
     if (platform !== 'linux' || !fs.existsSync(liveMarker)) return { live: false, persistent: true };
     const mounts = readMounts().split('\n').map((l) => l.split(' ')[1]).filter(Boolean);
-    const here = path.resolve(dataDir);
+    const here = path.posix.resolve(dataDir.replace(/\\/g, '/'));
     const own = mounts.some((m) => m !== '/' && (here === m || here.startsWith(m + '/')) && !['/run', '/tmp', '/dev', '/sys', '/proc'].some((x) => m === x || m.startsWith(x + '/')));
     return { live: true, persistent: own };
   } catch { return { live: false, persistent: true }; }
