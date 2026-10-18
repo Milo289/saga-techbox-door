@@ -54,7 +54,7 @@ test('the data can also travel as a file: download here, put it back there', asy
   const file = await fetch(`${a.url}/api/transfer/export`, { headers: { Authorization: `Bearer ${ta}` } }).then((r) => r.text());
   const data = JSON.parse(file);
   assert.equal(data.transfer, true); assert.equal(data.sessions, undefined, 'sessions never travel'); assert.equal(data.rootLock, undefined);
-  assert.equal((await call(b, 'POST', '/api/transfer/import', { version: 1, settings: {} }, tb)).status, 400, 'a file of another kind is refused');
+  assert.equal((await call(b, 'POST', '/api/transfer/import', { hallo: 1 }, tb)).status, 400, 'a file of another kind is refused');
   const r = await call(b, 'POST', '/api/transfer/import', data, tb);
   assert.equal(r.status, 200, r.text);
   assert.equal((await call(b, 'GET', '/api/state')).json.settings.name, 'Uit een bestand');
@@ -62,4 +62,26 @@ test('the data can also travel as a file: download here, put it back there', asy
   const old = (await call(a, 'GET', '/api/export', undefined, ta)).json;
   const r2 = await call(b, 'POST', '/api/transfer/import', old, await login(b));
   assert.equal(r2.status, 200, r2.text); assert.equal(r2.json.full, false);
+});
+
+test('a big back-up file still restores, and a far too big one is refused with a clear message (no broken connection)', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const tok = await login(srv);
+  const data = (await call(srv, 'GET', '/api/export', undefined, tok)).json;
+  const big = { ...data, settings: { ...data.settings, name: 'Groot bestand' }, customBell: '', pad: 'A'.repeat(3 * 1048576) }; // 3 MB, far over the old 1 MB limit
+  const r = await call(srv, 'POST', '/api/import', big, tok);
+  assert.equal(r.status, 200, r.text.slice(0, 200));
+  assert.equal((await call(srv, 'GET', '/api/state')).json.settings.name, 'Groot bestand');
+  const huge = await fetch(`${srv.url}/api/import`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` }, body: JSON.stringify({ ...data, pad: 'A'.repeat(70 * 1048576) }) });
+  assert.equal(huge.status, 413); assert.match((await huge.json()).error, /te groot/);
+  // other requests stay small
+  const other = await fetch(`${srv.url}/api/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` }, body: JSON.stringify({ note: 'A'.repeat(2 * 1048576) }) });
+  assert.equal(other.status, 413);
+  // older or version-less files are accepted, other kinds of files are refused with a clear text
+  assert.equal((await call(srv, 'POST', '/api/import', { ...data, version: 1 }, tok)).status, 200);
+  const { version, ...noVersion } = data;
+  assert.equal((await call(srv, 'POST', '/api/import', noVersion, tok)).status, 200);
+  const bad = await call(srv, 'POST', '/api/import', { hallo: 1 }, tok);
+  assert.equal(bad.status, 400); assert.match(bad.json.error, /geen back-up/);
 });

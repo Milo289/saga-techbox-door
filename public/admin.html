@@ -1298,7 +1298,7 @@
         sysData.backups.length ? h('div', { style: 'margin-top:8px' }, ...sysData.backups.map((b) => h('div', { class: 'urow' },
           h('div', { class: 'who' }, h('b', {}, b.name.replace(/^state-/, '').replace(/\.json$/, '')), h('span', { class: 'muted' }, `${when(b.at)} · ${bytes(b.size)}`)),
           h('button', { class: 'sm', onclick: () => download(b.name) }, 'Downloaden'),
-          h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm(`De huidige stand wordt vervangen door deze back-up (de huidige stand wordt eerst bewaard). Doorgaan?`)) return; await api('/api/system/backups/restore', { name: b.name }); toast('Back-up teruggezet'); sysData = null; refresh(); } }, 'Terugzetten')))) : h('p', { class: 'muted' }, 'Nog geen back-ups.')),
+          h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm(`De huidige stand wordt vervangen door deze back-up (de huidige stand wordt eerst bewaard). Doorgaan?`)) return; const r = await api('/api/system/backups/restore', { name: b.name }); toast(r.lost ? `Back-up teruggezet. Vul ${r.lost} wachtwoord${r.lost === 1 ? '' : 'en'} (bijvoorbeeld van e-mail) opnieuw in: die konden niet worden meegenomen.` : 'Back-up teruggezet'); sysData = null; refresh(); } }, 'Terugzetten')))) : h('p', { class: 'muted' }, 'Nog geen back-ups.')),
 
       h('div', { class: 'card' }, h('h2', {}, 'Gevarenzone'),
         h('div', { class: 'row' },

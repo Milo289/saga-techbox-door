@@ -336,7 +336,7 @@
     });
     await t('sys', G.sys, 'Gegevens overzetten: foute invoer wordt veilig geweigerd', async () => {
       if (!isRoot()) skip('alleen het hoofdaccount (milo)'); const a = await post('/api/transfer/pull', { url: '' }); must(a.status === 400, 'leeg adres: ' + a.status);
-      const b = await post('/api/transfer/import', { version: 1, settings: {} }); must(b.status === 400, 'ander soort bestand: ' + b.status);
+      const b = await post('/api/transfer/import', { hallo: 1 }); must(b.status === 400, 'ander soort bestand: ' + b.status);
       must((await get('/api/state')).status === 200, 'de server doet het niet meer');
     });
     await t('sys', G.sys, 'Gewone back-up (oude vorm) wordt geleverd', async () => { if (!can('export')) skip('geen recht'); const r = await get('/api/export'); must(r.status === 200 && JSON.parse(r.text).version === 2, 'status ' + r.status); });

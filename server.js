@@ -1348,8 +1348,16 @@ function send(res, code, obj) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
-    const max = /^\/api\/transfer\/import/.test(req.url || '') ? 32 * 1048576 : 1048576; // a file with all the data of a server may be big
-    req.on('data', (c) => { size += c.length; if (size > max) { reject(new Error('Te groot')); req.destroy(); } else chunks.push(c); });
+    // a back-up file with all the data of a server may be big (an own bell sound, thousands of visitors); everything else stays small
+    const big = /^\/api\/(transfer\/import|import)(\?|$)/.test(req.url || '');
+    const max = big ? 64 * 1048576 : 1048576;
+    let tooBig = false;
+    req.on('data', (c) => {
+      size += c.length;
+      if (tooBig) { if (size > max * 4) req.destroy(); return; } // the rest is thrown away (the answer can only be read when the sender has finished sending)
+      if (size > max) { tooBig = true; chunks.length = 0; reject(Object.assign(new Error(`Dit bestand is te groot voor deze server (meer dan ${Math.round(max / 1048576)} MB).`), { code: 413 })); return; }
+      chunks.push(c);
+    });
     req.on('end', () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8'), (k, v) => (k === '__proto__' || k === 'constructor' || k === 'prototype' ? undefined : v)) : {}); } catch { reject(new Error('Ongeldig verzoek')); } });
     req.on('error', reject);
   });
@@ -2045,7 +2053,7 @@ const adminRoutes = {
     return { ok: true, full, ...out };
   },
   'POST /api/import': (b) => {
-    if (!b || b.version !== 2 || !b.settings) throw bad('Dit is geen back-up van deze versie');
+    if (!b || typeof b !== 'object' || !b.settings || typeof b.settings !== 'object' || (b.version !== undefined && ![1, 2].includes(b.version))) throw bad('Dit bestand is geen back-up van een deurserver (of van een veel nieuwere versie). Kies een bestand dat je met “Back-up maken” hebt gemaakt.');
     const d = freshState();
     state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), power: power.clean(b.power), alerts: state.alerts, integ: state.integ, devices: state.devices, sightings: state.sightings, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
@@ -2054,7 +2062,7 @@ const adminRoutes = {
 
 // replaces the data of this server with the data of another one; this server keeps its own system settings and sessions
 function applyTransfer(data, id) {
-  if (!data || data.version !== 2 || !data.settings) throw bad('Dit zijn geen gegevens van een deurserver');
+  if (!data || typeof data !== 'object' || !data.settings || typeof data.settings !== 'object' || (data.version !== undefined && ![1, 2].includes(data.version))) throw bad('Dit zijn geen gegevens van een deurserver');
   writeBackup('voor-overzetten'); // so it can be undone
   const accounts = data.transfer === true && Array.isArray(data.users);
   state = {
@@ -2111,8 +2119,11 @@ Object.assign(adminRoutes, {
     if (!data || data.version !== 2 || !data.settings) throw bad('Dit is geen geldige back-up');
     writeBackup('voor-herstel'); // so a restore can be undone
     state = { ...freshState(), ...data, settings: coerce(DEFAULT_SETTINGS, data.settings), system: state.system, sessions: state.sessions, lastBackupDay: state.lastBackupDay };
+    const sealed = secretSlots().filter(([o, k]) => typeof o[k] === 'string' && o[k].startsWith('enc:v1:'));
     decryptSecrets();
-    log('systeem', `Back-up teruggezet: ${name}`);
+    const lost = sealed.filter(([o, k]) => !o[k]).length; // secrets made with the key of another server cannot be opened here: they have to be typed in again
+    log('systeem', `Back-up teruggezet: ${name}${lost ? ` (${lost} wachtwoord(en) moeten opnieuw worden ingevuld)` : ''}`);
+    return { ok: true, lost };
   },
   'POST /api/system/lockdown': (b, id) => {
     const now = Date.now();
@@ -2527,7 +2538,7 @@ const handle = async (req, res) => {
     // our own messages ("Dat verzoek bestaat niet meer") are shown; a real bug or a file-system error is not: that could give away paths and code
     const internal = e instanceof TypeError || e instanceof RangeError || e instanceof ReferenceError || e instanceof SyntaxError && !/JSON/.test(e.message) || (typeof e.code === 'string' && /^E[A-Z]+$/.test(e.code));
     if (internal) { console.error('internal error on', req.method, p, e && e.stack || e); log('fout', `Interne fout bij ${req.method} ${p}: ${e.message}`, 'systeem'); return send(res, 500, { error: 'Er ging iets mis in de server.' }); }
-    send(res, e.logout ? 401 : e.code === 429 ? 429 : 400, { error: e.message });
+    send(res, e.logout ? 401 : e.code === 429 ? 429 : e.code === 413 ? 413 : 400, { error: e.message });
   }
 };
 const server = http.createServer({ connectionsCheckingInterval: 2000 }, handle);
