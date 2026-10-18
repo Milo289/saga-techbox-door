@@ -709,7 +709,7 @@
     const timeIn = (k, key) => h('input', { type: 'time', value: d.days[k][key], oninput: (e) => { d.days[k][key] = e.target.value; paintEst(); } });
     const week = h('table', { class: 'week' }, h('thead', {}, h('tr', {}, ...['Dag', 'Scherm uit', 'Scherm aan', 'Computer uit', 'Computer aan'].map((t) => h('th', {}, t)))),
       h('tbody', {}, ...DAYS_NL.map(([k, name]) => h('tr', {}, h('td', {}, name), ...['screenOff', 'screenOn', 'off', 'on'].map((key) => h('td', {}, timeIn(k, key)))))));
-    const copyWork = () => { for (const k of ['2', '3', '4', '5']) d.days[k] = { ...d.days['1'] }; powerDraft = d; renderAll(true); toast('Maandag is naar dinsdag t/m vrijdag gekopieerd'); };
+    const copyWork = () => { for (const k of ['2', '3', '4', '5']) d.days[k] = { ...d.days['1'] }; powerDraft = d; renderAll(true); setTimeout(() => { const c = [...$('view').children].find((x) => x.querySelector && x.querySelector(':scope > h2') && x.querySelector(':scope > h2').textContent.includes('Energie')); if (c) { dirtyCards.add(c); paintDirty(); } }, 0); toast('Maandag is naar dinsdag t/m vrijdag gekopieerd. Vergeet niet op Opslaan te drukken.'); };
     const how = h('select', { onchange: (e) => { d.how = e.target.value; } }, ...[['computer', 'Helemaal uitzetten'], ['hibernate', 'Slaapstand (kan zichzelf wakker maken)']].map(([v, l]) => h('option', { value: v, selected: d.how === v }, l)));
     const plat = P.platform;
     const wakeHint = plat === 'win32' ? 'Windows: de wektaak maakt de computer wakker uit slaapstand of hibernate. Vanuit “helemaal uit” kan alleen de BIOS (zoek “Power on by RTC alarm” of “Wake on RTC”) of een stekkerdoos met timer.'
@@ -986,7 +986,8 @@
   }
   // one bar for all unsaved changes on a settings page: it presses the save button of every card that was changed
   const dirtyCards = new Set(); // cards with their own save button, or the word 'global' for the big save button at the bottom of the page
-  const saveButtonOf = (card) => card.querySelector(':scope > h2 button.white');
+  // the save buttons of one card: in the title bar, or (like Energie) at the bottom; a card can have more than one
+  const saveButtonsOf = (card) => [...card.querySelectorAll('button')].filter((b) => /opslaan/i.test(b.textContent) && !/back-up|bestand/i.test(b.textContent) && !b.closest('.save') && !b.closest('#saveBar'));
   const globalSave = () => $('view').querySelector(':scope > .save button.white');
   function paintDirty() {
     const bar = $('saveBar'), n = [...dirtyCards].filter((c) => c === 'global' || c.isConnected).length;
@@ -997,21 +998,21 @@
     if (!['settings', 'design', 'system', 'all'].includes(tab)) return;
     const card = e.target.closest && e.target.closest('.card');
     if (e.target.closest && e.target.closest('#tools')) return;
-    if (card && saveButtonOf(card)) dirtyCards.add(card); else if (globalSave() && card) dirtyCards.add('global'); else return;
+    if (card && saveButtonsOf(card).length) dirtyCards.add(card); else if (globalSave() && card) dirtyCards.add('global'); else return;
     paintDirty();
   };
   $('view').addEventListener('input', markDirty, true);
   $('view').addEventListener('change', markDirty, true);
   $('view').addEventListener('click', (e) => {
-    const b = e.target.closest && e.target.closest('button.white'); if (!b) return;
+    const b = e.target.closest && e.target.closest('button'); if (!b) return;
     const card = b.closest('.card');
-    if (card && dirtyCards.has(card) && saveButtonOf(card) === b) setTimeout(() => { dirtyCards.delete(card); paintDirty(); }, 600);
+    if (card && dirtyCards.has(card) && saveButtonsOf(card).includes(b)) setTimeout(() => { dirtyCards.delete(card); paintDirty(); }, 600);
     if (b === globalSave()) setTimeout(() => { dirtyCards.delete('global'); paintDirty(); }, 600);
   }, true);
   $('saveAll').onclick = async () => {
     for (const u of [...dirtyCards]) {
-      const b = u === 'global' ? globalSave() : u.isConnected && saveButtonOf(u);
-      if (b) { b.click(); await new Promise((r) => setTimeout(r, 500)); }
+      const list = u === 'global' ? [globalSave()] : u.isConnected ? saveButtonsOf(u) : [];
+      for (const b of list) if (b) { b.click(); await new Promise((r) => setTimeout(r, 600)); }
       dirtyCards.delete(u);
     }
     paintDirty();

@@ -310,6 +310,22 @@
       } finally { await save({ note: old }); closePanel(); }
       return 'beide manieren bewaren, daarna teruggezet';
     });
+    await t('save', G2, 'Energie: maandag kopiëren naar dinsdag t/m vrijdag en opslaan met de balk (de tijd om de computer uit te zetten)', async () => {
+      uiNeed(); if (!can('power')) skip('geen recht voor energie');
+      const before = (await get('/api/admin-state')).json.power; if (!before) skip('energiebeheer is hier niet beschikbaar');
+      try {
+        const d = await openPanel(); await goTab(d, 'Instellingen');
+        const card = cardNamed(d, 'Energie'); must(card, 'de kaart Energie staat er niet');
+        const monday = card.querySelectorAll('table.week tbody tr')[0], off = monday.querySelectorAll('input[type=time]')[2]; must(off, 'het veld “Computer uit” voor maandag staat er niet');
+        type(off, '17:41'); await sleep(300);
+        const copy = [...card.querySelectorAll('button')].find((b) => b.textContent.includes('Maandag kopiëren')); must(copy, 'de knop om maandag te kopiëren staat er niet'); copy.click(); await sleep(1000);
+        must(!d.getElementById('saveBar').classList.contains('hidden'), 'na het kopiëren verscheen de balk “Alles opslaan” niet (de wijziging kan zo verloren gaan)');
+        d.getElementById('saveAll').click(); await sleep(3200);
+        const now = (await get('/api/admin-state')).json.power;
+        for (const k of ['1', '2', '3', '4', '5']) must(now.days[k].off === '17:41', `dag ${k} staat op “${now.days[k].off}” in plaats van 17:41 (niet bewaard)`);
+      } finally { await post('/api/power/settings', { enabled: before.enabled, how: before.how, warnMinutes: before.warnMinutes, skipIfBusy: before.skipIfBusy, pauseUntil: before.pauseUntil, watts: before.watts, days: before.days, wol: before.wol }); }
+      return 'maandag t/m vrijdag bewaard en weer teruggezet';
+    });
     await t('save', G2, 'Back-up terugzetten met het echte bestandsveld (en het scherm laat daarna de teruggezette waarden zien)', async () => {
       uiNeed(); if (!can('export')) skip('geen recht voor back-ups');
       if (isRoot()) await post('/api/system/backups/create', {}); // a safety copy first
