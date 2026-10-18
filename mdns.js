@@ -4,7 +4,7 @@
 const dgram = require('dgram');
 const os = require('os');
 
-const GROUP = '224.0.0.251', PORT = 5353, TTL = 120;
+const GROUP = '224.0.0.251', TTL = 120;
 // what is going on, for the test page: did the lookups for our names arrive, and did we answer
 const stats = { running: false, names: [], ips: [], queries: 0, answered: 0, lastQuery: 0, error: '', avahi: false };
 
@@ -51,7 +51,8 @@ function answerFor(query, names, ips, forceUnicast, nsec = true) {
 
 const lanIps = () => Object.values(os.networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => a.address);
 
-function start(names, log = () => {}) {
+function start(names, log = () => {}, opts = {}) {
+  const PORT = opts.port || 5353; // another port only in tests
   let sock;
   // on the Linux disk avahi already answers for IPv6; then only the IPv4 address is answered here (two "no such record" answers would fight)
   const avahi = require('fs').existsSync('/run/avahi-daemon/socket');

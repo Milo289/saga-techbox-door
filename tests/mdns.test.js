@@ -38,3 +38,19 @@ test('when avahi already answers for IPv6, only the IPv4 address is answered her
   assert.equal(answerFor(query('saga-deur.local', 28), ['saga-deur.local'], ['10.0.0.5'], false, false), null);
   assert.ok(answerFor(query('saga-deur.local', 1), ['saga-deur.local'], ['10.0.0.5'], false, false));
 });
+
+test('a real question over the network gets a real answer (an old-style question, from a spare port)', async (t) => {
+  const os = require('os'), dgram = require('dgram'), mdns = require('../mdns.js');
+  const ips = Object.values(os.networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => a.address);
+  if (!ips.length) return t.skip('this machine has no network address');
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const sock = mdns.start(['saga-deur.local'], () => {}, { port });
+  t.after(() => { try { clearInterval(sock.timer); sock.close(); } catch {} });
+  await new Promise((r) => setTimeout(r, 400));
+  const client = dgram.createSocket('udp4');
+  t.after(() => client.close());
+  const reply = await new Promise((resolve) => { client.on('message', (m) => resolve(m)); client.send(query('saga-deur.local', 1), port, '127.0.0.1'); setTimeout(() => resolve(null), 2500); });
+  assert.ok(reply, 'an answer came back');
+  assert.equal(reply.readUInt16BE(0), 0x1234, 'with the same id');
+  assert.ok(ips.includes([...reply.subarray(reply.length - 4)].join('.')), 'with one of this machine’s addresses');
+});

@@ -36,6 +36,8 @@
       "schedule.js",
       "mdns.js",
       "settings-schema.js",
+      "check-selftest.js",
+      "check-runner.js",
       "discover.js",
       "seal.js",
       "access.js",

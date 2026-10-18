@@ -80,7 +80,7 @@ test('the page policy fingerprints inline scripts the way a browser does, also w
 });
 
 test('the test page calculates the same two-step codes as the server', () => {
-  const check = require('../public/check.js');
+  const check = require('../public/check-core.js');
   for (const secret of ['JBSWY3DPEHPK3PXP', 'B27BNO3EKAO22MLX54RSGYUKJJN47ICA']) for (const now of [59000, 1234567890000, Date.now()]) assert.equal(check.totp(secret, now), sec.totp.code(secret, now));
 });
 test('the test page is served and its script is allowed by the policy', async () => {
