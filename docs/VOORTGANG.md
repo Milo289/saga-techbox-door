@@ -23,7 +23,7 @@ Opmerkingen:
 - Passkeys zijn alleen getest met een nagebootste authenticator, nog niet met echte apparaten.
 - B11 (update-handtekeningen) is bewust niet gedaan.
 
-## beta.17 — server bijwerken vanuit het paneel
+## beta.18 — server bijwerken vanuit het paneel
 - Systeem → *Server bijwerken*: zoekt op GitHub naar een nieuwere versie (gewoon of ook developer betas), downloadt `Saga-Techbox-Server.tgz`, controleert de sha256, pakt uit in `<data>/app/<versie>`, maakt een back-up en herstart. `boot.js` start de nieuwste code; een versie die drie keer niet start wordt teruggedraaid.
 - Linux-schijf: een lege tweede schijf wordt zelf als gegevensschijf (`saga-data`) gebruikt, zodat gegevens en updates een herstart overleven.
 - Getest: eenheidstests (versies, kanalen, onveilige namen, controlesom, onvolledig bestand, boot.js terugdraaien), de routes en het paneel. NIET getest: een echte update tussen twee uitgaven (de eerste uitgave met het serverbestand is deze), de gegevensschijf op echte hardware (CI start hem wel in een virtuele machine).
