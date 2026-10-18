@@ -310,6 +310,23 @@
       } finally { await save({ note: old }); closePanel(); }
       return 'beide manieren bewaren, daarna teruggezet';
     });
+    await t('save', G2, 'Back-up terugzetten met het echte bestandsveld (en het scherm laat daarna de teruggezette waarden zien)', async () => {
+      uiNeed(); if (!can('export')) skip('geen recht voor back-ups');
+      if (isRoot()) await post('/api/system/backups/create', {}); // a safety copy first
+      const file = (await get('/api/export')).text, saved = JSON.parse(file).settings.name, old = fld('name').value;
+      try {
+        await save({ name: 'Tijdelijk ' + rand() });
+        const d = await openPanel(); d.defaultView.confirm = () => true; await goTab(d, 'Instellingen'); await sleep(500);
+        const input = [...d.querySelectorAll('input[type=file]')].find((i) => (i.accept || '').includes('json')); must(input, 'het veld om een back-up te kiezen staat er niet');
+        const pick = async () => { const dt = new d.defaultView.DataTransfer(); dt.items.add(new d.defaultView.File([file], 'back-up.json', { type: 'application/json' })); input.files = dt.files; input.dispatchEvent(new d.defaultView.Event('change', { bubbles: true })); await sleep(3000); };
+        await pick();
+        must((await settingsNow()).name === saved, 'de back-up is niet teruggezet (naam staat op “' + (await settingsNow()).name + '”)');
+        const shown = cardNamed(d, 'Deur'); must(shown && textInput(shown).value === saved, 'het scherm liet na het terugzetten nog de oude waarden zien');
+        await save({ name: 'Tijdelijk ' + rand() }); await sleep(500); await pick(); // the same file a second time
+        must((await settingsNow()).name === saved, 'dezelfde back-up opnieuw kiezen werkt niet');
+      } finally { await save({ name: old }); }
+      return 'terugzetten, scherm ververst, dezelfde back-up nog een keer';
+    });
     closePanel();
 
     // calendar, mail

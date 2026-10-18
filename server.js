@@ -2057,6 +2057,7 @@ const adminRoutes = {
     const d = freshState();
     state = { ...d, ...b, positions: cleanPositions(b.positions), blocks: cleanBlocks(b.blocks), blocked: cleanBlocked(b.blocked), customBell: cleanBell(b.customBell), power: power.clean(b.power), alerts: state.alerts, integ: state.integ, devices: state.devices, sightings: state.sightings, users: state.users, apiKeys: state.apiKeys, sessions: state.sessions, rootLock: state.rootLock, settings: coerce(DEFAULT_SETTINGS, b.settings) }; // accounts are never imported
     log('system', 'Back-up teruggezet');
+    return { ok: true, name: state.settings.name, requests: state.requests.length, people: state.people.length };
   },
 };
 

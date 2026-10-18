@@ -1130,6 +1130,17 @@
       h('input', { type: 'checkbox', checked: draft[key].includes(perm), disabled: !mine, onchange: (e) => { draft[key] = e.target.checked ? [...new Set([...draft[key], perm])] : draft[key].filter((x) => x !== perm); } }), label);
   }));
   const refresh = async () => { S = await api('/api/admin-state'); renderAll(true); };
+  // after a restore or a move of data everything on screen is old: fetch it again and forget what was typed
+  const afterBigChange = async () => { S = await api('/api/admin-state'); allSchema = null; allDraft = {}; sysData = null; dirtyCards.clear(); paintDirty(); renderAll(true); };
+  // a back-up file: say what is in it, ask, restore, say what came back
+  async function restoreFile(data) {
+    if (!data || typeof data !== 'object' || !data.settings) return toast('Dit bestand is geen back-up van een deurserver');
+    const info = `Naam: ${(data.settings && data.settings.name) || '—'}\n${(data.requests || []).length} bezoekersverzoeken, ${(data.people || []).length} personen`;
+    if (!confirm(`Dit staat in het bestand:\n${info}\n\nDe huidige instellingen en bezoekers worden vervangen door deze. Doorgaan?`)) return;
+    const r = await api('/api/import', data);
+    await afterBigChange();
+    toast(`Teruggezet: ${r.requests} bezoekersverzoeken, ${r.people} personen`);
+  }
 
   function usersCard() {
     const rows = S.users.map((u) => h('div', { class: 'urow' },
@@ -1233,7 +1244,7 @@
       if (!file) return;
       let data; try { data = JSON.parse(await file.text()); } catch { return toast('Dit bestand kan niet gelezen worden'); }
       if (!confirm('De gegevens van deze server worden vervangen door die uit het bestand. Er wordt eerst een back-up van deze server gemaakt. Doorgaan?')) return;
-      try { const r = await api('/api/transfer/import', data); out.textContent = `Klaar. ${r.requests} bezoekersverzoeken, ${r.people} personen${r.full ? `, ${r.users} account(s)` : ''} overgenomen.${r.full ? '' : ' Dit bestand bevat geen accounts: die maak je hier opnieuw aan.'}`; S = await api('/api/admin-state'); toast('Gegevens overgezet'); } catch {}
+      try { const r = await api('/api/transfer/import', data); out.textContent = `Klaar. ${r.requests} bezoekersverzoeken, ${r.people} personen${r.full ? `, ${r.users} account(s)` : ''} overgenomen.${r.full ? '' : ' Dit bestand bevat geen accounts: die maak je hier opnieuw aan.'}`; await afterBigChange(); toast('Gegevens overgezet'); } catch {}
     } });
     const f = (key, label, props = {}) => [h('label', {}, label), h('input', { value: transferDraft[key], 'data-keep': 'transfer-' + key, autocapitalize: 'none', spellcheck: 'false', ...props, oninput: (e) => { transferDraft[key] = e.target.value; } })];
     const go = h('button', { class: 'white', onclick: async () => {
@@ -1244,7 +1255,7 @@
         const r = await api('/api/transfer/pull', { ...transferDraft });
         transferDraft.password = ''; transferDraft.code = '';
         out.textContent = `Klaar. ${r.requests} bezoekersverzoeken, ${r.people} personen${r.full ? `, ${r.users} account(s)` : ''} overgenomen.${r.full ? '' : ' De oude server is ouder: accounts en sleutels zijn niet meegekomen. Maak die hier opnieuw aan.'}`;
-        S = await api('/api/admin-state'); toast('Gegevens overgezet');
+        await afterBigChange(); toast('Gegevens overgezet');
       } catch (e) { out.textContent = ''; }
       go.disabled = false;
     } }, 'Gegevens overzetten');
@@ -1298,7 +1309,7 @@
         sysData.backups.length ? h('div', { style: 'margin-top:8px' }, ...sysData.backups.map((b) => h('div', { class: 'urow' },
           h('div', { class: 'who' }, h('b', {}, b.name.replace(/^state-/, '').replace(/\.json$/, '')), h('span', { class: 'muted' }, `${when(b.at)} · ${bytes(b.size)}`)),
           h('button', { class: 'sm', onclick: () => download(b.name) }, 'Downloaden'),
-          h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm(`De huidige stand wordt vervangen door deze back-up (de huidige stand wordt eerst bewaard). Doorgaan?`)) return; const r = await api('/api/system/backups/restore', { name: b.name }); toast(r.lost ? `Back-up teruggezet. Vul ${r.lost} wachtwoord${r.lost === 1 ? '' : 'en'} (bijvoorbeeld van e-mail) opnieuw in: die konden niet worden meegenomen.` : 'Back-up teruggezet'); sysData = null; refresh(); } }, 'Terugzetten')))) : h('p', { class: 'muted' }, 'Nog geen back-ups.')),
+          h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm(`De huidige stand wordt vervangen door deze back-up (de huidige stand wordt eerst bewaard). Doorgaan?`)) return; const r = await api('/api/system/backups/restore', { name: b.name }); await afterBigChange(); toast(r.lost ? `Back-up teruggezet. Vul ${r.lost} wachtwoord${r.lost === 1 ? '' : 'en'} (bijvoorbeeld van e-mail) opnieuw in: die konden niet worden meegenomen.` : 'Back-up teruggezet'); } }, 'Terugzetten')))) : h('p', { class: 'muted' }, 'Nog geen back-ups.')),
 
       h('div', { class: 'card' }, h('h2', {}, 'Gevarenzone'),
         h('div', { class: 'row' },
@@ -1429,8 +1440,7 @@
         can('export') ? h('button', { onclick: async () => {
           const r = await window.doorApp.openFile(); if (!r.ok) { if (r.error) toast(r.error); return; }
           let data; try { data = JSON.parse(r.text); } catch { return toast('Dit bestand kan niet gelezen worden'); }
-          if (!confirm('De huidige instellingen worden vervangen door deze back-up. Doorgaan?')) return;
-          await api('/api/import', data); toast('Back-up teruggezet'); refresh();
+          await restoreFile(data);
         } }, 'Back-up terugzetten uit bestand…') : null));
     window.doorApp.info().then((i) => {
       if (!i) return;
@@ -2090,10 +2100,12 @@
       const days = (obj) => { const wrap = h('div', { class: 'days' }); const draw = () => wrap.replaceChildren(...DAYS.map((d, n) => h('button', { type: 'button', class: obj.days.includes(n) ? 'on' : '', onclick: () => { obj.days = obj.days.includes(n) ? obj.days.filter((x) => x !== n) : [...obj.days, n]; draw(); } }, d))); draw(); return wrap; };
       const save = async () => { await api('/api/settings', payloadFor(st)); S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true); };
 
-      const importFile = h('input', { type: 'file', accept: 'application/json', class: 'hidden', onchange: async (e) => {
-        const file = e.target.files[0]; if (!file) return;
-        let data; try { data = JSON.parse(await file.text()); } catch { return toast('Dit bestand kan niet gelezen worden'); }
-        await api('/api/import', data); toast('Back-up teruggezet'); renderAll(true);
+      const importFile = h('input', { type: 'file', accept: '.json,application/json', class: 'hidden', onchange: async (e) => {
+        const file = e.target.files[0]; e.target.value = ''; // the same file can be chosen again
+        if (!file) return;
+        if (/\.sbk$/i.test(file.name)) return toast('Dit is een versleutelde back-up (.sbk). Zet hem terug bij Systeem → Back-ups, met het wachtwoord.');
+        let data; try { data = JSON.parse(await file.text()); } catch { return toast('Dit bestand kan niet gelezen worden (is het een .json-bestand van “Back-up maken”?)'); }
+        await restoreFile(data);
       } });
 
       const desktopBox = h('input', { type: 'checkbox', checked: prefs.desktop, onchange: async (e) => {
