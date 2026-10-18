@@ -7,8 +7,9 @@
 #   5. schrijft een verslag, en als er iets niet werkt een tekst die je aan Claude kunt geven
 # Er wordt niets van je andere machines verwijderd of gewijzigd.
 #
-#   ISO_URL="https://…" ./proxmox-all.sh           (de link krijg je van Claude)
-#   ./proxmox-all.sh "https://…" --keep-test        (de testmachine laten staan)
+#   bash proxmox-all.sh "https://…"                (de link naar de schijf krijg je van Claude)
+#   bash proxmox-all.sh "https://…" --keep-test     (de testmachine laten staan)
+#   Of in één keer:  bash <(wget -qO- "LINK-NAAR-DIT-SCRIPT") "LINK-NAAR-DE-SCHIJF"
 #   OPTIES: --keep-test  --skip-real  --bridge vmbr0  --vmid-test 9400
 set -uo pipefail
 
@@ -76,7 +77,12 @@ wait_http() { for i in $(seq 1 60); do curl -fsS -m 4 "http://$1:8080/healthz" >
 gx() {
   local vm="$1"; shift
   local raw; raw=$(qm guest exec "$vm" --timeout 280 -- "$@" 2>/dev/null) || { GXOUT=""; GXCODE=127; return 1; }
-  GXOUT=$(printf '%s' "$raw" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("out-data","")+d.get("err-data",""), end="")' 2>/dev/null)
+  GXOUT=$(printf '%s' "$raw" | python3 -c '
+import json,sys
+d=json.load(sys.stdin); t=d.get("out-data","")+d.get("err-data","")
+try: t=t.encode("latin-1").decode("utf-8")   # the guest agent hands over UTF-8 as if it were latin-1
+except Exception: pass
+print(t, end="")' 2>/dev/null)
   GXCODE=$(printf '%s' "$raw" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("exitcode",1))' 2>/dev/null)
   return 0
 }
