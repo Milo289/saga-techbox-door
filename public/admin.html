@@ -709,7 +709,7 @@
     const timeIn = (k, key) => h('input', { type: 'time', value: d.days[k][key], oninput: (e) => { d.days[k][key] = e.target.value; paintEst(); } });
     const week = h('table', { class: 'week' }, h('thead', {}, h('tr', {}, ...['Dag', 'Scherm uit', 'Scherm aan', 'Computer uit', 'Computer aan'].map((t) => h('th', {}, t)))),
       h('tbody', {}, ...DAYS_NL.map(([k, name]) => h('tr', {}, h('td', {}, name), ...['screenOff', 'screenOn', 'off', 'on'].map((key) => h('td', {}, timeIn(k, key)))))));
-    const copyWork = () => { for (const k of ['2', '3', '4', '5']) d.days[k] = { ...d.days['1'] }; powerDraft = d; renderAll(true); setTimeout(() => { const c = [...$('view').children].find((x) => x.querySelector && x.querySelector(':scope > h2') && x.querySelector(':scope > h2').textContent.includes('Energie')); if (c) { dirtyCards.add(c); paintDirty(); } }, 0); toast('Maandag is naar dinsdag t/m vrijdag gekopieerd. Vergeet niet op Opslaan te drukken.'); };
+    const copyWork = () => { for (const k of ['2', '3', '4', '5']) d.days[k] = { ...d.days['1'] }; powerDraft = d; renderAll(true); restoreDirty(); toast('Maandag is naar dinsdag t/m vrijdag gekopieerd. Vergeet niet op Opslaan te drukken.'); };
     const how = h('select', { onchange: (e) => { d.how = e.target.value; } }, ...[['computer', 'Helemaal uitzetten'], ['hibernate', 'Slaapstand (kan zichzelf wakker maken)']].map(([v, l]) => h('option', { value: v, selected: d.how === v }, l)));
     const plat = P.platform;
     const wakeHint = plat === 'win32' ? 'Windows: de wektaak maakt de computer wakker uit slaapstand of hibernate. Vanuit “helemaal uit” kan alleen de BIOS (zoek “Power on by RTC alarm” of “Wake on RTC”) of een stekkerdoos met timer.'
@@ -985,6 +985,17 @@
     paintDirty();
   }
   // one bar for all unsaved changes on a settings page: it presses the save button of every card that was changed
+  // some cards keep what you typed in a draft that survives a redraw (Energie, Personen, Koppelingen): after every redraw they must still count as "not saved"
+  const powerKeys = (o) => JSON.stringify({ enabled: o.enabled, how: o.how, warnMinutes: o.warnMinutes, skipIfBusy: o.skipIfBusy, pauseUntil: o.pauseUntil, watts: o.watts, days: o.days, wol: o.wol });
+  const powerChanged = () => !!(powerDraft && S && S.power && powerKeys(powerDraft) !== powerKeys(S.power));
+  function restoreDirty() {
+    if (!S || !['settings'].includes(tab)) return;
+    const mark = (title) => { const c = [...$('view').children].find((x) => x.querySelector && x.querySelector(':scope > h2') && x.querySelector(':scope > h2').textContent.includes(title)); if (c) dirtyCards.add(c); };
+    if (powerChanged()) mark('Energie');
+    if (peopleDraft && JSON.stringify(peopleDraft) !== JSON.stringify(S.people || [])) mark('Personen');
+    if (integDraft && S.integ && JSON.stringify(integDraft) !== JSON.stringify({ lock: S.integ.lock, automations: S.integ.automations, cameras: S.integ.cameras, faces: S.integ.faces })) mark('Koppelingen');
+    paintDirty();
+  }
   const dirtyCards = new Set(); // cards with their own save button, or the word 'global' for the big save button at the bottom of the page
   // the save buttons of one card: in the title bar, or (like Energie) at the bottom; a card can have more than one
   const saveButtonsOf = (card) => [...card.querySelectorAll('button')].filter((b) => /opslaan/i.test(b.textContent) && !/back-up|bestand/i.test(b.textContent) && !b.closest('.save') && !b.closest('#saveBar'));
@@ -1047,6 +1058,7 @@
     dirtyCards.clear();
     $('view').replaceChildren(...VIEWS[tab]().filter(Boolean));
     enhance();
+    restoreDirty();
     for (const r of S.requests) seenReq.add(r.id);
     $('view').querySelectorAll('[data-keep]').forEach((i) => {
       if (i.dataset.keep in kept && i.value !== kept[i.dataset.keep]) { i.value = kept[i.dataset.keep]; if (i.tagName === 'SELECT') i.dispatchEvent(new Event('change')); }
@@ -2099,7 +2111,10 @@
       const sel = (obj, key, opts, num) => h('select', { onchange: (e) => { obj[key] = num ? Number(e.target.value) : e.target.value; } }, ...opts.map(([v, l]) => h('option', { value: v, selected: String(obj[key]) === String(v) }, l)));
       const lines = (key) => h('textarea', { oninput: (e) => { st[key] = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); } }, st[key].join('\n'));
       const days = (obj) => { const wrap = h('div', { class: 'days' }); const draw = () => wrap.replaceChildren(...DAYS.map((d, n) => h('button', { type: 'button', class: obj.days.includes(n) ? 'on' : '', onclick: () => { obj.days = obj.days.includes(n) ? obj.days.filter((x) => x !== n) : [...obj.days, n]; draw(); } }, d))); draw(); return wrap; };
-      const save = async () => { await api('/api/settings', payloadFor(st)); S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true); };
+      const save = async () => {
+        if (can('power') && powerChanged()) { await api('/api/power/settings', powerDraft); powerDraft = null; } // the Energie card keeps its own draft: it goes along with the big button
+        await api('/api/settings', payloadFor(st)); S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true);
+      };
 
       const importFile = h('input', { type: 'file', accept: '.json,application/json', class: 'hidden', onchange: async (e) => {
         const file = e.target.files[0]; e.target.value = ''; // the same file can be chosen again

@@ -323,6 +323,10 @@
         d.getElementById('saveAll').click(); await sleep(3200);
         const now = (await get('/api/admin-state')).json.power;
         for (const k of ['1', '2', '3', '4', '5']) must(now.days[k].off === '17:41', `dag ${k} staat op “${now.days[k].off}” in plaats van 17:41 (niet bewaard)`);
+        // the same, but with the big button “Instellingen opslaan” at the bottom of the page
+        const off2 = cardNamed(d, 'Energie').querySelectorAll('table.week tbody tr')[0].querySelectorAll('input[type=time]')[2]; type(off2, '17:52'); await sleep(300);
+        const big = d.querySelector('#view .save button.white'); must(big, 'de grote knop onderaan staat er niet'); big.click(); await sleep(3200);
+        const after = (await get('/api/admin-state')).json.power; must(after.days['1'].off === '17:52', `met de grote knop onderaan werd de tijd niet bewaard (staat op “${after.days['1'].off}”, op het scherm stond 17:52)`);
       } finally { await post('/api/power/settings', { enabled: before.enabled, how: before.how, warnMinutes: before.warnMinutes, skipIfBusy: before.skipIfBusy, pauseUntil: before.pauseUntil, watts: before.watts, days: before.days, wol: before.wol }); }
       return 'maandag t/m vrijdag bewaard en weer teruggezet';
     });
