@@ -12,15 +12,16 @@
 # Een schijf die al in de machine zit wordt nooit aangeraakt. Oude ISO-bestanden worden niet verwijderd.
 #
 #   OPTIES:  123 (het nummer van de machine)   --ja (niet om bevestiging vragen)   --stabiel (alleen gewone versies)
-#            --opslag NAAM (waar de gegevensschijf komt)   --geen-schijf (geen gegevensschijf toevoegen)
+#            --versie v3.4.0-beta.20 (een bepaalde uitgave in plaats van de nieuwste)   --opslag NAAM (waar de gegevensschijf komt)   --geen-schijf (geen gegevensschijf toevoegen)
 set -uo pipefail
 
-REPO="Milo289/saga-techbox-door"; VMID=""; YES=0; STABLE=0; STORE=""; NODISK=0; ISO_NAME_BASE="Saga-Techbox-Deur-OS-amd64"
+REPO="Milo289/saga-techbox-door"; VMID=""; YES=0; STABLE=0; STORE=""; NODISK=0; WANT=""; ISO_NAME_BASE="Saga-Techbox-Deur-OS-amd64"
 MIN_MB="${SAGA_MIN_ISO_MB:-200}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --ja|-y) YES=1 ;; --stabiel) STABLE=1 ;; --geen-schijf) NODISK=1 ;;
     --opslag) STORE="${2:-}"; shift ;;
+    --versie) WANT="${2:-}"; shift ;;
     -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     [0-9]*) VMID="$1" ;;
   esac
@@ -61,19 +62,20 @@ say "Machine: $VMID ($VMNAME)"
 # ---------- 2. de nieuwste uitgave ----------
 say "Zoeken naar de nieuwste versie op GitHub…"
 JSON=$(wget -qO- --header="User-Agent: saga-update" "https://api.github.com/repos/$REPO/releases?per_page=30" 2>/dev/null) || die "Geen verbinding met GitHub."
-PICK=$(printf '%s' "$JSON" | STABLE="$STABLE" python3 -c '
+PICK=$(printf '%s' "$JSON" | STABLE="$STABLE" WANT="$WANT" python3 -c '
 import json, os, sys
 try: rels = json.load(sys.stdin)
 except Exception: sys.exit(1)
 for r in rels:
     if r.get("draft") or (os.environ.get("STABLE") == "1" and r.get("prerelease")): continue
+    if os.environ.get("WANT") and r.get("tag_name") != os.environ["WANT"]: continue
     for a in r.get("assets", []):
         if a.get("name") == "Saga-Techbox-Deur-OS-amd64.iso":
             print(r["tag_name"], a["browser_download_url"], a.get("size", 0)); sys.exit(0)
 sys.exit(2)') || die "Ik vond geen schijf (ISO) bij de uitgaven."
 TAG=${PICK%% *}; REST=${PICK#* }; URL=${REST%% *}; SIZE=${REST##* }
 ISO_NAME="${ISO_NAME_BASE}-${TAG}.iso"
-say "Nieuwste versie: $TAG ($((SIZE/1048576)) MB)"
+say "Versie: $TAG ($((SIZE/1048576)) MB)"
 
 # ---------- 3. waar de ISO heen moet ----------
 ISOSTORE="${SAGA_ISO_STORE:-}"
