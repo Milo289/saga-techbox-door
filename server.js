@@ -903,7 +903,7 @@ function securityChecks() {
   const powerful = state.users.filter((u) => !u.disabled && !u.starter && PRIVILEGED.some((x) => permsOf(u.perms).includes(x)));
   add('twoStepOthers', 10, powerful.every((u) => u.totp && u.totp.enabled), 'Accounts met veel rechten hebben tweestapsverificatie', `Dit geldt nog niet voor: ${powerful.filter((u) => !(u.totp && u.totp.enabled)).map((u) => u.username).join(', ')}. Je kunt het verplicht stellen bij Systeem.`);
   add('https', 10, httpsOn, 'De verbinding is versleuteld (https)', 'Zet https aan bij Beveiliging (eigen certificaat, geen domein nodig).');
-  add('backupEnc', 10, !!state.system.backupPassword, 'Back-ups zijn versleuteld met een wachtwoord', 'Kies een back-upwachtwoord bij Systeem (alleen het hoofdaccount).');
+  add('backupEnc', 10, !!state.system.backupPassword, 'Back-ups zijn versleuteld met een wachtwoord', 'Kies een back-upwachtwoord bij Beveiliging → Back-ups, aanvalsbeveiliging en herstart (alleen het hoofdaccount).');
   const last = state.lastBackupDay ? Date.parse(state.lastBackupDay) : 0;
   add('backupFresh', 5, last && Date.now() - last < 4 * 864e5, 'Er is de laatste dagen een back-up gemaakt', 'Zet automatische back-ups aan bij Systeem, of maak er nu een.');
   add('rateLimit', 10, state.system.rateLimit !== false, 'De aanvalsbeveiliging staat aan', 'Zet de aanvalsbeveiliging aan.', 'rateLimit');
@@ -2219,7 +2219,7 @@ function setupChecklist(id) {
   add('https', httpsOn, 'De verbinding is versleuteld (https)', 'Zet https aan en installeer het certificaat op je apparaten.', 'security');
   add('twoStep', !!(state.rootTotp && state.rootTotp.enabled), 'Het hoofdaccount heeft tweestapsverificatie', 'Zet tweestapsverificatie aan voor het hoofdaccount.', 'security');
   add('passkey', passkeysOf(id.userId).length > 0, 'Je hebt een passkey als reserve', 'Voeg een passkey toe op je Mac of iPhone (Beveiliging).', 'security');
-  add('backupPw', !!state.system.backupPassword, 'Back-ups zijn versleuteld met een wachtwoord', 'Kies een back-upwachtwoord (Systeem).', 'system');
+  add('backupPw', !!state.system.backupPassword, 'Back-ups zijn versleuteld met een wachtwoord', 'Kies een back-upwachtwoord (Beveiliging → Back-ups, aanvalsbeveiliging en herstart).', 'security');
   add('retention', state.system.retentionDays > 0, `Bezoekersverzoeken worden na ${state.system.retentionDays || '…'} dagen gewist`, 'Kies hoelang bezoekersverzoeken bewaard worden (Systeem). Nu blijven ze voor altijd staan.', 'system');
   const pers = updates.persistence(DATA_DIR);
   add('disk', !pers.live || pers.persistent, 'Gegevens overleven een herstart (eigen gegevensschijf)', 'Geef de virtuele machine een lege tweede schijf; die wordt zelf in gebruik genomen.', 'system');

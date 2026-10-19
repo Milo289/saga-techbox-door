@@ -13,7 +13,7 @@ Doe dit na het installeren van een nieuwe versie. Alles wat je aanvinkt, weet je
 - [ ] **Instellingen → Alle instellingen → Instellingen uit een bestand toepassen**: kies `saga-aanbevolen-instellingen.json` (staat bij de uitgave en in `docs/`).
 - [ ] **Beveiliging → https aan**, daarna het certificaat installeren op je Mac, iPhone en iPad.
 - [ ] **Tweestapsverificatie** aan voor `milo`, en een **passkey** toevoegen.
-- [ ] **Systeem → back-upwachtwoord** kiezen. Daarna **Nu een back-up maken** en **Test back-up**.
+- [ ] **Beveiliging → Back-ups, aanvalsbeveiliging en herstart → Wachtwoord voor back-ups** kiezen. Daarna **Nu een back-up maken** en **Test back-up**.
 - [ ] **E-mail of ntfy** instellen en op **Test versturen** drukken.
 - [ ] **Openingstijden** invullen, en je **schoolnaam**.
 - [ ] Privacyverklaring: vul onderaan `PRIVACY.md` je organisatie en contactpersoon in.
