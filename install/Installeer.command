@@ -3,7 +3,8 @@
 #   Mac:    dubbelklik dit bestand (of sleep het naar Terminal)
 #   Linux:  bash Installeer.command
 # Het herkent je computer (Mac met Apple-chip of Intel, Linux x64 of ARM), haalt de nieuwste versie
-# van GitHub op en start de installatie. Optie:  --dry-run  = alleen laten zien wat het zou kiezen.
+# van GitHub op (ook developer betas) en start de installatie.
+# Opties:  --stabiel = alleen gewone versies   --dry-run = alleen laten zien wat het zou kiezen.
 set -u
 REPO="Milo289/saga-techbox-door"
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
@@ -27,30 +28,19 @@ echo "Bestand: $PAT"
 
 pause() { [ -t 0 ] && read -r -p "$1" _ || true; }
 
-if ! command -v gh >/dev/null 2>&1; then
-  echo
-  echo "Voor het downloaden uit jouw privé-GitHub heb ik de gratis hulp ‘gh’ nodig."
-  if command -v brew >/dev/null 2>&1; then
-    read -r -p "Nu installeren met Homebrew? [j/N] " yn
-    case "$yn" in j|J|y|Y) brew install gh ;; esac
-  fi
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "Download het bestand dan met de hand op: https://github.com/$REPO/releases/latest  (kies het bestand dat eindigt op ${PAT#\*})"
-    [ "$OS" = Darwin ] && open "https://github.com/$REPO/releases/latest"
-    pause "Druk Enter om af te sluiten… "; exit 1
-  fi
-fi
-
-if ! gh auth status >/dev/null 2>&1; then
-  echo
-  echo "Log eenmalig in bij GitHub (volg de vragen op het scherm):"
-  gh auth login || { pause "Inloggen mislukt. Druk Enter… "; exit 1; }
-fi
-
 DEST="$HOME/Downloads"; mkdir -p "$DEST"
 echo
+echo "Zoeken naar de nieuwste versie …"
+if [ "${1:-}" = "--stabiel" ]; then API="https://api.github.com/repos/$REPO/releases/latest"; else API="https://api.github.com/repos/$REPO/releases?per_page=30"; fi
+RE=$(printf '%s' "${PAT#\*}" | sed 's/\./\\./g')
+URL=$(curl -fsSL -H "User-Agent: saga-installeer" "$API" 2>/dev/null | grep -oE '"browser_download_url": ?"[^"]+"' | grep -E "${RE}\"\$" | head -1 | cut -d'"' -f4)
+if [ -z "$URL" ]; then
+  echo "Ik vond geen bestand voor deze computer. Download het met de hand op: https://github.com/$REPO/releases  (kies het bestand dat eindigt op ${PAT#\*})"
+  [ "$OS" = Darwin ] && open "https://github.com/$REPO/releases"
+  pause "Druk Enter om af te sluiten… "; exit 1
+fi
 echo "Downloaden naar $DEST …"
-gh release download --repo "$REPO" --pattern "$PAT" --dir "$DEST" --clobber || { pause "Downloaden mislukte. Druk Enter… "; exit 1; }
+curl -fL --progress-bar -o "$DEST/$(basename "$URL")" "$URL" || { pause "Downloaden mislukte. Druk Enter… "; exit 1; }
 FILE=$(ls -t "$DEST"/$PAT 2>/dev/null | head -1)
 [ -n "$FILE" ] || { echo "Het gedownloade bestand is niet gevonden."; pause "Druk Enter… "; exit 1; }
 echo "Klaar: $FILE"
