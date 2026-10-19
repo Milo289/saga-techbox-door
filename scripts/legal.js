@@ -39,7 +39,7 @@ ${body}
 function build() {
   const files = { 'voorwaarden.html': ['VOORWAARDEN.md', 'Gebruiksvoorwaarden'], 'privacy.html': ['PRIVACY.md', 'Privacyverklaring'] };
   const res = {};
-  for (const [out, [md, title]] of Object.entries(files)) res[out] = PAGE(title + ' – Saga Techbox Deur', render(fs.readFileSync(path.join(ROOT, md), 'utf8')));
+  for (const [out, [md, title]] of Object.entries(files)) res[out] = PAGE(title + ' – Saga Techbox Deur', render(fs.readFileSync(path.join(ROOT, md), 'utf8').replace(/\r\n/g, '\n')));
   return res;
 }
 if (require.main === module) for (const [name, html] of Object.entries(build())) fs.writeFileSync(path.join(ROOT, 'public', name), html);
