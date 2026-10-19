@@ -141,3 +141,32 @@ test('fifteen extra switches in Weergave: all off by default, each can be turned
   for (const n of names) { assert.ok(door.includes('lk-' + n) || n === 'muteDoor' || n === 'fullscreen' || n === 'hideAsk', 'door: ' + n); assert.ok(panel.includes(`'${n}'`), 'panel: ' + n); }
   assert.ok(door.includes('muteDoor') && door.includes('requestFullscreen'));
 });
+
+test('fifty more switches: all off by default, each one works on and off, the panel gets the list, the door has a rule for each', async (t) => {
+  const { LOOK_FLAGS } = require('../settings-schema.js');
+  assert.equal(LOOK_FLAGS.length, 50); assert.equal(new Set(LOOK_FLAGS.map((f) => f[0])).size, 50, 'no name twice');
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const look = async () => (await call(srv, 'GET', '/api/state')).json.settings.look;
+  const d = await look();
+  for (const [k] of LOOK_FLAGS) assert.equal(d[k], false, k + ' off by default');
+  await call(srv, 'POST', '/api/settings', { look: Object.fromEntries(LOOK_FLAGS.map(([k]) => [k, true])) }, a);
+  for (const [k] of LOOK_FLAGS) assert.equal((await look())[k], true, k + ' on');
+  await call(srv, 'POST', '/api/settings', { look: { ...(await look()), vivid: false } }, a); // the panel always sends the whole look
+  assert.equal((await look()).vivid, false); assert.equal((await look()).warm, true, 'the others stay');
+  const st = (await call(srv, 'GET', '/api/admin-state', undefined, a)).json;
+  assert.equal(st.lookFlags.length, 50);
+  const sch = (await call(srv, 'GET', '/api/settings-schema', undefined, a)).json.groups.find((g) => g.id === 'weergave').fields.map((f) => f.key);
+  for (const [k] of LOOK_FLAGS) assert.ok(sch.includes('look.' + k), 'the apps get ' + k);
+  const door = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  const noRule = new Set(['vivid', 'softColors', 'warm', 'cool', 'dimAll', 'invert']); // these are colour filters made in the script
+  for (const [k] of LOOK_FLAGS) assert.ok(noRule.has(k) ? door.includes('L.' + k) : door.includes('lk-' + k), 'door: ' + k);
+});
+
+test('the close time of the sent screen is the chosen one, also when an answer arrives (the old timers overwrote it)', () => {
+  const door = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  assert.ok(door.includes('let sentAuto = 0'), 'one timer value for the sent screen');
+  assert.ok(door.includes('setTimeout(closeSheet, sentAuto ? sentAuto * 1000 : ms)'), 'every timer uses it');
+  assert.ok(door.includes("if (cls !== 'done') sentAuto = 0;"));
+});

@@ -8,6 +8,9 @@ const DAYS = [[1, 'maandag'], [2, 'dinsdag'], [3, 'woensdag'], [4, 'donderdag'],
 const TYPES = [['any', 'Alles'], ['bell', 'Aanbellen'], ['reason', 'Een reden'], ['message', 'Een vraagje'], ['appointment', 'Een afspraak'], ['callback', 'Terugbellen']];
 const o = (list) => list.map(([v, l]) => [String(v), l]);
 
+// fifty more switches for the door screen (all off by default): [name, group, label]
+const LOOK_FLAGS = [["italicLabel", "Tekst", "Statuswoord schuin"], ["wideLetters", "Tekst", "Brede letters in het statuswoord"], ["tightLetters", "Tekst", "Smalle letters in het statuswoord"], ["outlineLabel", "Tekst", "Statuswoord alleen als omtrek"], ["gradientLabel", "Tekst", "Kleurverloop in het statuswoord"], ["blinkLabel", "Tekst", "Statuswoord knippert langzaam"], ["floatLabel", "Tekst", "Statuswoord zweeft zacht"], ["underlineLabel", "Tekst", "Streep onder het statuswoord"], ["boldMessage", "Tekst", "Dik bericht"], ["bigMessage", "Tekst", "Groter bericht"], ["bigUntil", "Tekst", "Grotere “we sluiten over …”-tekst"], ["monoClock", "Tekst", "Klok in vaste breedte"], ["hideSubtitle", "Tekst", "Verberg de ondertitel"], ["hideWeather", "Tekst", "Verberg het weer"], ["tilesBig", "Knoppen", "Grotere knoppen"], ["tilesColumn", "Knoppen", "Knoppen onder elkaar (één kolom)"], ["tilesSquare", "Knoppen", "Vierkante knoppen"], ["tilesBorder", "Knoppen", "Gekleurde rand om de knoppen"], ["tilesShadow", "Knoppen", "Schaduw onder de knoppen"], ["tilesUpper", "Knoppen", "KNOPPEN IN HOOFDLETTERS"], ["tilesBold", "Knoppen", "Dikke letters in de knoppen"], ["tilesRow", "Knoppen", "Symbool naast de tekst"], ["tilesGap", "Knoppen", "Meer ruimte tussen de knoppen"], ["tilesPill", "Knoppen", "Afgeronde (pil)knoppen"], ["tilesGrow", "Knoppen", "Knoppen worden groter bij aanraken"], ["tilesTint", "Knoppen", "Knoppen in de kleur van de status"], ["pureBlack", "Kleuren", "Zuiver zwart (voor OLED)"], ["grayscale", "Kleuren", "Knoppen en klok in grijs"], ["vivid", "Kleuren", "Levendige kleuren"], ["softColors", "Kleuren", "Zachte kleuren"], ["warm", "Kleuren", "Warm licht (avond)"], ["cool", "Kleuren", "Koel licht"], ["invert", "Kleuren", "Kleuren omkeren"], ["dimAll", "Kleuren", "Altijd iets gedimd"], ["centerButtons", "Indeling", "Knoppen in het midden"], ["compact", "Indeling", "Minder ruimte overal"], ["loose", "Indeling", "Meer ruimte overal"], ["topStatus", "Indeling", "Status bovenaan"], ["bottomStatus", "Indeling", "Status onderaan"], ["bigPadding", "Indeling", "Bredere rand om het beeld"], ["hugeLabel", "Indeling", "Statuswoord extra groot"], ["leftHeader", "Indeling", "Naam en klok onder elkaar, links"], ["scanlines", "Effecten", "Lijntjes over het scherm"], ["vignette", "Effecten", "Donkere hoeken"], ["grain", "Effecten", "Korrel (ruis)"], ["tileGlow", "Effecten", "Gloed om de knoppen"], ["rippleDot", "Effecten", "Golf rond het statuspunt"], ["sheetBig", "Effecten", "Grotere vensters (formulieren)"], ["sheetTop", "Effecten", "Vensters bovenaan"], ["cursorAlways", "Effecten", "Muisaanwijzer altijd zichtbaar"]];
+
 function build(ctx) {
   const { settings: s, system: sys, can, UI_TEXTS, BELL_TONES, REPLY_TONES, PASS_MASK } = ctx;
   const groups = [];
@@ -45,6 +48,7 @@ function build(ctx) {
     C('look.icons', 'Symbolen op knoppen', [['symbols', 'Tonen'], ['none', 'Niet tonen']]), N('look.agenda', 'Aantal geplande momenten tonen', 0, 5),
     B('look.ticker.enabled', 'Lopende tekst onderaan'), T('look.ticker.text', 'Tekst van de lopende regel', 200), T('look.footer', 'Vaste regel onderaan', 120),
     B('look.idle.enabled', 'Schermbeveiliging als niemand het scherm aanraakt'), N('look.idle.minutes', 'Schermbeveiliging na (minuten)', 1, 240),
+    ...LOOK_FLAGS.map(([k, g, l]) => B('look.' + k, g + ': ' + l)),
     B('look.shift', 'Beeld af en toe een paar pixels verschuiven (tegen inbranden)'), B('look.contrast', 'Hoog contrast'), B('look.motion', 'Bewegingen en animaties'),
     C('look.buttons.place', 'Plaats van de eigen knoppen', [['below', 'Onder, bij de gewone knoppen'], ['top', 'Boven in beeld'], ['side', 'Zijkant (rechts)'], ['floating', 'Zwevend rechtsonder'], ['hidden', 'Niet tonen']]),
     C('look.buttons.size', 'Grootte van de knoppen', [['small', 'Klein'], ['normal', 'Normaal'], ['large', 'Groot']]), N('look.buttons.columns', 'Kolommen met knoppen (0 = vanzelf)', 0, 4),
@@ -165,4 +169,4 @@ function parse(ctx, values) {
   return out;
 }
 
-module.exports = { build, parse, getPath };
+module.exports = { build, parse, getPath, LOOK_FLAGS };

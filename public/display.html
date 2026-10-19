@@ -296,6 +296,58 @@
   body.lk-bigDot .ring { width: calc(var(--u)*6.4); height: calc(var(--u)*6.4); } body.lk-staticDot .ring:not(.ding) { animation: none; }
   body.lk-bigHeader header { font-size: calc(var(--u)*4); } body.lk-flip #ask { order: -1; } body.lk-dimClosed[data-now="closed"] #app { filter: brightness(.55); }
   body.lk-statusIcon[data-now="open"] #label::before { content: "🚪 "; } body.lk-statusIcon[data-now="closed"] #label::before { content: "🔒 "; } body.lk-statusIcon[data-now="busy"] #label::before { content: "⏳ "; }
+  /* fifty more switches (all off by default) */
+  body.lk-italicLabel #label { font-style: italic; }
+  body.lk-wideLetters #label { letter-spacing: .04em; }
+  body.lk-tightLetters #label { letter-spacing: -.07em; }
+  body.lk-outlineLabel #label { color: transparent; -webkit-text-stroke: calc(var(--u)*.45) var(--c); }
+  body.lk-gradientLabel #label { background: linear-gradient(180deg, var(--c), color-mix(in srgb, var(--c) 45%, #fff)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  body.lk-blinkLabel #label { animation: lkBlink 3.2s ease-in-out infinite; }
+  body.lk-floatLabel #label { animation: lkFloat 5s ease-in-out infinite; }
+  body.lk-underlineLabel #label { text-decoration: underline; text-decoration-thickness: .06em; text-underline-offset: .12em; }
+  body.lk-boldMessage #message { font-weight: 700; }
+  body.lk-bigMessage #message { font-size: calc(var(--u)*3.6); }
+  body.lk-bigUntil #until { font-size: calc(var(--u)*5.2); }
+  body.lk-bigUntil #untilAt { font-size: calc(var(--u)*3.8); }
+  body.lk-monoClock #time { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  body.lk-hideSubtitle #subtitle { display: none; }
+  body.lk-hideWeather #weather { display: none !important; }
+  body.lk-tilesBig .tile { font-size: 1.2em; padding-top: calc(var(--u)*3.6); padding-bottom: calc(var(--u)*3.6); }
+  body.lk-tilesColumn #actions { grid-template-columns: 1fr !important; }
+  body.lk-tilesSquare #actions .tile { aspect-ratio: 1 / 1; }
+  body.lk-tilesBorder .tile { border: calc(var(--u)*.4) solid var(--c); }
+  body.lk-tilesShadow .tile { box-shadow: 0 calc(var(--u)*1) calc(var(--u)*2.6) rgba(0,0,0,.4); }
+  body.lk-tilesUpper .tile { text-transform: uppercase; letter-spacing: .04em; }
+  body.lk-tilesBold .tile { font-weight: 800; }
+  body.lk-tilesRow #actions .tile { flex-direction: row; }
+  body.lk-tilesGap #actions, body.lk-tilesGap #reasons { gap: calc(var(--u)*2.4); }
+  body.lk-tilesPill .tile { border-radius: 999px !important; }
+  body.lk-tilesGrow .tile:active { transform: scale(1.08); }
+  body.lk-tilesTint .tile { background: color-mix(in srgb, var(--c) 18%, var(--s1)); }
+  body.lk-pureBlack:not(.light) { --bg: #000; --s1: #0a0a0b; --s2: #141416; }
+  body.lk-pureBlack:not(.light) #app, body.lk-pureBlack:not(.light) #app.landscape { background: #000; }
+  body.lk-grayscale #ask, body.lk-grayscale header, body.lk-grayscale #xbtns { filter: grayscale(1); }
+  body.lk-centerButtons #ask { align-items: center; text-align: center; }
+  body.lk-centerButtons .ask h2 { text-align: center; width: 100%; }
+  body.lk-compact #app { gap: calc(var(--u)*1.6); }
+  body.lk-compact main { gap: calc(var(--u)*2); }
+  body.lk-loose #app { gap: calc(var(--u)*4.5); }
+  body.lk-loose main { gap: calc(var(--u)*6); }
+  body.lk-topStatus .hero { justify-content: flex-start; }
+  body.lk-bottomStatus .hero { justify-content: flex-end; }
+  body.lk-bigPadding #app { padding: calc(var(--u)*7 + var(--mg, 0px)); }
+  body.lk-hugeLabel #label { font-size: calc(var(--u)*24) !important; }
+  body.lk-leftHeader header { flex-direction: column; align-items: flex-start; gap: 0; }
+  body.lk-scanlines #app::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 35; background: repeating-linear-gradient(0deg, rgba(0,0,0,.2) 0 1px, transparent 1px 3px); }
+  body.lk-vignette::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 80; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); }
+  body.lk-grain::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 81; opacity: .14; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+  body.lk-tileGlow .tile { box-shadow: 0 0 calc(var(--u)*2.6) color-mix(in srgb, var(--c) 55%, transparent); }
+  body.lk-rippleDot .ring::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--c); animation: lkRipple 2.4s ease-out infinite; }
+  body.lk-rippleDot .ring { position: relative; }
+  body.lk-sheetBig .sheet { max-width: calc(var(--u)*110); }
+  body.lk-sheetTop #modal { align-items: flex-start; }
+  body.lk-cursorAlways, body.lk-cursorAlways.idle { cursor: default !important; }
+  @keyframes lkBlink { 50% { opacity: .35; } } @keyframes lkFloat { 50% { translate: 0 calc(var(--u)*-1.4); } } @keyframes lkRipple { from { transform: scale(1); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
 </style>
 </head>
 <body>
@@ -673,7 +725,8 @@
     d.transition = L.transition || 'slide'; d.background = VISIT ? 'glow' : (L.background || 'glow'); d.border = VISIT ? 'off' : (L.border || 'off'); d.shift = L.shift && !VISIT ? '1' : '0';
     b.classList.toggle('hc', !!L.contrast); b.classList.toggle('nomotion', L.motion === false);
     d.now = v.mode;
-    for (const k of ['hideName', 'hideMessage', 'hideUntil', 'hideExtra', 'hideAsk', 'uppercase', 'shadow', 'bigDot', 'staticDot', 'bigHeader', 'statusIcon', 'flip', 'dimClosed', 'muteDoor', 'fullscreen']) b.classList.toggle('lk-' + k, !VISIT && !!L[k]); // the switches of Weergave (door screen only)
+    for (const [k, val] of Object.entries(L)) if (typeof val === 'boolean') b.classList.toggle('lk-' + k, !VISIT && val); // every switch of Weergave (door screen only)
+    { const fx = []; if (!VISIT) { if (L.vivid) fx.push('saturate(1.35)'); if (L.softColors) fx.push('saturate(.75)'); if (L.warm) fx.push('sepia(.35) brightness(.95)'); if (L.cool) fx.push('hue-rotate(12deg) saturate(.9)'); if (L.dimAll) fx.push('brightness(.8)'); if (L.invert) fx.push('invert(1) hue-rotate(180deg)'); } document.documentElement.style.filter = fx.join(' '); } // colour filters can be combined
     // plan: the next planned moments
     const n = VISIT ? 0 : (L.mode === 'agenda' ? Math.max(L.agenda || 0, 3) : (L.agenda || 0));
     const ag = $('agenda'), list = (v.upcoming || []).slice(0, n);
@@ -800,6 +853,7 @@
   const useKB = () => !VISIT && S?.settings.layout.keyboard && params.get('keyboard') !== '0';
 
   function openSheet(cls, ...kids) {
+    if (cls !== 'done') sentAuto = 0;
     const wasOpen = $('modal').classList.contains('open');
     $('sheet').className = 'sheet ' + (cls || '') + (wasOpen ? ' step' : '');
     $('sheet').replaceChildren(...kids.filter(Boolean));
@@ -811,8 +865,9 @@
     $('sheet').querySelectorAll('.kb').forEach((k) => k.redraw?.());
     if (first && !useKB()) setTimeout(() => first.focus(), 60);
   }
-  function closeSheet() { $('modal').classList.remove('open'); pending = null; activeInput = null; clearTimeout(idleTimer); }
-  function bumpIdle(ms = 60000) { clearTimeout(idleTimer); idleTimer = setTimeout(closeSheet, ms); }
+  let sentAuto = 0; // seconds: while the “sent” screen is open without a button, every timer uses this one time
+  function closeSheet() { $('modal').classList.remove('open'); pending = null; activeInput = null; sentAuto = 0; clearTimeout(idleTimer); }
+  function bumpIdle(ms = 60000) { clearTimeout(idleTimer); idleTimer = setTimeout(closeSheet, sentAuto ? sentAuto * 1000 : ms); }
   $('modal').addEventListener('pointerdown', (e) => { if (e.target === $('modal')) closeSheet(); else bumpIdle(pending ? 300000 : 60000); });
   $('modal').addEventListener('focusin', (e) => { if (e.target.matches('input,textarea')) activeInput = e.target; });
 
@@ -902,6 +957,7 @@
   }
   function showSent(payload, mailTo) {
     const L = (S && S.settings.look) || {}, autoClose = L.sentClose === 'auto';
+    sentAuto = autoClose ? Math.max(3, Number(L.sentSeconds) || 10) : 0; // set before the sheet opens: the timers below use it
     openSheet('done',
       h('div', { class: 'badge pop' }, payload.type === 'bell' ? icon('bell') : icon('check')),
       h('h3', {}, formCfg().thanksText ? formCfg().thanksText : payload.type === 'bell' ? tx('sentBell') : payload.type === 'appointment' ? tx('sentAppt') : payload.type === 'callback' ? tx('callbackSent') : tx('sent')),
@@ -910,8 +966,7 @@
       payload.type === 'appointment' && payload.at ? h('button', { class: 'link', onclick: () => downloadIcs(payload) }, lt('Zet in mijn agenda', 'Add to my calendar')) : null,
       h('div', { id: 'replyBox', class: 'wait-line' }, h('div', { class: 'spin' }), tx('waiting')),
       autoClose ? null : h('div', { class: 'btns', style: 'width:100%' }, h('button', { class: 'btn', onclick: closeSheet }, tx('close'))));
-    bumpIdle(300000);
-    if (autoClose) { const secs = Math.max(3, Number(L.sentSeconds) || 10); clearTimeout(idleTimer); idleTimer = setTimeout(closeSheet, secs * 1000); } // no button: it closes by itself (a tap next to it closes it too)
+    bumpIdle(300000); // with “no button” this is the chosen number of seconds (and an answer that arrives starts them again, so it can be read)
     checkReply();
   }
 
