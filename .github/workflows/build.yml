@@ -17,6 +17,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Put the version of the tag in package.json (so a beta knows it is a beta)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: npm pkg set version="${GITHUB_REF_NAME#v}"
       - name: The Windows installer script finds the newest file (no download)
         if: matrix.os == 'windows-latest'
         shell: powershell
@@ -128,6 +132,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Put the version of the tag in package.json (so a beta knows it is a beta)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: npm pkg set version="${GITHUB_REF_NAME#v}"
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -218,6 +226,7 @@ jobs:
       - name: The server bundle (the update button in the panel downloads this)
         run: |
           mkdir -p srv && cp -r package.json boot.js updates.js server.js power.js integrations.js security.js pki.js schedule.js mdns.js settings-schema.js check-selftest.js check-runner.js discover.js seal.js access.js public srv/
+          (cd srv && npm pkg set version="${GITHUB_REF_NAME#v}")   # the bundle knows which version it is
           tar -czf out/Saga-Techbox-Server.tgz -C srv .
           (cd out && sha256sum Saga-Techbox-Server.tgz | cut -d' ' -f1 > Saga-Techbox-Server.tgz.sha256)
       - name: The smart installers (they recognise the computer themselves)

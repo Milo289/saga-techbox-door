@@ -34,6 +34,12 @@ test('version comparison', () => {
   assert.ok(updater.isNewer('1.10.0', '1.9.9'));
   assert.ok(!updater.isNewer('1.5.0', '1.5.0'));
   assert.ok(!updater.isNewer('1.4.0', 'v1.5.0'));
+  assert.ok(updater.isNewer('3.5.0-beta.2', '3.5.0-beta.1'));
+  assert.ok(updater.isNewer('3.5.0-beta.10', '3.5.0-beta.9'));
+  assert.ok(updater.isNewer('3.5.0-beta.1', '3.4.0'));
+  assert.ok(updater.isNewer('3.5.0', '3.5.0-beta.9'));
+  assert.ok(!updater.isNewer('3.5.0-beta.9', '3.5.0'));
+  assert.ok(!updater.isNewer('3.5.0-beta.1', '3.5.0-beta.1'));
 });
 
 test('picks the right installer for each system', async () => {

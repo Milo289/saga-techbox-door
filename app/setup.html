@@ -121,6 +121,7 @@
   <div class="card" id="updBox">
     <div class="row"><b class="grow">Updates</b><span class="hint" id="updState"></span></div>
     <label class="check"><input type="checkbox" id="autoUpdate"> Automatisch op updates controleren</label>
+    <label class="check"><input type="checkbox" id="betaUpdates"> Ook public betas aanbieden (nieuwe versies die nog getest worden)</label>
     <label class="check"><input type="checkbox" id="autoInstall"> Update vanzelf installeren zodra de pc opstart (Windows en Linux-AppImage; op een Mac vraagt het eerst)</label>
     <div class="row"><button type="button" id="updCheck">Nu controleren</button><button type="button" id="updGo" class="hidden">Downloaden en installeren</button></div>
     <p class="hint" id="updMsg">Je instellingen en gegevens staan buiten de app en blijven bewaard bij een update. De server maakt zelf een back-up voordat een nieuwe versie voor het eerst start.</p>
@@ -223,6 +224,7 @@
   // ---- updates ----
   const upd = window.setup.update;
   $('autoUpdate').checked = c.autoUpdate !== false;
+  $('betaUpdates').checked = !!c.betaUpdates;
   $('autoInstall').checked = !!c.autoInstall;
   $('startDelay').value = c.startDelay || 0; $('startHidden').checked = !!c.startHidden;
   const showFound = (f) => {
@@ -265,7 +267,7 @@
     const res = await window.setup.save({
       role: effective().role, serverMode: effective().mode, url: $('url').value.trim(),
       port: $('port').value, pin: $('pin').value, autostart: $('autostart').checked,
-      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), autoUpdate: $('autoUpdate').checked, autoInstall: $('autoInstall').checked, startDelay: $('startDelay').value, startHidden: $('startHidden').checked, alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
+      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), autoUpdate: $('autoUpdate').checked, betaUpdates: $('betaUpdates').checked, autoInstall: $('autoInstall').checked, startDelay: $('startDelay').value, startHidden: $('startHidden').checked, alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
       closeToTray: $('closeToTray').checked, hotkeys: $('hotkeys').checked, display: $('display').value, windowed: $('windowed').checked, lockMouse: $('lockMouse').checked,
     });
     if (!res || !res.ok) { $('err').textContent = (res && res.error) || 'Opslaan lukte niet.'; $('save').disabled = false; }

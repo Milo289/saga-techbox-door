@@ -28,3 +28,9 @@ Opmerkingen:
 - Linux-schijf: een lege tweede schijf wordt zelf als gegevensschijf (`saga-data`) gebruikt, zodat gegevens en updates een herstart overleven.
 - Getest: eenheidstests (versies, kanalen, onveilige namen, controlesom, onvolledig bestand, boot.js terugdraaien), de routes en het paneel. NIET getest: een echte update tussen twee uitgaven (de eerste uitgave met het serverbestand is deze), de gegevensschijf op echte hardware (CI start hem wel in een virtuele machine).
 - Nog geen ondertekening van uitgaven (B11): de controlesom beschermt alleen tegen een beschadigd bestand.
+
+## 3.5.0-beta.1 — eerste public beta
+- Opt-in: de desktop-app (Instellingen → Updates → "Ook public betas aanbieden") en de server (Systeem → Server bijwerken → "Ook developer betas") bieden betas alleen aan wie dat aanzet. Gewone gebruikers blijven op de laatste gewone versie (3.2.0) tot er een gewone uitgave komt.
+- Een uitgave met een tag als `v3.5.0-beta.1` zet die versie nu ook in `package.json` tijdens de build, zodat server en app weten dat ze een beta zijn en de volgende beta als nieuwer zien.
+- De updater van de desktop-app begrijpt nu betaversies (beta.10 is nieuwer dan beta.9, 3.5.0 nieuwer dan 3.5.0-beta.9).
+- Niet getest: een echte update van de desktop-app naar een beta op Windows/Mac/Linux (alleen de vergelijkingen en de GitHub-aanroep in eenheidstests).

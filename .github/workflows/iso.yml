@@ -24,6 +24,10 @@ jobs:
           curl -fsSLo /tmp/lb.deb http://deb.debian.org/debian/pool/main/l/live-build/live-build_20230502_all.deb
           sudo dpkg -i --force-depends /tmp/lb.deb
           lb --version
+      - name: Put the version of the tag in package.json (so a beta knows it is a beta)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: npm pkg set version="${GITHUB_REF_NAME#v}"
       - run: sudo ARCH=${{ matrix.arch }} ./linux-iso/build.sh
       # The ISO goes to a release page (not to the build artifacts: those have a download limit and fill up quickly).
       # A version tag (v...) uses that version's release; a manual run uses the release "iso-latest".

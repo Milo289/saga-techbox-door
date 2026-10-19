@@ -13,7 +13,7 @@ test('a server can be found on the network without typing its address', async (t
   assert.equal(found[0].port, srv.port);
   assert.equal(found[0].host, '127.0.0.1');
   assert.equal(found[0].name, 'Saga Techbox');
-  assert.match(found[0].version, /^\d+\.\d+\.\d+$/);
+  assert.match(found[0].version, /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
   assert.deepEqual(await discover({ address: '127.0.0.1', port: udp + 1, timeout: 400 }), [], 'nothing answers on another port');
 });
 

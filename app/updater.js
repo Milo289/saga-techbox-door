@@ -9,11 +9,24 @@ const DEFAULT_API = 'https://api.github.com/repos/Milo289/saga-techbox-door/rele
 const API = process.env.DOOR_UPDATE_API || DEFAULT_API; // the override is only for tests
 const OFFICIAL = API === DEFAULT_API;
 
-const parse = (v) => { const m = String(v).replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)/); return m ? m.slice(1).map(Number) : null; };
+const LIST_API = 'https://api.github.com/repos/Milo289/saga-techbox-door/releases?per_page=30';
+const parse = (v) => { const m = String(v).replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/); return m ? [Number(m[1]), Number(m[2]), Number(m[3]), m[4] ? m[4].split('.').map((x) => (/^\d+$/.test(x) ? Number(x) : x)) : null] : null; };
+// 3.5.0-beta.2 is newer than 3.5.0-beta.1 and than 3.4.0, but older than 3.5.0 itself
 function isNewer(a, b) {
   const x = parse(a), y = parse(b);
   if (!x || !y) return false;
   for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  if (!x[3] && !y[3]) return false;
+  if (!x[3]) return true;
+  if (!y[3]) return false;
+  for (let i = 0; i < Math.max(x[3].length, y[3].length); i++) {
+    const p = x[3][i], q = y[3][i];
+    if (p === undefined) return false;
+    if (q === undefined) return true;
+    if (p === q) continue;
+    if (typeof p === 'number' && typeof q === 'number') return p > q;
+    return typeof p === 'string' && typeof q === 'number' ? true : (typeof p === 'number' ? false : p > q);
+  }
   return false;
 }
 
@@ -50,15 +63,20 @@ async function verifyFile(file, name, sumsText) {
   return (await sha256File(file)).toLowerCase() === line[0].toLowerCase();
 }
 
-async function check(current, token, env) {
+async function check(current, token, env, opts = {}) {
   let res;
-  try { res = await fetch(API, { headers: { Accept: 'application/vnd.github+json', ...baseHeaders(token) }, signal: AbortSignal.timeout(15000) }); }
+  const beta = !!opts.beta && OFFICIAL; // developer and public betas are only looked at when the person asked for them
+  try { res = await fetch(beta ? LIST_API : API, { headers: { Accept: 'application/vnd.github+json', ...baseHeaders(token) }, signal: AbortSignal.timeout(15000) }); }
   catch { throw new Error('Geen verbinding met GitHub — probeer het later opnieuw'); }
   if (res.status === 401 || res.status === 403 || res.status === 404) {
-    throw new Error(token ? 'GitHub weigert de toegangssleutel (of er is nog geen versie gepubliceerd)' : 'De versies staan in een privé-opslagplaats: vul onder “Privé-opslagplaats?” een toegangssleutel in');
+    throw new Error(token ? 'GitHub weigert de toegangssleutel (of er is nog geen versie gepubliceerd)' : 'GitHub vindt geen versie. Is de opslagplaats privé? Vul dan onder “Privé-opslagplaats?” een toegangssleutel in');
   }
   if (!res.ok) throw new Error(`GitHub gaf een fout (${res.status})`);
-  const rel = await res.json();
+  let rel = await res.json();
+  if (beta) { // the newest release of all, betas included (drafts and other tags are skipped)
+    const all = (Array.isArray(rel) ? rel : []).filter((r) => r && !r.draft && parse(r.tag_name) && pickAsset(r.assets, env));
+    rel = all.reduce((best, r) => (!best || isNewer(r.tag_name, best.tag_name) ? r : best), null) || {};
+  }
   const version = String(rel.tag_name || '').replace(/^v/, '');
   if (!isNewer(version, current)) return { upToDate: true, version: current };
   const asset = pickAsset(rel.assets, env);

@@ -50,6 +50,7 @@ const DEFAULTS = {
   role: null, serverMode: 'here', url: 'http://localhost:8080', port: 8080, pin: '', autostart: true,
   zoom: 1, alwaysOnTop: false, tray: true, closeToTray: false, hotkeys: false,
   autoUpdate: true,
+  betaUpdates: false,
   startDelay: 0, startHidden: false,                     // seconds to wait after the computer starts (network may not be ready); control panel starts in the tray
   autoInstall: false,                                  // install a found update by itself right after the PC has started (no questions)
   lockMouse: false,                                    // door screen: the mouse cannot leave this monitor, other monitors go black
@@ -487,6 +488,7 @@ ipcMain.handle('setup:save', async (e, next) => {
     display: String(next.display || ''), windowed: !!next.windowed,
     reloadAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(next.reloadAt) ? next.reloadAt : '',
     autoUpdate: next.autoUpdate !== false,
+    betaUpdates: !!next.betaUpdates,
     autoInstall: !!next.autoInstall,
     startDelay: Math.max(0, Math.min(300, Math.round(Number(next.startDelay) || 0))), startHidden: !!next.startHidden,
     lockMouse: !!next.lockMouse,
@@ -513,7 +515,7 @@ function updateToken() {
 }
 const sendSetup = (ch, ...a) => { if (setupWin && !setupWin.isDestroyed()) setupWin.webContents.send(ch, ...a); };
 async function checkForUpdates() {
-  const found = await updater.check(app.getVersion(), updateToken(), { platform: process.platform, arch: process.arch, appImage: !!process.env.APPIMAGE });
+  const found = await updater.check(app.getVersion(), updateToken(), { platform: process.platform, arch: process.arch, appImage: !!process.env.APPIMAGE }, { beta: !!config.betaUpdates });
   updateInfo = found.upToDate ? null : found;
   updateTray();
   return found;
