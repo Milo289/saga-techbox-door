@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacyverklaring – Saga Techbox Deur</title>
+<style>
+:root { --bg:#fff; --fg:#1d1d1f; --mut:#6e6e73; --line:#d2d2d7; }
+@media (prefers-color-scheme: dark) { :root { --bg:#000; --fg:#f5f5f7; --mut:#a1a1a6; --line:#3a3a3c; } }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+main { max-width:760px; margin:0 auto; padding:32px 16px 64px; }
+h1 { font-size:28px; } h2 { font-size:19px; margin-top:28px; } i { color:var(--mut); }
+table { border-collapse:collapse; width:100%; font-size:14px; } th, td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+a { color:inherit; }
+</style></head><body><main>
+<h1>Privacyverklaring Saga Techbox Deur</h1>
+<p><i>Versie 1 – oktober 2026. Dit is een voorlopige tekst voor een beta. Laat hem controleren door je school (privacyfunctionaris) en vul de gegevens van je eigen organisatie in bij punt 8.</i></p>
+<h2>1. Kort samengevat</h2>
+<ul><li>De software draait op <b>jouw eigen server</b>. De ontwikkelaar ontvangt <b>geen</b> gegevens: geen meetgegevens, geen gebruiksstatistieken, geen bezoekersgegevens.</li><li>Jouw school of organisatie is de <b>verwerkingsverantwoordelijke</b>. Zij bepaalt welke gegevens worden verzameld en hoe lang ze worden bewaard.</li><li>Gegevens blijven op de server, tenzij je zelf iets koppelt (zie punt 5).</li></ul>
+<h2>2. Welke gegevens worden verwerkt</h2>
+<table><tr><th>Wie</th><th>Gegevens</th><th>Waarvoor</th></tr><tr><td>Bezoekers</td><td>naam, reden van het bezoek, eventueel een bericht, tijdstip, de keuze om toestemming te geven</td><td>de gebruiker van de deur laten weten wie er is en kunnen antwoorden</td></tr><tr><td>Personen in de lijst</td><td>naam en wat je zelf invult (bijvoorbeeld een nummer of een label)</td><td>herkennen of aankondigen van bekende bezoekers</td></tr><tr><td>Beheerders</td><td>gebruikersnaam, naam, wachtwoord (alleen als onomkeerbare code), tweestapscode en passkeys (versleuteld)</td><td>inloggen</td></tr><tr><td>Alle gebruikers van het paneel</td><td>IP-adres, tijdstip en soort apparaat in het logboek en in de lijst met sessies</td><td>beveiliging, het opsporen van misbruik</td></tr><tr><td>Afspraken en roosters</td><td>wat je zelf invult</td><td>het deurbord laten kloppen</td></tr><tr><td>Apparaten en camera's (alleen als jij ze koppelt)</td><td>gebeurtenissen die zij melden</td><td>automatisering, bijvoorbeeld een slot</td></tr></table>
+<h2>3. Grondslag</h2>
+<p>Voor beheerders en beveiliging: gerechtvaardigd belang (een veilig systeem). Voor bezoekers: toestemming of gerechtvaardigd belang van de organisatie. Welke grondslag geldt, bepaalt de organisatie die de software gebruikt.</p>
+<h2>4. Bewaartermijnen</h2>
+<p>De instelling <b>Bezoekersverzoeken bewaren (dagen)</b> onder Systeem bepaalt hoelang verzoeken blijven staan. <b>Leeg of 0 betekent dat ze blijven staan tot iemand ze verwijdert.</b> Kies bewust een termijn, bijvoorbeeld 90 dagen. Back-ups bevatten dezelfde gegevens en worden zoveel dagen bewaard als je bij Aantal back-ups bewaren instelt. Het logboek is bedoeld om aantoonbaar te zijn en wordt niet automatisch gewist.</p>
+<h2>5. Delen met anderen</h2>
+<p>Standaard deelt de software niets. Dit gebeurt alleen als de beheerder het aanzet:</p>
+<ul><li><b>E-mail</b> via de mailserver die de beheerder invult (bijvoorbeeld Gmail). Berichten gaan dan via die dienst.</li><li><b>Meldingen</b> via ntfy of een webhook-adres dat de beheerder invult.</li><li><b>Updates:</b> de software vraagt GitHub of er een nieuwere versie is. GitHub ziet dan het IP-adres van de server, zoals bij elk bezoek aan een website.</li><li><b>Apple, Google en Microsoft</b> zijn alleen betrokken bij het installeren van apps, niet bij de gegevens op de server.</li></ul>
+<h2>6. Beveiliging</h2>
+<p>Wachtwoorden worden alleen als onomkeerbare code bewaard. Geheimen (mailwachtwoord, tokens, tweestapsleutels) worden versleuteld opgeslagen. Het logboek heeft een ketting, zodat aanpassingen opvallen. Er is tweestapsverificatie en inloggen met een passkey, en een aanvalsbeveiliging. Op een lokaal netwerk kun je https aanzetten met een eigen certificaat. Alle maatregelen helpen, maar geen enkel systeem is helemaal veilig: houd de software bijgewerkt en maak back-ups.</p>
+<h2>7. Jouw rechten</h2>
+<p>Mensen van wie gegevens zijn opgeslagen mogen vragen om <b>inzage</b>, <b>correctie</b>, <b>verwijdering</b> en <b>beperking</b>, en mogen bezwaar maken. Vraag het aan de organisatie die de server beheert (zie punt 8). Een beheerder kan een bericht verwijderen in het paneel (Bezoekers), de bewaartermijn instellen en alle gegevens exporteren (Systeem → Gegevens overzetten). Klachten kun je indienen bij de Autoriteit Persoonsgegevens.</p>
+<h2>8. Wie is verantwoordelijk</h2>
+<p>Vul hier in voor je eigen server: naam van de organisatie, adres, en een contactpersoon of functionaris voor gegevensbescherming.</p>
+<p>Organisatie: …</p>
+<p>Contact: …</p>
+<h2>9. Wijzigingen</h2>
+<p>Deze verklaring kan veranderen. De versie staat bovenaan.</p>
+<p><a href="/voorwaarden">Voorwaarden</a> · <a href="/privacy">Privacyverklaring</a></p>
+</main></body></html>

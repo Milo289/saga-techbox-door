@@ -47,6 +47,7 @@
   <h1>Saga Techbox Deur installeren</h1>
   <p class="lead">Kies je apparaat, download het bestand en volg de drie stappen.</p>
   <p class="note" style="margin-bottom:22px">De downloads staan op GitHub en je hoeft er niet voor in te loggen.</p>
+  <label class="card" id="termsBox" style="display:block;margin-bottom:16px"><input type="checkbox" id="termsOk"> Ik ga akkoord met de <a href="https://github.com/Milo289/saga-techbox-door/blob/main/VOORWAARDEN.md" target="_blank" rel="noopener">gebruiksvoorwaarden</a> en de <a href="https://github.com/Milo289/saga-techbox-door/blob/main/PRIVACY.md" target="_blank" rel="noopener">privacyverklaring</a>. <span class="note" id="termsHint" style="display:block;margin-top:6px">Zonder vinkje werken de downloadknoppen niet.</span></label>
 
   <div class="card" id="mine" hidden>
     <h2 id="mineTitle"></h2>
@@ -63,7 +64,7 @@
     <ol>
       <li>Download het bestand voor jouw computer en pak het uit (dubbelklik op de .zip).</li>
       <li><b>Mac/Linux:</b> dubbelklik op <code>Installeer.command</code> (Linux: <code>bash Installeer.command</code>). <b>Windows:</b> dubbelklik op <code>Installeer-Windows.bat</code>.</li>
-      <li>Het bestand ziet welke computer je hebt (Apple-chip of Intel, Windows, Linux), haalt de nieuwste versie op en start de installatie. De eerste keer log je eenmalig in bij GitHub.</li>
+      <li>Het bestand ziet welke computer je hebt (Apple-chip of Intel, Windows, Linux), haalt de nieuwste versie op en start de installatie. Je hoeft nergens voor in te loggen.</li>
     </ol>
     <p class="note">Zegt je Mac dat het bestand niet geopend kan worden? Rechtsklik erop → <b>Open</b> → <b>Open</b>.</p>
   </div>
@@ -247,5 +248,16 @@
   })();
   </script>
 </main>
+<script>
+(function () {
+  var box = document.getElementById('termsOk'), hint = document.getElementById('termsHint');
+  try { box.checked = localStorage.getItem('sagaTermsOk') === '1'; } catch (e) {}
+  box.addEventListener('change', function () { try { localStorage.setItem('sagaTermsOk', box.checked ? '1' : '0'); } catch (e) {} hint.style.color = ''; });
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a.dl');
+    if (a && !box.checked) { e.preventDefault(); hint.textContent = 'Vink eerst aan dat je akkoord gaat met de voorwaarden en de privacyverklaring.'; hint.style.color = '#ff9f0a'; box.focus(); }
+  }, true);
+})();
+</script>
 </body>
 </html>

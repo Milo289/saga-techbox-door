@@ -138,6 +138,7 @@
   </div>
 
   <p class="err" id="err"></p>
+  <label class="check" id="termsRow"><input type="checkbox" id="terms"> Ik ga akkoord met de <a href="#" id="termsLink">gebruiksvoorwaarden</a> en de <a href="#" id="privacyLink">privacyverklaring</a>.</label>
   <button class="go" id="save">Opslaan en starten</button>
   <p class="hint" id="keys"></p>
 </main>
@@ -262,12 +263,19 @@
     $('testResult').className = ok ? 'hint ok' : 'hint bad';
   };
 
+  // the terms are asked once (again when the text gets a new version)
+  const TERMS = 1;
+  $('terms').checked = c.termsAccepted >= TERMS;
+  $('termsRow').classList.toggle('hidden', c.termsAccepted >= TERMS);
+  $('termsLink').onclick = (e) => { e.preventDefault(); window.setup.openLegal('voorwaarden'); };
+  $('privacyLink').onclick = (e) => { e.preventDefault(); window.setup.openLegal('privacy'); };
   $('save').onclick = async () => {
+    if (!$('terms').checked) { $('err').textContent = 'Vink eerst aan dat je akkoord gaat met de voorwaarden en de privacyverklaring.'; return; }
     $('save').disabled = true; $('err').textContent = '';
     const res = await window.setup.save({
       role: effective().role, serverMode: effective().mode, url: $('url').value.trim(),
       port: $('port').value, pin: $('pin').value, autostart: $('autostart').checked,
-      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), autoUpdate: $('autoUpdate').checked, betaUpdates: $('betaUpdates').checked, autoInstall: $('autoInstall').checked, startDelay: $('startDelay').value, startHidden: $('startHidden').checked, alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
+      zoom: $('zoom').value, reloadAt: $('reloadAt').value.trim(), termsAccepted: TERMS, autoUpdate: $('autoUpdate').checked, betaUpdates: $('betaUpdates').checked, autoInstall: $('autoInstall').checked, startDelay: $('startDelay').value, startHidden: $('startHidden').checked, alwaysOnTop: $('alwaysOnTop').checked, tray: $('tray').checked,
       closeToTray: $('closeToTray').checked, hotkeys: $('hotkeys').checked, display: $('display').value, windowed: $('windowed').checked, lockMouse: $('lockMouse').checked,
     });
     if (!res || !res.ok) { $('err').textContent = (res && res.error) || 'Opslaan lukte niet.'; $('save').disabled = false; }

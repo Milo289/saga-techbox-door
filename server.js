@@ -2365,6 +2365,8 @@ const handle = async (req, res) => {
       return res.end(iphone ? pki.mobileconfig(httpsInfo.caDer, 'Saga Techbox') : httpsInfo.caPem);
     }
     if (p === '/help' || p === '/handleiding') return serveFile(res, 'help.html', req);
+    if (p === '/voorwaarden') return serveFile(res, 'voorwaarden.html', req); // terms of use and privacy statement (from VOORWAARDEN.md and PRIVACY.md)
+    if (p === '/privacy' || p === '/privacyverklaring') return serveFile(res, 'privacy.html', req);
     if (p === '/events') {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;

@@ -4,7 +4,7 @@
 #   Linux:  bash Installeer.command
 # Het herkent je computer (Mac met Apple-chip of Intel, Linux x64 of ARM), haalt de nieuwste versie
 # van GitHub op (ook developer betas) en start de installatie.
-# Opties:  --stabiel = alleen gewone versies   --dry-run = alleen laten zien wat het zou kiezen.
+# Opties:  --akkoord = je gaat akkoord met de voorwaarden (niet meer vragen)   --stabiel = alleen gewone versies   --dry-run = alleen laten zien wat het zou kiezen.
 set -u
 REPO="Milo289/saga-techbox-door"
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
@@ -38,6 +38,15 @@ if [ -z "$URL" ]; then
   echo "Ik vond geen bestand voor deze computer. Download het met de hand op: https://github.com/$REPO/releases  (kies het bestand dat eindigt op ${PAT#\*})"
   [ "$OS" = Darwin ] && open "https://github.com/$REPO/releases"
   pause "Druk Enter om af te sluiten… "; exit 1
+fi
+if ! printf '%s ' "$@" | grep -q -- '--akkoord'; then
+  echo
+  echo "Voordat je installeert, lees de voorwaarden en de privacyverklaring:"
+  echo "  Voorwaarden: https://github.com/$REPO/blob/main/VOORWAARDEN.md"
+  echo "  Privacy:     https://github.com/$REPO/blob/main/PRIVACY.md"
+  echo "Kort: een beta kan fouten hebben, jij beheert je eigen server en gegevens, er gaan geen gegevens naar de maker."
+  read -r -p "Ga je akkoord met de gebruiksvoorwaarden en de privacyverklaring? [j/N] " yn
+  case "$yn" in j|J|y|Y) ;; *) echo "Zonder akkoord installeer ik niets. Er is niets gedownload."; pause "Druk Enter om af te sluiten… "; exit 1 ;; esac
 fi
 echo "Downloaden naar $DEST …"
 curl -fL --progress-bar -o "$DEST/$(basename "$URL")" "$URL" || { pause "Downloaden mislukte. Druk Enter… "; exit 1; }

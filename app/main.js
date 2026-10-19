@@ -51,6 +51,7 @@ const DEFAULTS = {
   zoom: 1, alwaysOnTop: false, tray: true, closeToTray: false, hotkeys: false,
   autoUpdate: true,
   betaUpdates: false,
+  termsAccepted: 0,
   startDelay: 0, startHidden: false,                     // seconds to wait after the computer starts (network may not be ready); control panel starts in the tray
   autoInstall: false,                                  // install a found update by itself right after the PC has started (no questions)
   lockMouse: false,                                    // door screen: the mouse cannot leave this monitor, other monitors go black
@@ -473,6 +474,8 @@ ipcMain.handle('setup:forgetLogin', async (e) => {
 ipcMain.handle('setup:discover', async (e) => (fromSetup(e) ? discover({ timeout: 1800 }) : []));
 ipcMain.handle('setup:test', async (e, url) => (fromSetup(e) ? isDoorServer(String(url)) : false));
 ipcMain.handle('setup:reveal', (e) => { if (fromSetup(e) && fs.existsSync(DATA_DIR)) shell.openPath(DATA_DIR); });
+const LEGAL = { voorwaarden: 'VOORWAARDEN.md', privacy: 'PRIVACY.md' };
+ipcMain.handle('setup:openLegal', (e, which) => { if (fromSetup(e) && LEGAL[which]) openSafe(`https://github.com/Milo289/saga-techbox-door/blob/main/${LEGAL[which]}`); });
 ipcMain.handle('setup:save', async (e, next) => {
   if (!fromSetup(e)) return { ok: false };
   const c = {
@@ -489,6 +492,7 @@ ipcMain.handle('setup:save', async (e, next) => {
     reloadAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(next.reloadAt) ? next.reloadAt : '',
     autoUpdate: next.autoUpdate !== false,
     betaUpdates: !!next.betaUpdates,
+    termsAccepted: Math.max(Number(config.termsAccepted) || 0, Math.min(1, Number(next.termsAccepted) || 0)),
     autoInstall: !!next.autoInstall,
     startDelay: Math.max(0, Math.min(300, Math.round(Number(next.startDelay) || 0))), startHidden: !!next.startHidden,
     lockMouse: !!next.lockMouse,

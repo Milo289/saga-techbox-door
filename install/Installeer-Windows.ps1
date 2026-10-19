@@ -1,9 +1,9 @@
 # Saga Techbox Deur - slimme installatie voor Windows.
 # Dubbelklik "Installeer-Windows.bat" (of voer dit bestand uit met PowerShell).
 # Het herkent je pc, haalt de nieuwste versie van GitHub op (ook developer betas) en start de installatie.
-# Opties:  -Stabiel = alleen gewone versies   -ZoekAlleen = alleen zoeken, niet downloaden   -DryRun = alleen laten zien wat het zou kiezen.
+# Opties:  -Akkoord = je gaat akkoord met de voorwaarden (niet meer vragen)   -Stabiel = alleen gewone versies   -ZoekAlleen = alleen zoeken, niet downloaden   -DryRun = alleen laten zien wat het zou kiezen.
 # (Dit bestand bevat bewust geen accenten of bijzondere tekens: Windows PowerShell leest die verkeerd.)
-param([switch]$DryRun, [switch]$Stabiel, [switch]$ZoekAlleen)
+param([switch]$DryRun, [switch]$Stabiel, [switch]$ZoekAlleen, [switch]$Akkoord)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $repo = 'Milo289/saga-techbox-door'
@@ -39,6 +39,15 @@ if (-not $asset) {
 }
 
 if ($ZoekAlleen) { Write-Host "Gevonden: $($asset.browser_download_url)"; exit 0 }
+if (-not $Akkoord) {
+  Write-Host ''
+  Write-Host 'Voordat je installeert, lees de voorwaarden en de privacyverklaring:'
+  Write-Host "  Voorwaarden: https://github.com/$repo/blob/main/VOORWAARDEN.md"
+  Write-Host "  Privacy:     https://github.com/$repo/blob/main/PRIVACY.md"
+  Write-Host 'Kort: een beta kan fouten hebben, jij beheert je eigen server en gegevens, er gaan geen gegevens naar de maker.'
+  $yn = Read-Host 'Ga je akkoord met de gebruiksvoorwaarden en de privacyverklaring? [j/N]'
+  if ($yn -notmatch '^[jJyY]') { Pause-Exit 'Zonder akkoord installeer ik niets. Er is niets gedownload.' }
+}
 $dest = Join-Path $env:USERPROFILE 'Downloads'
 $file = Join-Path $dest $asset.name
 Write-Host "Versie $tag - downloaden naar $dest ..."

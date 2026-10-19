@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('setup', {
   get: () => ipcRenderer.invoke('setup:get'),
   test: (url) => ipcRenderer.invoke('setup:test', url),
   save: (config) => ipcRenderer.invoke('setup:save', config),
+  openLegal: (which) => ipcRenderer.invoke('setup:openLegal', which),
   reveal: () => ipcRenderer.invoke('setup:reveal'),
   forgetLogin: () => ipcRenderer.invoke('setup:forgetLogin'),
   discover: () => ipcRenderer.invoke('setup:discover'),

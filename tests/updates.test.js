@@ -152,3 +152,13 @@ test('updates in the server: only the main account, the code is stored encrypted
   const raw = fs.readFileSync(path.join(srv.dataDir, 'state.json'), 'utf8');
   assert.equal(raw.includes('github_pat_TESTWAARDE'), false, 'not in plain text on disk');
 });
+
+test('legal pages: the pages shown at /voorwaarden and /privacy are made from the markdown texts and are up to date', async (t) => {
+  const legal = require('../scripts/legal.js');
+  for (const [name, html] of Object.entries(legal.build())) assert.equal(fs.readFileSync(path.join(__dirname, '..', 'public', name), 'utf8'), html, `${name} is out of date: run node scripts/legal.js`);
+  const { startServer, call } = require('./helpers');
+  const srv = await startServer({ patch: true, system: true, dir: fs.mkdtempSync(path.join(os.tmpdir(), 'legal-')) });
+  t.after(() => srv.stop());
+  for (const p of ['/voorwaarden', '/privacy']) { const r = await call(srv, 'GET', p); assert.equal(r.status, 200); assert.match(r.text, /<h1>/); }
+  assert.match((await call(srv, 'GET', '/privacy')).text, /verwerkingsverantwoordelijke/);
+});
