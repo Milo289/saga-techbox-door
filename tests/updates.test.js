@@ -40,12 +40,12 @@ test('updates: unsafe archive names are refused', () => {
   assert.equal(U.safeNames(''), false);
 });
 
-function makeBundle(dir, version) {
+function makeBundle(dir, version, saga) {
   const src = fs.mkdtempSync(path.join(os.tmpdir(), 'bundle-'));
   fs.mkdirSync(path.join(src, 'public'));
   fs.writeFileSync(path.join(src, 'public', 'index.html'), '<p>x</p>');
   fs.writeFileSync(path.join(src, 'server.js'), 'module.exports={}');
-  fs.writeFileSync(path.join(src, 'package.json'), JSON.stringify({ version }));
+  fs.writeFileSync(path.join(src, 'package.json'), JSON.stringify(saga ? { version, sagaVersion: saga } : { version }));
   const file = path.join(dir, 'b.tgz');
   execFileSync('tar', ['-czf', 'b.tgz', '-C', path.basename(src), '.'], { cwd: os.tmpdir() }); fs.copyFileSync(path.join(os.tmpdir(), 'b.tgz'), file); fs.rmSync(path.join(os.tmpdir(), 'b.tgz'));
   fs.rmSync(src, { recursive: true, force: true });
@@ -230,4 +230,42 @@ test('signing: the script signs, the built-in key is the public half of the key 
   assert.equal(U.signatureOk(Buffer.from('abd  file\n'), fs.readFileSync(f + '.sig', 'utf8'), PUB), false, 'a changed file fails');
   assert.throws(() => execFileSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'sign-release.js'), f], { env: { ...process.env, RELEASE_SIGNING_KEY: '' }, stdio: 'pipe' }), 'no key, no release');
   assert.equal(require('../app/updater.js').RELEASE_PUBLIC_KEY, U.RELEASE_PUBLIC_KEY, 'server and desktop app trust the same key');
+});
+
+test('a bundle made like the release job does it (plain number in "version", the beta in sagaVersion) is accepted by the new check AND by the check of the servers that are out there', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'upd-'));
+  const data = makeBundle(dir, '3.5.0', '3.5.0-beta.16');
+  const sum = crypto.createHash('sha256').update(data).digest('hex');
+  // the check the older servers have (kept here as it was): it must pass for this bundle
+  const oldCheck = (pjVersion, releaseVersion) => U.compareVersions(pjVersion, releaseVersion.replace(/-.*/, '')) < 0;
+  assert.equal(oldCheck('3.5.0', '3.5.0-beta.16'), false, 'older servers accept a plain 3.5.0 for a 3.5.0-beta release');
+  assert.equal(oldCheck('3.5.0-beta.16', '3.5.0-beta.16'), true, 'and refused a bundle that carried the beta suffix in "version" (that was the bug)');
+  const u = updater(dir, { bundle: data, sum: Buffer.from(sum + '  Saga-Techbox-Server.tgz\n') }, '3.4.0-beta.15');
+  await u.check();
+  const r = await u.apply();
+  assert.equal(r.version, '3.4.0-beta.16');
+  const cur = JSON.parse(fs.readFileSync(path.join(dir, 'app', 'current.json'), 'utf8'));
+  assert.ok(fs.existsSync(path.join(dir, 'app', cur.dir, 'package.json')));
+  // the running server reads the exact version from the bundle
+  const pj = JSON.parse(fs.readFileSync(path.join(dir, 'app', cur.dir, 'package.json'), 'utf8'));
+  assert.equal(pj.version, '3.5.0'); assert.equal(pj.sagaVersion, '3.5.0-beta.16');
+});
+
+test('boot.js compares the exact versions: a newer disk beats an older update, a newer update beats an older disk', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'boot2-'));
+  const disk = path.join(root, 'disk'), data = path.join(root, 'data'), up = path.join(data, 'app', 'x');
+  fs.mkdirSync(disk); fs.mkdirSync(up, { recursive: true });
+  for (const f of ['boot.js', 'updates.js']) fs.copyFileSync(path.join(__dirname, '..', f), path.join(disk, f));
+  fs.writeFileSync(path.join(disk, 'server.js'), 'console.log("DISK")');
+  fs.writeFileSync(path.join(up, 'server.js'), 'console.log("NEW")');
+  fs.writeFileSync(path.join(data, 'app', 'current.json'), '{"version":"3.5.0-beta.11","dir":"x"}');
+  const start = () => execFileSync(process.execPath, [path.join(disk, 'boot.js')], { env: { ...process.env, DATA_DIR: data }, encoding: 'utf8', timeout: 20000 });
+  fs.writeFileSync(path.join(up, 'package.json'), '{"version":"3.5.0","sagaVersion":"3.5.0-beta.11"}');
+  fs.writeFileSync(path.join(disk, 'package.json'), '{"version":"3.5.0-beta.12"}');
+  assert.match(start(), /DISK/, 'a newer ISO wins over the update on the data disk');
+  fs.writeFileSync(path.join(disk, 'package.json'), '{"version":"3.5.0-beta.7"}');
+  assert.match(start(), /NEW/, 'an older ISO runs the newer update');
+  fs.rmSync(path.join(data, 'app', 'tries.json'), { force: true });
+  fs.writeFileSync(path.join(disk, 'package.json'), '{"version":"3.5.0-beta.11"}');
+  assert.match(start(), /DISK/, 'the same version: the disk');
 });

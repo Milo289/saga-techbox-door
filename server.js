@@ -28,7 +28,7 @@ const ADMIN_PIN = process.env.ADMIN_PIN || '';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const BUILD = crypto.randomBytes(4).toString('hex'); // screens reload themselves when this changes
 let APP_VERSION = '—';
-try { APP_VERSION = require('./package.json').version; } catch {}
+try { const pj = require('./package.json'); APP_VERSION = pj.sagaVersion || pj.version; } catch {} // sagaVersion: the exact version with -beta.N (the update bundle keeps a plain number in "version" so that older servers accept it)
 const MODES = ['open', 'closed', 'busy'];
 
 // ---------- defaults ----------

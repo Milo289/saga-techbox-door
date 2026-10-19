@@ -228,7 +228,8 @@ jobs:
       - name: The server bundle (the update button in the panel downloads this)
         run: |
           mkdir -p srv && cp -r package.json boot.js updates.js server.js power.js integrations.js security.js pki.js schedule.js mdns.js settings-schema.js check-selftest.js check-runner.js discover.js seal.js access.js public srv/
-          (cd srv && npm pkg set version="${GITHUB_REF_NAME#v}")   # the bundle knows which version it is
+          # "version" stays a plain number (older servers compare it with the release and refuse a beta suffix); sagaVersion has the exact version
+          (cd srv && TAG="${GITHUB_REF_NAME#v}" && npm pkg set version="${TAG%%-*}" sagaVersion="$TAG")
           tar -czf out/Saga-Techbox-Server.tgz -C srv .
           (cd out && sha256sum Saga-Techbox-Server.tgz | cut -d' ' -f1 > Saga-Techbox-Server.tgz.sha256)
       - name: The smart installers (they recognise the computer themselves)

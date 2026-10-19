@@ -15,7 +15,8 @@ function pick() {
     const cur = JSON.parse(fs.readFileSync(path.join(root, 'current.json'), 'utf8'));
     const dir = path.join(root, path.basename(String(cur.dir || '')));
     if (!fs.existsSync(path.join(dir, 'server.js'))) return null;
-    const own = require(path.join(here, 'package.json')).version, theirs = require(path.join(dir, 'package.json')).version;
+    const ver = (f) => { const pj = require(path.join(f, 'package.json')); return pj.sagaVersion || pj.version; };
+    const own = ver(here), theirs = ver(dir);
     if (compareVersions(theirs, own) <= 0) return null; // the disk itself is newer (a new ISO): its code wins
     const triesFile = path.join(root, 'tries.json');
     let t = {}; try { t = JSON.parse(fs.readFileSync(triesFile, 'utf8')); } catch {}

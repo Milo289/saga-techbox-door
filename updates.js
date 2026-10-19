@@ -127,7 +127,7 @@ function create({ dataDir, appDir, currentVersion, getToken, getChannel, log = (
         await run('tar', ['-xzf', rel, '-C', relTmp], root);
         for (const need of ['server.js', 'package.json', 'public']) if (!fs.existsSync(path.join(tmp, need))) throw new Error('Het serverbestand is onvolledig (' + need + ' ontbreekt). Er is niets veranderd.');
         const pj = JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'), 'utf8'));
-        if (compareVersions(pj.version, r.version.replace(/-.*/, '')) < 0) throw new Error('Het serverbestand hoort niet bij deze versie. Er is niets veranderd.');
+        if (compareVersions(pj.sagaVersion || pj.version, r.version) < 0 && compareVersions(pj.version, r.version.replace(/-.*/, '')) < 0) throw new Error('Het serverbestand hoort niet bij deze versie. Er is niets veranderd.');
         fs.rmSync(dir, { recursive: true, force: true });
         fs.renameSync(tmp, dir);
       } finally { fs.rmSync(file, { force: true }); fs.rmSync(tmp, { recursive: true, force: true }); }
