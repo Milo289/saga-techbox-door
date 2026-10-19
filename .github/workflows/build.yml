@@ -24,6 +24,8 @@ jobs:
       - name: The Windows installer script finds the newest file (no download)
         if: matrix.os == 'windows-latest'
         shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./install/Installeer-Windows.ps1 -ZoekAlleen
       - uses: actions/setup-node@v4
         with:

@@ -15,15 +15,18 @@ Write-Host "Ik zie: Windows-pc ($arch)"
 Write-Host "Bestand: $pattern"
 if ($DryRun) { exit 0 }
 
-function Pause-Exit($msg) { Write-Host $msg; Read-Host 'Druk Enter om af te sluiten'; exit 1 }
+function Pause-Exit($msg) { Write-Host $msg; if (-not $ZoekAlleen) { Read-Host 'Druk Enter om af te sluiten' }; exit 1 }
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 Write-Host ''
 Write-Host 'Zoeken naar de nieuwste versie ...'
 try {
-  $rels = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=30" -Headers @{ 'User-Agent' = 'saga-installeer' }
+  $hdr = @{ 'User-Agent' = 'saga-installeer' }
+  if ($env:GITHUB_TOKEN) { $hdr['Authorization'] = "Bearer $env:GITHUB_TOKEN" }   # only used by the automatic test (shared runners hit the rate limit)
+  $rels = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=30" -Headers $hdr
 } catch {
   Start-Process "https://github.com/$repo/releases"
+  Write-Host "Fout: $($_.Exception.Message)"
   Pause-Exit 'Geen verbinding met GitHub. Download het bestand dat eindigt op windows-setup.exe met de hand (de pagina is geopend).'
 }
 $asset = $null; $tag = ''
