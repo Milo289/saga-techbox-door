@@ -33,6 +33,20 @@ function build(ctx) {
     F('hours.breaks', 'Pauzes (elke dag)', 'records', { columns: [{ key: 'from', label: 'Van', type: 'time' }, { key: 'to', label: 'Tot', type: 'time' }, { key: 'label', label: 'Naam', type: 'text', max: 40 }], value: hours.breaks || [], blank: { from: '12:00', to: '13:00', label: '' }, addLabel: 'Pauze toevoegen' }),
     F('hours.holidays', 'Vrije dagen en vakanties', 'records', { columns: [{ key: 'date', label: 'Datum', type: 'date' }, { key: 'label', label: 'Naam', type: 'text', max: 60 }], value: hours.holidays || [], blank: { date: '', label: '' }, addLabel: 'Vrije dag toevoegen' }),
   ]);
+  add('weergave', 'Weergave van het deurscherm', 'settings', 'Hoe het deurscherm eruitziet en zich gedraagt. De standaardwaarden geven het gewone scherm.', [
+    C('look.mode', 'Weergavemodus', [['standard', 'Standaard'], ['status', 'Alleen de status (groot)'], ['clock', 'Grote klok met status'], ['agenda', 'Status met planning'], ['strip', 'Smalle balk (breed, laag scherm)'], ['minimal', 'Alleen kleur en woord']]),
+    C('look.font', 'Lettertype', [['system', 'Systeem'], ['rounded', 'Afgerond'], ['serif', 'Met schreef'], ['mono', 'Vaste breedte'], ['readable', 'Goed leesbaar']]),
+    N('look.textScale', 'Tekstgrootte (%)', 70, 160), C('look.weight', 'Letterdikte', [['light', 'Dun'], ['normal', 'Normaal'], ['bold', 'Vet']]),
+    C('look.clock', 'Klok', [['digital', 'Digitaal'], ['analog', 'Wijzerplaat'], ['none', 'Geen klok']]), B('look.seconds', 'Seconden tonen'), C('look.date', 'Datum', [['none', 'Geen'], ['short', 'Kort'], ['long', 'Lang']]),
+    C('look.transition', 'Animatie bij een nieuwe status', [['none', 'Geen'], ['fade', 'Vervagen'], ['slide', 'Schuiven'], ['zoom', 'Inzoomen']]),
+    C('look.cards', 'Stijl van knoppen', [['soft', 'Zacht'], ['flat', 'Plat'], ['outline', 'Omlijnd'], ['glass', 'Glas']]), C('look.corners', 'Hoeken', [['sharp', 'Scherp'], ['soft', 'Een beetje rond'], ['round', 'Rond']]),
+    C('look.background', 'Achtergrond', [['glow', 'Gloed (standaard)'], ['plain', 'Effen'], ['gradient', 'Kleurverloop'], ['dots', 'Stippen'], ['aurora', 'Langzaam bewegend']]),
+    C('look.border', 'Gekleurde rand', [['off', 'Geen'], ['thin', 'Dun'], ['thick', 'Dik'], ['pulse', 'Kloppend']]), B('look.countdown', 'Voortgangsbalk tot de status verandert'),
+    C('look.icons', 'Symbolen op knoppen', [['symbols', 'Tonen'], ['none', 'Niet tonen']]), N('look.agenda', 'Aantal geplande momenten tonen', 0, 5),
+    B('look.ticker.enabled', 'Lopende tekst onderaan'), T('look.ticker.text', 'Tekst van de lopende regel', 200), T('look.footer', 'Vaste regel onderaan', 120),
+    B('look.idle.enabled', 'Schermbeveiliging als niemand het scherm aanraakt'), N('look.idle.minutes', 'Schermbeveiliging na (minuten)', 1, 240),
+    B('look.shift', 'Beeld af en toe een paar pixels verschuiven (tegen inbranden)'), B('look.contrast', 'Hoog contrast'), B('look.motion', 'Bewegingen en animaties'),
+  ]);
   add('visitors', 'Bezoekers', 'settings', 'Wat bezoekers op het deurscherm kunnen doen.', [
     B('visitors.doorbell', 'Deurbel'), B('visitors.bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'), B('visitors.reasons', 'Redenen'), B('visitors.appointments', 'Tijd booken'), B('visitors.messages', 'Vraagje'), B('visitors.callback', 'Terugbellen'),
     F('reasons', 'Redenen (één per regel)', 'lines', { max: 80 }), F('topics', 'Vraag-onderwerpen (één per regel)', 'lines', { max: 60 }), F('quickReplies', 'Snelle antwoorden (één per regel)', 'lines', { max: 200 }),

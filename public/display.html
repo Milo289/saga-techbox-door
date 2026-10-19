@@ -213,6 +213,61 @@
   body.light .sheet input, body.light .sheet textarea, body.light .slot, body.light .picked, body.light .nrdisp, body.light .switch { background: var(--s2); border-color: transparent; }
   body.light .key, body.light .topic { background: var(--s2); }
   body.light .sheet input:focus, body.light .sheet textarea:focus { border-color: var(--c); background: #fff; }
+
+  /* ---------- look: chosen under Ontwerp → Weergave (body carries data-* attributes) ---------- */
+  body[data-font="rounded"] { font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", system-ui, sans-serif; }
+  body[data-font="serif"] { font-family: "New York", Georgia, "Times New Roman", serif; }
+  body[data-font="mono"] { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  body[data-font="readable"] { font-family: Verdana, "Atkinson Hyperlegible", "Trebuchet MS", sans-serif; letter-spacing: .01em; }
+  body[data-weight="light"] #label { font-weight: 300; } body[data-weight="bold"] #label { font-weight: 900; } body[data-weight="bold"] { font-weight: 600; }
+  body[data-transition="none"] .hero.swap > :not(.ring) { animation: none; }
+  body[data-transition="fade"] .hero.swap > :not(.ring) { animation: fadeIn .8s ease; }
+  body[data-transition="zoom"] .hero.swap > :not(.ring) { animation: zoomIn .6s cubic-bezier(.2,.8,.2,1); }
+  @keyframes fadeIn { from { opacity: 0; } } @keyframes zoomIn { from { transform: scale(.82); opacity: .2; } }
+  body[data-cards="flat"] .tile, body[data-cards="flat"] .topic { box-shadow: none; background: var(--s2); }
+  body[data-cards="outline"] .tile, body[data-cards="outline"] .topic { background: transparent; box-shadow: none; border: calc(var(--u)*.35) solid var(--line); }
+  body[data-cards="glass"] .tile, body[data-cards="glass"] .topic { background: color-mix(in srgb, var(--fg) 9%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); box-shadow: none; }
+  body[data-corners="sharp"] .tile, body[data-corners="sharp"] .topic, body[data-corners="sharp"] .key, body[data-corners="sharp"] .btn, body[data-corners="sharp"] .slot, body[data-corners="sharp"] .daytab, body[data-corners="sharp"] #note, body[data-corners="sharp"] .sheet, body[data-corners="sharp"] .picked, body[data-corners="sharp"] .sheet input, body[data-corners="sharp"] .sheet textarea { border-radius: 3px !important; }
+  body[data-corners="soft"] .tile, body[data-corners="soft"] .topic, body[data-corners="soft"] .key, body[data-corners="soft"] .btn, body[data-corners="soft"] .slot, body[data-corners="soft"] #note, body[data-corners="soft"] .sheet, body[data-corners="soft"] .picked, body[data-corners="soft"] .sheet input, body[data-corners="soft"] .sheet textarea { border-radius: calc(var(--u)*.8) !important; }
+  body[data-background="plain"] #app, body[data-background="plain"] #app.landscape { background: var(--bg); }
+  body[data-background="gradient"] #app, body[data-background="gradient"] #app.landscape { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 30%, var(--bg)), var(--bg) 72%); }
+  body[data-background="dots"] #app, body[data-background="dots"] #app.landscape { background: radial-gradient(color-mix(in srgb, var(--c) 32%, transparent) 1.6px, transparent 1.8px) 0 0 / calc(var(--u)*3.2) calc(var(--u)*3.2), var(--bg); }
+  body[data-background="aurora"] #app, body[data-background="aurora"] #app.landscape { background: linear-gradient(125deg, var(--bg), color-mix(in srgb, var(--c) 34%, var(--bg)), var(--bg), color-mix(in srgb, var(--c) 20%, var(--bg)), var(--bg)); background-size: 320% 320%; animation: aurora 36s ease-in-out infinite; }
+  @keyframes aurora { 50% { background-position: 100% 60%; } }
+  body[data-border]:not([data-border="off"]) #app::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 40; border: calc(var(--u)*.6) solid var(--c); }
+  body[data-border="thick"] #app::after, body[data-border="pulse"] #app::after { border-width: calc(var(--u)*1.7); }
+  body[data-border="pulse"] #app::after { animation: edge 2.6s ease-in-out infinite; } @keyframes edge { 50% { opacity: .25; } }
+  body.hc { --dim: #e6e6ea; --mute: #c4c4ca; --line: #8a8a92; } body.hc.light { --dim: #1f2228; --mute: #3a3f48; --line: #555a64; }
+  body.hc .tile, body.hc .topic { border: calc(var(--u)*.35) solid var(--fg); } body.hc #label { text-shadow: 0 0 1px currentColor; }
+  body.nomotion *, body.nomotion *::before, body.nomotion *::after { animation: none !important; transition: none !important; }
+  body[data-icons="none"] .tile svg { display: none; }
+  /* extra parts: big clock, plan, progress, ticker, footer */
+  #bigclock { display: none; font-size: calc(var(--u)*13); font-weight: 300; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; color: var(--fg); }
+  #bigclock svg { width: calc(var(--u)*34); height: calc(var(--u)*34); } #time svg { width: calc(var(--u)*5.4); height: calc(var(--u)*5.4); vertical-align: middle; }
+  #bar { display: none; width: min(100%, calc(var(--u)*46)); height: calc(var(--u)*.9); border-radius: 999px; background: color-mix(in srgb, var(--fg) 14%, transparent); overflow: hidden; margin-top: calc(var(--u)*1.2); }
+  #bar span { display: block; height: 100%; width: 0; background: var(--c); border-radius: inherit; transition: width 1s linear; }
+  #agenda { display: none; flex-direction: column; gap: calc(var(--u)*.8); font-size: calc(var(--u)*2.6); color: var(--dim); margin-top: calc(var(--u)*1.4); }
+  #agenda div { background: var(--s1); border-radius: calc(var(--u)*1.6); padding: calc(var(--u)*1.2) calc(var(--u)*2.4); } #agenda b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  #ticker { display: none; position: absolute; left: 0; right: 0; bottom: 0; overflow: hidden; white-space: nowrap; background: color-mix(in srgb, var(--c) 18%, var(--bg)); color: var(--fg); font-size: calc(var(--u)*3); font-weight: 600; padding: calc(var(--u)*1.2) 0; z-index: 30; }
+  #ticker span { display: inline-block; padding-left: 100%; animation: marq 30s linear infinite; } @keyframes marq { to { transform: translateX(-100%); } }
+  #foot { display: none; position: absolute; left: 0; right: 0; bottom: calc(var(--u)*1.2); text-align: center; color: var(--mute); font-size: calc(var(--u)*2.1); z-index: 30; pointer-events: none; }
+  body[data-pad="1"] #app { padding-bottom: calc(var(--u)*11.5); } body[data-pad="2"] #app { padding-bottom: calc(var(--u)*9); } body[data-pad="3"] #app { padding-bottom: calc(var(--u)*15.5); }
+  body[data-shift="1"] #app > header, body[data-shift="1"] #app > main { translate: var(--sx, 0px) var(--sy, 0px); transition: translate 3s ease; }
+  /* modes */
+  body[data-mode="status"] #ask, body[data-mode="status"] #extra, body[data-mode="status"] #qr, body[data-mode="status"] #weather, body[data-mode="status"] #note { display: none !important; }
+  body[data-mode="status"] #label { font-size: calc(var(--u)*27) !important; }
+  body[data-mode="minimal"] header, body[data-mode="minimal"] #ask, body[data-mode="minimal"] #extra, body[data-mode="minimal"] #qr, body[data-mode="minimal"] #note, body[data-mode="minimal"] #message, body[data-mode="minimal"] #until, body[data-mode="minimal"] #untilAt { display: none !important; }
+  body[data-mode="minimal"] #label { font-size: calc(var(--u)*30) !important; } body[data-mode="minimal"] .ring { width: calc(var(--u)*6); height: calc(var(--u)*6); }
+  body[data-mode="clock"] #bigclock { display: block; } body[data-mode="clock"] #label { font-size: calc(var(--u)*11) !important; } body[data-mode="clock"] #time { visibility: hidden; }
+  body[data-mode="agenda"] #agenda { display: flex; }
+  #app.strip { flex-direction: row; align-items: center; gap: calc(var(--u)*4); padding: calc(var(--u)*2.5) calc(var(--u)*4); }
+  #app.strip header { flex-direction: column; align-items: flex-end; flex: none; gap: 0; } #app.strip main { display: flex; flex-direction: row; align-items: center; gap: calc(var(--u)*4); flex: 1; min-width: 0; }
+  #app.strip .hero { flex-direction: row; justify-content: flex-start; text-align: left; align-items: center; gap: calc(var(--u)*3); flex-wrap: nowrap; } #app.strip #label { font-size: calc(var(--u)*11) !important; }
+  #app.strip #until { max-width: none; font-size: calc(var(--u)*3.6); } #app.strip #message, #app.strip #extra, #app.strip #qr, #app.strip #note, #app.strip #ask, #app.strip #agenda, #app.strip #bigclock { display: none !important; }
+  /* screen saver: nothing to tap, everything dim and slowly drifting */
+  body.saver #ask, body.saver #extra, body.saver #qr, body.saver #note, body.saver #agenda { visibility: hidden; }
+  body.saver #app { filter: brightness(.42); } body.saver .hero { animation: drift 80s ease-in-out infinite alternate; }
+  @keyframes drift { from { translate: -4vmin -3vmin; } to { translate: 4vmin 3vmin; } }
 </style>
 </head>
 <body>
@@ -227,11 +282,14 @@
     <section class="hero">
       <div class="ring"></div>
       <div id="label" role="status" aria-live="polite"></div>
+      <div id="bigclock"></div>
       <div id="until" class="ph" data-ph="Over 30 minuten gaan we sluiten"></div>
+      <div id="bar"><span></span></div>
       <div id="untilAt" class="ph" data-ph="om 15:12"></div>
       <div id="message" class="ph" data-ph="Bericht"></div>
       <div id="note" class="ph" data-ph="Jouw bericht aan bezoekers"></div>
       <div id="extra" class="ph" data-ph="Bezet 13:00–14:00 · Vandaag open 09:00–17:00"></div>
+      <div id="agenda"></div>
       <div id="qr" class="ph" data-ph="QR-code"></div>
     </section>
     <section class="ask" id="ask">
@@ -243,6 +301,8 @@
   <div id="modal"><div class="sheet" id="sheet"></div></div>
   <div id="offline">Verbinding herstellen…</div>
   <div id="toast"></div>
+  <div id="ticker"><span></span></div>
+  <div id="foot"></div>
   <div id="dim"></div>
 </div>
 
@@ -353,10 +413,14 @@
     app.style.width = VISIT ? '100%' : W + 'px';
     app.style.height = VISIT ? 'auto' : H + 'px';
     app.style.transform = rotate === 90 ? `translateX(${vw}px) rotate(90deg)` : rotate === 270 ? `translateY(${vh}px) rotate(-90deg)` : rotate === 180 ? `translate(${vw}px,${vh}px) rotate(180deg)` : '';
+    const look = (S && S.settings.look) || {};
+    const strip = !VISIT && look.mode === 'strip';
     const land = orient === 'landscape' || (orient === 'auto' && W > H);
-    app.classList.toggle('landscape', land);
-    app.classList.toggle('portrait', !land);
-    const base = VISIT ? Math.min(W, 520) * 1.1 : land ? Math.min(W * 0.6, H) : Math.min(W, H * 0.6);
+    app.classList.toggle('landscape', land && !strip);
+    app.classList.toggle('portrait', !land && !strip);
+    app.classList.toggle('strip', strip);
+    let base = VISIT ? Math.min(W, 520) * 1.1 : strip ? Math.min(W * 0.5, H * 3.2) : land ? Math.min(W * 0.6, H) : Math.min(W, H * 0.6);
+    if (!VISIT) base *= Math.max(70, Math.min(160, Number(look.textScale) || 100)) / 100;
     document.documentElement.style.setProperty('--u', (base / 100) + 'px');
     applyPositions();
   }
@@ -455,12 +519,87 @@
     try { const holder = h('div'); holder.innerHTML = window.QR.svg(url); box.append(holder.firstChild, h('small', {}, tx('qrHint'))); } catch { /* too long for a code */ }
   }
 
+
+  // ---------- look: modes, fonts, clock style, background, border, ticker, screen saver (settings.look) ----------
+  const DAYS_S = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
+  function analogSvg(d, seconds) {
+    const ns = 'http://www.w3.org/2000/svg', mk = (n, a) => { const e = document.createElementNS(ns, n); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); return e; };
+    const svg = mk('svg', { viewBox: '-50 -50 100 100' });
+    svg.append(mk('circle', { r: 46, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, opacity: .55 }));
+    for (let i = 0; i < 12; i++) svg.append(mk('line', { x1: 0, y1: -40, x2: 0, y2: i % 3 ? -43 : -37, stroke: 'currentColor', 'stroke-width': i % 3 ? 1.4 : 2.6, transform: `rotate(${i * 30})`, opacity: .8 }));
+    const h = d.getHours() % 12 + d.getMinutes() / 60, m = d.getMinutes() + d.getSeconds() / 60;
+    svg.append(mk('line', { x1: 0, y1: 4, x2: 0, y2: -24, stroke: 'currentColor', 'stroke-width': 4.2, 'stroke-linecap': 'round', transform: `rotate(${h * 30})` }));
+    svg.append(mk('line', { x1: 0, y1: 6, x2: 0, y2: -36, stroke: 'currentColor', 'stroke-width': 2.8, 'stroke-linecap': 'round', transform: `rotate(${m * 6})` }));
+    if (seconds) svg.append(mk('line', { x1: 0, y1: 8, x2: 0, y2: -40, stroke: 'var(--c)', 'stroke-width': 1.4, transform: `rotate(${d.getSeconds() * 6})` }));
+    svg.append(mk('circle', { r: 2.6, fill: 'var(--c)' }));
+    return svg;
+  }
+  let clockSig = '';
+  function paintClock(t) {
+    const L = (S && S.settings.look) || {}, d = new Date(t);
+    const small = $('time'), big = $('bigclock');
+    const style = L.clock || 'digital';
+    const dateTxt = L.date === 'long' ? d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }) : L.date === 'short' ? `${DAYS_S[d.getDay()]} ${d.getDate()} ${d.toLocaleDateString('nl-NL', { month: 'short' })}` : '';
+    const digital = L.seconds ? `${fmtTime(t)}:${pad(d.getSeconds())}` : fmtTime(t);
+    const sig = [style, L.seconds, dateTxt, digital, L.mode, Math.floor(t / (L.seconds ? 1000 : 60000))].join('|');
+    if (sig === clockSig) return;
+    clockSig = sig;
+    if (style === 'none') small.textContent = dateTxt;
+    else if (style === 'analog') { small.replaceChildren(analogSvg(d, L.seconds), ...(dateTxt ? [document.createTextNode(' ' + dateTxt)] : [])); }
+    else small.textContent = dateTxt ? `${dateTxt} · ${digital}` : digital;
+    if (L.mode === 'clock') {
+      const date = dateTxt ? h('div', { style: 'font-size:.2em;font-weight:500;color:var(--dim);letter-spacing:0;margin-top:.3em' }, dateTxt) : null;
+      if (style === 'analog') big.replaceChildren(analogSvg(d, L.seconds), ...(date ? [date] : []));
+      else big.replaceChildren(document.createTextNode(digital), ...(date ? [date] : []));
+    }
+  }
+  let barKey = '', barStart = 0, barSpan = 1;
+  function paintBar(t, v) {
+    const L = (S && S.settings.look) || {}, bar = $('bar');
+    if (!L.countdown || VISIT || !v.until || v.until <= t) { bar.style.display = 'none'; barKey = ''; return; }
+    const key = `${v.mode}|${v.until}`;
+    if (key !== barKey) { barKey = key; barStart = t; barSpan = Math.max(1, v.until - t); } // the length is what was left when this screen first saw it
+    bar.style.display = 'block';
+    bar.firstElementChild.style.width = Math.max(0, Math.min(100, ((v.until - t) / barSpan) * 100)).toFixed(1) + '%';
+  }
+  let lastTouch = Date.now();
+  for (const ev of ['pointerdown', 'keydown', 'touchstart']) document.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true });
+  function paintSaver() {
+    const L = (S && S.settings.look) || {};
+    document.body.classList.toggle('saver', !VISIT && !EDIT && !!(L.idle && L.idle.enabled) && Date.now() - lastTouch > (L.idle.minutes || 10) * 60e3 && !$('modal').classList.contains('open'));
+  }
+  setInterval(() => { const L = S && S.settings.look; if (!L || !L.shift || VISIT) return; document.documentElement.style.setProperty('--sx', (Math.round(Math.random() * 16) - 8) + 'px'); document.documentElement.style.setProperty('--sy', (Math.round(Math.random() * 16) - 8) + 'px'); }, 120000);
+  let lookSig = '';
+  function applyLook() {
+    const L = S.settings.look || {}, b = document.body, st = S.settings, v = S.view;
+    const d = b.dataset;
+    d.font = L.font || 'system'; d.cards = L.cards || 'soft'; d.corners = L.corners || 'round'; d.icons = L.icons || 'symbols'; d.weight = L.weight || 'normal';
+    d.mode = VISIT ? 'standard' : (L.mode || 'standard');
+    d.transition = L.transition || 'slide'; d.background = VISIT ? 'glow' : (L.background || 'glow'); d.border = VISIT ? 'off' : (L.border || 'off'); d.shift = L.shift && !VISIT ? '1' : '0';
+    b.classList.toggle('hc', !!L.contrast); b.classList.toggle('nomotion', L.motion === false);
+    // plan: the next planned moments
+    const n = VISIT ? 0 : (L.mode === 'agenda' ? Math.max(L.agenda || 0, 3) : (L.agenda || 0));
+    const ag = $('agenda'), list = (v.upcoming || []).slice(0, n);
+    ag.style.display = n > 0 ? 'flex' : 'none';
+    ag.replaceChildren(...list.map((u) => h('div', {}, h('b', {}, `${fmtTime(u.from)}–${fmtTime(u.to)}`), ` ${st.texts.busy.label}${u.note ? ' · ' + u.note : ''}`)));
+    // ticker and footer line
+    const tk = $('ticker'), on = !VISIT && L.ticker && L.ticker.enabled && L.ticker.text;
+    tk.style.display = on ? 'block' : 'none';
+    if (on && tk.firstElementChild.textContent !== L.ticker.text) { tk.firstElementChild.textContent = L.ticker.text; tk.firstElementChild.style.animationDuration = Math.max(14, L.ticker.text.length * 0.45) + 's'; }
+    const ft = $('foot'); ft.textContent = VISIT ? '' : (L.footer || ''); ft.style.display = ft.textContent ? 'block' : 'none';
+    ft.style.bottom = on ? 'calc(var(--u)*7.4)' : 'calc(var(--u)*1.2)';
+    d.pad = (on ? 1 : 0) + (ft.textContent ? 2 : 0); // room under the content for the ticker (1) and the footer line (2)
+    const sig = JSON.stringify(L);
+    if (sig !== lookSig) { lookSig = sig; clockSig = ''; barKey = ''; fitLabel(); tick(); }
+  }
+
   function render() {
     const st = S.settings, v = S.view;
     const hero = document.querySelector('.hero');
     if (render.mode && render.mode !== v.mode) { hero.classList.remove('swap'); void hero.offsetWidth; hero.classList.add('swap'); }
     render.mode = v.mode;
     applyTheme();
+    applyLook();
     document.title = `${v.label} — ${st.name}`;
     renderBlocks();
     layout();
@@ -523,12 +662,14 @@
     if (!S) return;
     updateBell();
     const t = now(), v = S.view;
-    $('time').textContent = fmtTime(t);
+    paintClock(t);
     paintPower();
     if (lastLight !== null && themeIsLight() !== lastLight) applyTheme();
     const [line, at] = v.until && v.until > t ? untilText(v, t) : ['', ''];
     $('until').textContent = line;
     $('untilAt').textContent = at;
+    paintBar(t, v);
+    paintSaver();
 
     const dm = S.settings.dim;
     let dimOn = false;

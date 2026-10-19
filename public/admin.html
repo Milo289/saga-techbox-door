@@ -271,6 +271,9 @@
     main { grid-column: 2; grid-row: 2; max-width: 1080px; width: 100%; margin: 0; padding: 30px 36px 90px; }
     #saveBar { left: calc(50% + 126px); }
   }
+  html.dense body { font-size: 14px; } html.dense .card { padding: 12px 14px; } html.dense .urow { padding: 6px 0; } html.roomy .card { padding: 26px 24px; } html.roomy .urow { padding: 14px 0; }
+  html { zoom: var(--ui-scale, 1); } html.nomotion *, html.nomotion *::before, html.nomotion *::after { animation: none !important; transition: none !important; }
+  html.hicontrast { --dim: #e2e2e8; --mute: #c2c2ca; --line: #5a5a62; } html.light.hicontrast { --dim: #22252b; --mute: #33373f; --line: #777c86; }
 </style>
 </head>
 <body>
@@ -1008,7 +1011,7 @@
   const markDirty = (e) => {
     if (!['settings', 'design', 'system', 'all'].includes(tab)) return;
     const card = e.target.closest && e.target.closest('.card');
-    if (e.target.closest && e.target.closest('#tools')) return;
+    if (e.target.closest && (e.target.closest('#tools') || e.target.closest('[data-nosave]'))) return; // the personal panel look is saved at once, it is not a setting of the server
     if (card && saveButtonsOf(card).length) dirtyCards.add(card); else if (globalSave() && card) dirtyCards.add('global'); else return;
     paintDirty();
   };
@@ -1249,6 +1252,68 @@
 
   // ---------- moving everything from another door server to this one ----------
   const transferDraft = { url: '', username: '', password: '', code: '' };
+  // ---------- Weergave: how the door screen looks (modes, fonts, clock, background …) with ready-made designs ----------
+  const LOOK_DEFAULT = { mode: 'standard', font: 'system', textScale: 100, weight: 'normal', clock: 'digital', seconds: false, date: 'none', transition: 'slide', shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0, ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true };
+  const LOOK_PRESETS = [
+    ['Standaard', 'Zoals het was', {}],
+    ['Rustig', 'Zacht, afgerond, langzaam', { font: 'rounded', background: 'gradient', transition: 'fade', cards: 'soft' }],
+    ['Strak', 'Plat, scherp, zonder animatie', { weight: 'bold', background: 'plain', cards: 'flat', corners: 'sharp', transition: 'none' }],
+    ['Groot en duidelijk', 'Voor op afstand', { mode: 'status', textScale: 115, weight: 'bold', contrast: true, background: 'plain', border: 'thick' }],
+    ['Nacht', 'Glas, dimmen en schermbeveiliging', { background: 'aurora', cards: 'glass', border: 'thin', shift: true, idle: { enabled: true, minutes: 5 } }],
+    ['Receptie', 'Wijzerplaat, planning en voortgang', { mode: 'agenda', clock: 'analog', date: 'long', countdown: true, font: 'rounded' }],
+    ['Gang (smalle balk)', 'Voor een breed, laag scherm', { mode: 'strip', border: 'thick', weight: 'bold', clock: 'digital' }],
+  ];
+  function lookCard(st, sel, chk, text) {
+    st.look = { ...structuredClone(LOOK_DEFAULT), ...(st.look || {}), ticker: { ...LOOK_DEFAULT.ticker, ...((st.look || {}).ticker || {}) }, idle: { ...LOOK_DEFAULT.idle, ...((st.look || {}).idle || {}) } };
+    const L = st.look, row = (label, ...kids) => [h('label', {}, label), kids.length > 1 ? h('div', { class: 'row' }, ...kids) : kids[0]];
+    const apply = async (preset) => {
+      const next = { ...structuredClone(LOOK_DEFAULT), ...structuredClone(preset[2]) };
+      next.ticker = { ...LOOK_DEFAULT.ticker, ...(preset[2].ticker || {}), text: L.ticker.text }; // your own texts stay
+      next.footer = L.footer; next.motion = L.motion;
+      try { await api('/api/settings', { look: next }); S = await api('/api/admin-state'); toast(`Ontwerp “${preset[0]}” staat aan`); renderAll(true); } catch {}
+    };
+    return h('div', { class: 'card' }, h('h2', {}, 'Weergave'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Kies een kant-en-klaar ontwerp, of stel hieronder alles zelf in. Een ontwerp is meteen zichtbaar op het deurscherm.'),
+      h('div', { class: 'row', style: 'flex-wrap:wrap;margin-bottom:12px' }, ...LOOK_PRESETS.map((p) => h('button', { class: 'sm', title: p[1], onclick: () => apply(p) }, p[0]))),
+      h('div', { class: 'form' },
+        ...row('Weergavemodus', sel(L, 'mode', [['standard', 'Standaard'], ['status', 'Alleen de status (groot)'], ['clock', 'Grote klok met status'], ['agenda', 'Status met planning'], ['strip', 'Smalle balk (breed, laag scherm)'], ['minimal', 'Alleen kleur en woord']])),
+        ...row('Lettertype', sel(L, 'font', [['system', 'Systeem'], ['rounded', 'Afgerond'], ['serif', 'Met schreef'], ['mono', 'Vaste breedte'], ['readable', 'Goed leesbaar']])),
+        ...row('Tekstgrootte', text(L, 'textScale', { type: 'number', min: 70, max: 160, style: 'width:90px' }), h('span', { class: 'muted' }, '% (70–160)')),
+        ...row('Letterdikte', sel(L, 'weight', [['light', 'Dun'], ['normal', 'Normaal'], ['bold', 'Vet']])),
+        ...row('Klok', sel(L, 'clock', [['digital', 'Digitaal'], ['analog', 'Wijzerplaat'], ['none', 'Geen klok']]), chk(L, 'seconds', 'Seconden'), sel(L, 'date', [['none', 'Geen datum'], ['short', 'Korte datum'], ['long', 'Lange datum']])),
+        ...row('Nieuwe status', sel(L, 'transition', [['none', 'Geen animatie'], ['fade', 'Vervagen'], ['slide', 'Schuiven'], ['zoom', 'Inzoomen']]), chk(L, 'countdown', 'Voortgangsbalk tot de volgende verandering')),
+        ...row('Knoppen', sel(L, 'cards', [['soft', 'Zacht'], ['flat', 'Plat'], ['outline', 'Omlijnd'], ['glass', 'Glas']]), sel(L, 'corners', [['sharp', 'Scherpe hoeken'], ['soft', 'Een beetje rond'], ['round', 'Rond']]), sel(L, 'icons', [['symbols', 'Met symbolen'], ['none', 'Zonder symbolen']])),
+        ...row('Achtergrond', sel(L, 'background', [['glow', 'Gloed (standaard)'], ['plain', 'Effen'], ['gradient', 'Kleurverloop'], ['dots', 'Stippen'], ['aurora', 'Langzaam bewegend']]), sel(L, 'border', [['off', 'Geen rand'], ['thin', 'Dunne rand'], ['thick', 'Dikke rand'], ['pulse', 'Kloppende rand']])),
+        ...row('Planning', text(L, 'agenda', { type: 'number', min: 0, max: 5, style: 'width:70px' }), h('span', { class: 'muted' }, 'geplande momenten onder de status (0 = niet, 3 bij de modus Planning)')),
+        ...row('Lopende tekst', chk(L.ticker, 'enabled', 'Aan'), text(L.ticker, 'text', { maxlength: 200, placeholder: 'bijv. Vanmiddag geen spreekuur — mail gerust' })),
+        ...row('Vaste regel', text(L, 'footer', { maxlength: 120, placeholder: 'Klein, onderaan het scherm' })),
+        ...row('Schermbeveiliging', chk(L.idle, 'enabled', 'Dim het scherm na'), text(L.idle, 'minutes', { type: 'number', min: 1, max: 240, style: 'width:70px' }), h('span', { class: 'muted' }, 'minuten zonder aanraking')),
+        ...row('Het scherm sparen', chk(L, 'shift', 'Beeld af en toe een paar pixels verschuiven (tegen inbranden)'), chk(L, 'contrast', 'Hoog contrast'), chk(L, 'motion', 'Bewegingen en animaties')),
+        h('span', {}), h('div', { class: 'row' }, ...[['Bekijk het deurscherm', '/'], ['Bekijk als telefoon', '/visit']].map(([t, u]) => h('button', { class: 'sm', onclick: () => window.open(u, '_blank') }, t)))));
+  }
+  // ---------- how this panel looks on this device only (kept in the browser) ----------
+  const PANEL_PREFS_KEY = 'doorPanelPrefs';
+  function panelPrefs() { try { return JSON.parse(localStorage.getItem(PANEL_PREFS_KEY) || '{}') || {}; } catch { return {}; } }
+  function applyPanelPrefs() {
+    const p = panelPrefs(), r = document.documentElement;
+    r.classList.toggle('dense', p.density === 'compact'); r.classList.toggle('roomy', p.density === 'roomy');
+    r.classList.toggle('nomotion', !!p.reduceMotion); r.classList.toggle('hicontrast', !!p.contrast);
+    r.style.setProperty('--ui-scale', String((Number(p.scale) || 100) / 100));
+    if (/^#[0-9a-f]{6}$/i.test(p.accent || '')) r.style.setProperty('--accent', p.accent); else if (p.accentSet) r.style.removeProperty('--accent');
+  }
+  applyPanelPrefs();
+  function panelPrefsCard() {
+    const p = panelPrefs();
+    const save = (patch) => { const next = { ...panelPrefs(), ...patch }; try { localStorage.setItem(PANEL_PREFS_KEY, JSON.stringify(next)); } catch {} applyPanelPrefs(); };
+    return h('div', { class: 'card', 'data-nosave': '1' }, h('h2', {}, 'Dit paneel op dit apparaat'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Hoe dit bedieningspaneel er voor jou uitziet. Het wordt alleen in deze browser onthouden en verandert niets aan het deurscherm.'),
+      h('div', { class: 'form' },
+        h('label', {}, 'Ruimte'), h('select', { onchange: (e) => save({ density: e.target.value }) }, ...[['normal', 'Normaal'], ['compact', 'Compact (meer op het scherm)'], ['roomy', 'Ruim']].map(([v, l]) => h('option', { value: v, selected: (p.density || 'normal') === v }, l))),
+        h('label', {}, 'Tekstgrootte'), h('input', { type: 'range', min: 85, max: 130, step: 5, value: p.scale || 100, oninput: (e) => save({ scale: Number(e.target.value) }) }),
+        h('label', {}, 'Accentkleur'), h('div', { class: 'row' }, h('input', { type: 'color', value: /^#[0-9a-f]{6}$/i.test(p.accent || '') ? p.accent : '#0a84ff', oninput: (e) => save({ accent: e.target.value, accentSet: true }) }), h('button', { class: 'sm ghost', onclick: () => { save({ accent: '', accentSet: true }); toast('Accentkleur teruggezet'); } }, 'Standaard')),
+        h('label', {}, 'Rustig'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p.reduceMotion, onchange: (e) => save({ reduceMotion: e.target.checked }) }), 'Geen animaties in dit paneel'),
+        h('label', {}, 'Contrast'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p.contrast, onchange: (e) => save({ contrast: e.target.checked }) }), 'Sterker contrast (randen en grijze tekst)')));
+  }
   // ---------- Eerste keer instellen: what to switch on, where to find it ----------
   let clData = null, clLoading = false;
   async function loadChecklist() {
@@ -1577,7 +1642,7 @@
   // people with only the mail right may only send the mail fields
   const MAIL_KEYS = ['mail', 'ntfyTopic', 'ntfyServer', 'webhookUrl'];
   const payloadFor = (st) => (can('settings') ? st : Object.fromEntries(MAIL_KEYS.map((k) => [k, st[k]])));
-  const CARD_PERM = { 'Deur': 'settings', 'Openingstijden': 'settings', 'Bezoekers': 'settings', 'Automatisch antwoorden': 'settings', 'E-mail': 'mail', 'Personen': 'people', 'Scherm': 'settings', 'Meldingen op je telefoon': 'mail', 'Moderatie': 'settings', 'Afwezig': 'settings', 'Energie': 'power', 'Meer': 'export' };
+  const CARD_PERM = { 'Deur': 'settings', 'Openingstijden': 'settings', 'Bezoekers': 'settings', 'Automatisch antwoorden': 'settings', 'E-mail': 'mail', 'Personen': 'people', 'Scherm': 'settings', 'Weergave': 'settings', 'Dit paneel op dit apparaat': null, 'Meldingen op je telefoon': 'mail', 'Moderatie': 'settings', 'Afwezig': 'settings', 'Energie': 'power', 'Meer': 'export' };
 
   // ---------- settings: e-mail ----------
   function mailCard(st, save) {
@@ -2302,6 +2367,9 @@
               ...[['Verticaal', '/?edit=1&orientation=portrait'], ['Horizontaal', '/?edit=1&orientation=landscape'], ['Telefoon', '/visit?edit=1']].map(([t, u]) => h('button', { onclick: () => window.open(u, '_blank') }, t))),
             h('span', {}), h('span', { class: 'muted' }, 'Staat iets niet goed? Sleep onderdelen van het deurscherm naar een andere plek, maak ze groter of kleiner, of verberg ze. Elk schermtype (verticaal, horizontaal, telefoon) heeft zijn eigen indeling. Het beste doe je dit op het deurscherm zelf (in de app: Ctrl/Cmd+Shift+E), dan zie je precies hoe het wordt. Het normale scherm kan nooit per ongeluk verschoven worden.'),
             h('label', {}, 'Nacht'), h('div', { class: 'row' }, chk(st.dim, 'enabled', 'Dimmen van'), timePicker(st.dim.from, (x) => { st.dim.from = x; }, 15), h('span', { class: 'muted' }, 'tot'), timePicker(st.dim.to, (x) => { st.dim.to = x; }, 15)))),
+
+        lookCard(st, sel, chk, text),
+        panelPrefsCard(),
 
         h('div', { class: 'card' }, h('h2', {}, 'Meldingen op je telefoon'),
           h('p', { class: 'muted', style: 'margin-top:0' }, 'Installeer de gratis app “ntfy”, abonneer je op een moeilijk te raden onderwerpnaam en vul diezelfde naam hier in. Je krijgt dan bij elke bezoeker een melding, ook als deze pagina dicht is.'),

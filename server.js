@@ -76,6 +76,12 @@ const DEFAULT_SETTINGS = {
   accent: '', // colour of the control panel and the apps (tabs, switches, buttons); empty = neutral
   palette: 'standard', // which colour theme was picked last (or 'custom')
   dim: { enabled: false, from: '22:00', to: '07:00', level: 0.2 },
+  // how the door screen looks and behaves (everything optional; the defaults are the normal screen)
+  look: {
+    mode: 'standard', font: 'system', textScale: 100, weight: 'normal', clock: 'digital', seconds: false, date: 'none', transition: 'slide',
+    shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0,
+    ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true,
+  },
   ntfyServer: 'https://ntfy.sh',
   ntfyTopic: '',
   webhookUrl: '',
@@ -107,6 +113,24 @@ function clientIp(req) {
   const fwd = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || '').split(',')[0].trim();
   if (!fwd) return remote;
   return TRUST_PROXY ? normIp(fwd) : 'proxied';
+}
+// the choices of the door-screen look; anything else becomes the standard
+const LOOK_CHOICES = {
+  mode: ['standard', 'status', 'clock', 'agenda', 'strip', 'minimal'], font: ['system', 'rounded', 'serif', 'mono', 'readable'], weight: ['light', 'normal', 'bold'],
+  clock: ['digital', 'analog', 'none'], date: ['none', 'short', 'long'], transition: ['none', 'fade', 'slide', 'zoom'], cards: ['soft', 'flat', 'outline', 'glass'],
+  corners: ['sharp', 'soft', 'round'], background: ['glow', 'plain', 'gradient', 'dots', 'aurora'], border: ['off', 'thin', 'thick', 'pulse'], icons: ['symbols', 'none'],
+};
+function cleanLook(l = {}) {
+  const d = DEFAULT_SETTINGS.look, out = {};
+  for (const [k, list] of Object.entries(LOOK_CHOICES)) out[k] = list.includes(l[k]) ? l[k] : d[k];
+  const n = (v, min, max, def) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.max(min, Math.min(max, x)) : def; };
+  out.textScale = n(l.textScale, 70, 160, 100); out.agenda = n(l.agenda, 0, 5, 0);
+  for (const k of ['seconds', 'shift', 'countdown', 'contrast']) out[k] = !!l[k];
+  out.motion = l.motion === undefined ? true : !!l.motion;
+  out.ticker = { enabled: !!(l.ticker && l.ticker.enabled), text: str(l.ticker && l.ticker.text, 200) };
+  out.idle = { enabled: !!(l.idle && l.idle.enabled), minutes: n(l.idle && l.idle.minutes, 1, 240, 10) };
+  out.footer = str(l.footer, 120);
+  return out;
 }
 const maskSystem = (sys) => ({ ...sys, backupPassword: sys.backupPassword ? PASS_MASK : '', updateToken: sys.updateToken ? PASS_MASK : '' });
 function cleanSystem(b = {}) {
@@ -1637,6 +1661,7 @@ const adminRoutes = {
     if (b.mail && b.mail.pass === PASS_MASK) b.mail = { ...b.mail, pass: state.settings.mail.pass };
     const merged = { ...state.settings };
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
+    merged.look = cleanLook(merged.look);
     if (![0, 90, 180, 270].includes(merged.layout.rotate)) merged.layout.rotate = 0;
     if (!['auto', 'portrait', 'landscape'].includes(merged.layout.orientation)) merged.layout.orientation = 'auto';
     if (!['dark', 'light'].includes(merged.theme)) merged.theme = 'dark';
