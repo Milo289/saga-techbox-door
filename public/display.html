@@ -289,6 +289,13 @@
   #flash { position: absolute; inset: 0; pointer-events: none; z-index: 60; background: var(--c); opacity: 0; } #flash.on { animation: flashOn 1.6s ease-out; } @keyframes flashOn { 0% { opacity: .75; } 100% { opacity: 0; } }
   #flash.pulse { background: transparent; box-shadow: inset 0 0 0 calc(var(--u)*2.4) var(--c); } #flash.pulse.on { animation: flashPulse 2.4s ease-out; } @keyframes flashPulse { 0%, 50% { opacity: 1; } 25%, 75% { opacity: .2; } 100% { opacity: 0; } }
   .infobox { font-size: calc(var(--u)*3); line-height: 1.4; white-space: pre-wrap; } .bigtxt { font-size: calc(var(--u)*7); font-weight: 800; letter-spacing: -.02em; text-align: center; } .qrbox { display: grid; place-items: center; gap: calc(var(--u)*1.2); } .qrbox svg { width: calc(var(--u)*32); height: auto; background: #fff; border-radius: calc(var(--u)*1.2); }
+  /* fifteen switches (all off by default) */
+  body.lk-hideName #hname { visibility: hidden; } body.lk-hideMessage #message { display: none !important; } body.lk-hideUntil #until, body.lk-hideUntil #untilAt { display: none !important; }
+  body.lk-hideExtra #extra { display: none !important; } body.lk-hideAsk #ask, body.lk-hideAsk #xbtns { display: none !important; }
+  body.lk-uppercase #label { text-transform: uppercase; letter-spacing: -.02em; } body.lk-shadow #label { text-shadow: 0 0 calc(var(--u)*4) color-mix(in srgb, var(--c) 70%, transparent); }
+  body.lk-bigDot .ring { width: calc(var(--u)*6.4); height: calc(var(--u)*6.4); } body.lk-staticDot .ring:not(.ding) { animation: none; }
+  body.lk-bigHeader header { font-size: calc(var(--u)*4); } body.lk-flip #ask { order: -1; } body.lk-dimClosed[data-now="closed"] #app { filter: brightness(.55); }
+  body.lk-statusIcon[data-now="open"] #label::before { content: "🚪 "; } body.lk-statusIcon[data-now="closed"] #label::before { content: "🔒 "; } body.lk-statusIcon[data-now="busy"] #label::before { content: "⏳ "; }
 </style>
 </head>
 <body>
@@ -422,6 +429,7 @@
   let actx;
   // the bell and answer sounds come from the settings (Ontwerp → Beltonen); an own sound file plays through a normal audio element
   function chime(kind) {
+    if (!VISIT && S && S.settings.look && S.settings.look.muteDoor) return; // this door screen is silent
     try {
       const snd = (S && S.settings.sound) || { bell: 'classic', reply: 'soft' };
       const name = kind === 'reply' ? snd.reply : snd.bell;
@@ -654,6 +662,8 @@
     if (mode === 'none' || VISIT) return;
     const f = $('flash'); f.className = mode === 'pulse' ? 'pulse' : ''; void f.offsetWidth; f.classList.add('on');
   }
+  // full screen at the first touch (a browser only allows it after a touch)
+  document.addEventListener('pointerdown', () => { if (!VISIT && !document.fullscreenElement && S && S.settings.look && S.settings.look.fullscreen && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); }, { passive: true });
   let lookSig = '';
   function applyLook() {
     const L = S.settings.look || {}, b = document.body, st = S.settings, v = S.view;
@@ -662,6 +672,8 @@
     d.mode = VISIT ? 'standard' : (L.mode || 'standard'); d.align = VISIT ? 'center' : (L.align || 'center'); d.dot = L.dot || 'dot'; d.glow = L.glow === false ? '0' : '1'; d.bsize = (L.buttons && L.buttons.size) || 'normal';
     d.transition = L.transition || 'slide'; d.background = VISIT ? 'glow' : (L.background || 'glow'); d.border = VISIT ? 'off' : (L.border || 'off'); d.shift = L.shift && !VISIT ? '1' : '0';
     b.classList.toggle('hc', !!L.contrast); b.classList.toggle('nomotion', L.motion === false);
+    d.now = v.mode;
+    for (const k of ['hideName', 'hideMessage', 'hideUntil', 'hideExtra', 'hideAsk', 'uppercase', 'shadow', 'bigDot', 'staticDot', 'bigHeader', 'statusIcon', 'flip', 'dimClosed', 'muteDoor', 'fullscreen']) b.classList.toggle('lk-' + k, !VISIT && !!L[k]); // the switches of Weergave (door screen only)
     // plan: the next planned moments
     const n = VISIT ? 0 : (L.mode === 'agenda' ? Math.max(L.agenda || 0, 3) : (L.agenda || 0));
     const ag = $('agenda'), list = (v.upcoming || []).slice(0, n);

@@ -122,3 +122,22 @@ test('after ringing: a close button (standard) or no button and a sheet that clo
   const sch = (await call(srv, 'GET', '/api/settings-schema', undefined, a)).json.groups.find((g) => g.id === 'weergave');
   assert.ok(sch.fields.some((f) => f.key === 'look.sentClose'));
 });
+
+test('fifteen extra switches in Weergave: all off by default, each can be turned on and off, the door and the apps know them', async (t) => {
+  const names = ['hideName', 'hideMessage', 'hideUntil', 'hideExtra', 'hideAsk', 'uppercase', 'shadow', 'bigDot', 'staticDot', 'bigHeader', 'statusIcon', 'flip', 'dimClosed', 'muteDoor', 'fullscreen'];
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const look = async () => (await call(srv, 'GET', '/api/state')).json.settings.look;
+  const d = await look();
+  for (const n of names) assert.equal(d[n], false, n + ' is off by default');
+  await call(srv, 'POST', '/api/settings', { look: Object.fromEntries(names.map((n) => [n, true])) }, a);
+  for (const n of names) assert.equal((await look())[n], true, n + ' on');
+  await call(srv, 'POST', '/api/settings', { look: Object.fromEntries(names.map((n) => [n, false])) }, a);
+  for (const n of names) assert.equal((await look())[n], false, n + ' off again');
+  const sch = (await call(srv, 'GET', '/api/settings-schema', undefined, a)).json.groups.find((g) => g.id === 'weergave').fields.map((f) => f.key);
+  for (const n of names) assert.ok(sch.includes('look.' + n), 'the apps get look.' + n);
+  const door = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8'), panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+  for (const n of names) { assert.ok(door.includes('lk-' + n) || n === 'muteDoor' || n === 'fullscreen' || n === 'hideAsk', 'door: ' + n); assert.ok(panel.includes(`'${n}'`), 'panel: ' + n); }
+  assert.ok(door.includes('muteDoor') && door.includes('requestFullscreen'));
+});
