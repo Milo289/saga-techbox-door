@@ -1,6 +1,6 @@
 # Privacyverklaring Saga Techbox Deur
 
-*Versie 1 – oktober 2026. Dit is een voorlopige tekst voor een beta. Laat hem controleren door je school (privacyfunctionaris) en vul de gegevens van je eigen organisatie in bij punt 8.*
+*Versie 2 – oktober 2026. Dit is een voorlopige tekst voor een beta. Laat hem controleren door je school (privacyfunctionaris) en vul de gegevens van je eigen organisatie in bij punt 8.*
 
 ## 1. Kort samengevat
 * De software draait op **jouw eigen server**. De ontwikkelaar ontvangt **geen** gegevens: geen meetgegevens, geen gebruiksstatistieken, geen bezoekersgegevens.
@@ -11,7 +11,9 @@
 | Wie | Gegevens | Waarvoor |
 |---|---|---|
 | Bezoekers | naam, reden van het bezoek, eventueel een bericht, tijdstip, de keuze om toestemming te geven | de gebruiker van de deur laten weten wie er is en kunnen antwoorden |
+| Personen met een account | naam, eventueel e-mailadres en een pincode die de server zelf bedenkt (4, 6 of 8 cijfers) | herkennen van terugkerende bezoekers, zodat ze hun naam niet steeds hoeven in te vullen. De beheerder krijgt een melding met de naam bij een nieuw account |
 | Personen in de lijst | naam en wat je zelf invult (bijvoorbeeld een nummer of een label) | herkennen of aankondigen van bekende bezoekers |
+| Telefoons van bezoekers | een willekeurig nummer in een cookie (zie hieronder) | zien dat dezelfde telefoon terugkomt en die aan een account koppelen |
 | Beheerders | gebruikersnaam, naam, wachtwoord (alleen als onomkeerbare code), tweestapscode en passkeys (versleuteld) | inloggen |
 | Alle gebruikers van het paneel | IP-adres, tijdstip en soort apparaat in het logboek en in de lijst met sessies | beveiliging, het opsporen van misbruik |
 | Afspraken en roosters | wat je zelf invult | het deurbord laten kloppen |
@@ -22,6 +24,11 @@ Voor beheerders en beveiliging: gerechtvaardigd belang (een veilig systeem). Voo
 
 ## 4. Bewaartermijnen
 De instelling **Bezoekersverzoeken bewaren (dagen)** onder Systeem bepaalt hoelang verzoeken blijven staan. Bij een nieuwe installatie staat dit op **90 dagen**. **0 betekent dat ze blijven staan tot iemand ze verwijdert**, en een server die uit een oude back-up is teruggezet houdt zijn eigen instelling. Kies bewust een termijn. Back-ups bevatten dezelfde gegevens en worden zoveel dagen bewaard als je bij Aantal back-ups bewaren instelt. Het logboek is bedoeld om aantoonbaar te zijn en wordt niet automatisch gewist. De server schrijft verder een klein bestand met het laatste tijdstip waarop hij draaide, om te kunnen melden dat hij onverwacht is uitgevallen.
+
+## 4b. Cookies en pincodes
+* **Eén cookie, alleen op de bezoekerspagina van een telefoon:** `saga_v`, een willekeurig nummer zonder betekenis. Het is er om je bij een volgend bezoek met je naam te groeten, en om te zien dat dezelfde telefoon terugkomt. Het wordt gezet zodra je iets doet (aanbellen, een vraag sturen of een account maken), blijft een jaar staan, is niet leesbaar voor andere websites, wordt nooit gedeeld en is niet bedoeld voor reclame of volgen. Het deurscherm zelf zet geen cookie, want dat is een gedeeld scherm.
+* **Verwijderen:** wis de cookies van je browser en je telefoon wordt niet meer herkend. De beheerder kan alles over een persoon wissen onder Beheer → Privacy.
+* **De pincode** van een account hoort bij jou. Wie hem kent, kan bij een vraag jouw naam gebruiken. Daarom staat hij nooit in meldingen of in het logboek. Een korte pincode is makkelijker te raden dan een lange; kies als beheerder liever 6 of 8 cijfers.
 
 ## 5. Delen met anderen
 Standaard deelt de software niets. Dit gebeurt alleen als de beheerder het aanzet:

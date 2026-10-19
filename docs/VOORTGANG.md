@@ -54,3 +54,10 @@ Niet getest: echte schermen en tv's (marge, spiegelen), spraak (browser blokkeer
 
 ## Proxmox: één opdracht om de bestaande machine bij te werken
 `tools/proxmox-update.sh`: zoekt de Saga-machine, haalt de nieuwste schijf (ISO), zet hem in het dvd-station, voegt een lege gegevensschijf van 4 GB toe als de machine geen schijf heeft, en start opnieuw. Getest met nagebootste Proxmox-opdrachten (zonder en met schijf, zonder toetsenbord, onbekende machine, te kleine download); NIET op een echte Proxmox-server.
+
+## 3.5.0-beta.10 — accounts met pincode, cookie, Energie in 24 uur, reserve
+- **Account maken**: altijd een knop op het deurscherm en de bezoekerspagina (aan/uit bij Bezoekers). Alleen een naam (en e-mail) is nodig: de server bedenkt een willekeurige pincode van 4, 6 of 8 cijfers (standaard 6) en toont die. Het cijferblok staat er altijd, ook als er nog niemand is. Jij krijgt bij elk nieuw account een melding met de naam (ntfy en mail, behalve in rustige uren). De pincode staat nergens in meldingen of het logboek.
+- **Cookie** `saga_v`: alleen op telefoons (niet op het deurscherm), willekeurig nummer, een jaar, HttpOnly. Een telefoon die eerder een pincode gebruikte of een account maakte wordt de volgende keer met naam gegroet. In de statistiek: terugkerende telefoons. Uitgelegd in PRIVACY.md.
+- **Energie**: tijden kiezen met uur- en minutenlijsten (24 uur), zodat AM/PM-velden in Safari niet meer lukraak leeg blijven. De server begrijpt ook 7:05, 07.05 en 07:05:00.
+- **Reserve**: een uurlijkse reservekopie (alleen als er iets veranderd is, bewaard per dag, 7 dagen) naast de nachtelijke back-ups. Knoppen houden hun nummer bij opslaan vanuit de apps.
+- Niet getest: cookies via https op een echte telefoon, de melding van een nieuw account op je telefoon, 4 en 8 cijfers op het deurscherm zelf.

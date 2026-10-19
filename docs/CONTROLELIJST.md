@@ -26,6 +26,12 @@ Doe dit na het installeren van een nieuwe versie. Alles wat je aanvinkt, weet je
 - [ ] Zet de **Schermbeveiliging** aan en wacht: dimt het scherm en komt het terug bij een aanraking?
 - [ ] Kies **Plaats van de eigen knoppen** (onder, boven, zijkant, zwevend) en kijk of ze niets bedekken.
 
+## 2b. Accounts en pincodes
+- [ ] Druk op het deurscherm op **Account maken**, vul een naam in: krijg je een pincode (standaard 6 cijfers)?
+- [ ] Kom je een melding op je telefoon (ntfy) of in je mail met de naam van het nieuwe account? (De pincode staat er bewust niet in.)
+- [ ] Tik bij een nieuwe vraag de pincode in op het cijferblok: wordt je naam herkend en staat die in het verzoek?
+- [ ] Doe hetzelfde op je telefoon (`/visit`): wordt je de tweede keer met je naam gegroet, zonder pincode?
+
 ## 3. Het paneel
 - [ ] Druk **O**, **G** en **B**: verandert de status? Druk **?** voor de sneltoetsen.
 - [ ] Wijzig "Computer uit" bij Energie en sla op met de **grote knop**. Ververs de pagina: staat de tijd er nog?

@@ -56,7 +56,7 @@ function build(ctx) {
     B('look.glow', 'Gloed rond het statuspunt'), N('look.margin', 'Marge rond het beeld (%)', 0, 12), B('look.mirror', 'Spiegelen'),
   ]);
   add('visitors', 'Bezoekers', 'settings', 'Wat bezoekers op het deurscherm kunnen doen.', [
-    B('visitors.doorbell', 'Deurbel'), B('visitors.bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'), B('visitors.reasons', 'Redenen'), B('visitors.appointments', 'Tijd booken'), B('visitors.messages', 'Vraagje'), B('visitors.callback', 'Terugbellen'),
+    B('visitors.doorbell', 'Deurbel'), B('visitors.bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'), B('visitors.reasons', 'Redenen'), B('visitors.appointments', 'Tijd booken'), B('visitors.messages', 'Vraagje'), B('visitors.callback', 'Terugbellen'), B('visitors.accounts', 'Account maken (met een pincode die vanzelf wordt gemaakt)'), C('visitors.pinLength', 'Lengte van de pincode', [[4, '4 cijfers'], [6, '6 cijfers'], [8, '8 cijfers']], { numeric: true }),
     F('reasons', 'Redenen (één per regel)', 'lines', { max: 80 }), F('topics', 'Vraag-onderwerpen (één per regel)', 'lines', { max: 60 }), F('quickReplies', 'Snelle antwoorden (één per regel)', 'lines', { max: 200 }),
     N('slotMinutes', 'Lengte van een afspraak (minuten)', 10, 240),
   ]);

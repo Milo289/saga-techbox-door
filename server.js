@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS = {
   },
   hours: { enabled: false, days: [1, 2, 3, 4, 5], from: '09:00', to: '17:00', perDay: {}, breaks: [], holidays: [] },
   customButtons: [], notifyRules: [], autoReplies: [],
-  visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false },
+  visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false, accounts: true, pinLength: 6 }, // accounts: the button “Account maken”; pinLength: digits of the code a new account gets
   moderation: { filter: true, defaultList: true, words: '', action: 'mask', maxPerHour: 20, profileApproval: false }, // action: flag | mask | block
   themeSchedule: { enabled: false, lightFrom: '07:00', darkFrom: '19:00' }, // the door screen is light by day and dark by night
   sound: { bell: 'classic', reply: 'soft', custom: false }, // custom = an own bell sound has been uploaded (the file itself is not in the settings)
@@ -284,6 +284,9 @@ const maskEmail = (e) => { const [u, d] = String(e).split('@'); return d ? `${u.
 // key: [group, what it is, standard text]. {…} are filled in by the screen.
 const UI_TEXTS = {
   askTitle: ['Hoofdscherm', 'Titel boven de knoppen', 'Niet kloppen'],
+  account: ['Hoofdscherm', 'Knop om een account te maken', 'Account maken'],
+  accountDone: ['Account maken', 'Titel als het account klaar is', 'Je account is klaar'],
+  accountPin: ['Account maken', 'Tekst bij de pincode', 'Dit is jouw pincode. Hiermee ben je bij elke vraag meteen jezelf. Bewaar hem goed.'],
   bell: ['Hoofdscherm', 'Knop deurbel', 'Deurbel'],
   bellOff: ['Hoofdscherm', 'Knop deurbel als de bel uit staat', 'Deurbel uit'],
   bellWait: ['Hoofdscherm', 'Knop deurbel tijdens de wachttijd ({s} = seconden)', 'Deurbel · {s}s'],
@@ -494,8 +497,9 @@ function serializeState(omitSessions) {
 function decryptSecrets() { for (const [o, k] of secretSlots()) if (typeof o[k] === 'string') o[k] = keys.decrypt(o[k]); }
 decryptSecrets();
 let saveTimer = null, savePending = false, lastBak = 0, saveBroken = false;
+let lastSnapshotAt = Date.now(), changeSeen = 0; // for the hourly copy (see monitors)
 function writeState() {
-  savePending = false;
+  savePending = false; changeSeen = Date.now();
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(STATE_FILE + '.tmp', serializeState()); // compact, with the secrets encrypted: much faster than indented, and nobody reads this file by hand
@@ -993,7 +997,7 @@ setInterval(() => { for (const c of clients) write(c, 'ping', { t: Date.now() })
 const TYPE_LABEL = { bell: 'Aangebeld', reason: 'Verzoek', appointment: 'Afspraakverzoek', message: 'Vraagje', callback: 'Terugbelverzoek' };
 function describe(r) {
   const parts = [`${TYPE_LABEL[r.type]} — ${r.name || 'Iemand'} bij ${state.settings.name}`];
-  if (r.nr) parts.push(`Nummer: ${r.nr}`);
+  // the code (PIN) of an account is never put in a message, the name is enough
   if (r.topic) parts.push(`Onderwerp: ${r.topic}`);
   if (r.reason) parts.push(`Reden: ${r.reason}`);
   if (r.at) parts.push(`Wil: ${new Date(r.at).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`);
@@ -1318,6 +1322,8 @@ writeAlive(false);
 process.on('exit', (code) => writeAlive(code === 0));
 function monitors(now) {
   writeAlive(false);
+  // a second line of defence: when something changed, a fresh copy of everything at most once an hour (kept apart from the nightly back-ups)
+  if (changeSeen && now - lastSnapshotAt >= 3600e3) { lastSnapshotAt = now; changeSeen = 0; try { writeBackup('auto'); } catch {} }
   try {
     const st = fs.statfsSync(DATA_DIR);
     const free = st.bavail * st.bsize, pct = st.blocks ? st.bavail / st.blocks : 1;
@@ -1681,6 +1687,7 @@ const adminRoutes = {
     if (b.mail && b.mail.pass === PASS_MASK) b.mail = { ...b.mail, pass: state.settings.mail.pass };
     const merged = { ...state.settings };
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
+    merged.visitors.accounts = merged.visitors.accounts !== false; merged.visitors.pinLength = [4, 6, 8].includes(Number(merged.visitors.pinLength)) ? Number(merged.visitors.pinLength) : 6;
     merged.look = cleanLook(merged.look);
     merged.noteSchedule = schedule.cleanNoteSchedule('noteSchedule' in b ? b.noteSchedule : state.settings.noteSchedule);
     merged.quiet = { enabled: !!merged.quiet.enabled, from: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.from) ? merged.quiet.from : '18:00', to: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.to) ? merged.quiet.to : '08:00' };
@@ -1697,6 +1704,8 @@ const adminRoutes = {
     merged.form = sanitizeForm(merged.form);
     merged.hours = { ...merged.hours, ...schedule.cleanHoursExtra('hours' in b ? b.hours : merged.hours) };
     for (const [k, fn] of [['customButtons', schedule.cleanCustomButtons], ['notifyRules', schedule.cleanNotifyRules], ['autoReplies', schedule.cleanAutoReplies]]) merged[k] = fn(k in b ? b[k] : state.settings[k]);
+    // a button keeps its number when a list without numbers comes in (the apps and “Alle instellingen” send none): a visitor who has the page open can still press it
+    { const old = state.settings.customButtons || [], used = new Set(); merged.customButtons = merged.customButtons.map((nb) => { if ('customButtons' in b && !(b.customButtons || []).some((x) => x && x.id === nb.id)) { const o = old.find((x) => x.label === nb.label && !used.has(x.id)); if (o) { used.add(o.id); return { ...nb, id: o.id }; } } return nb; }); }
     merged.mail.weekly = !!merged.mail.weekly; merged.mail.weeklyDay = Math.max(0, Math.min(6, Math.round(Number(merged.mail.weeklyDay)) || 0));
     const mo = merged.moderation;
     if (!['flag', 'mask', 'block'].includes(mo.action)) mo.action = 'mask';
@@ -2084,7 +2093,7 @@ const adminRoutes = {
     if (b.rev !== undefined && Number(b.rev) !== (state.peopleRev || 0)) throw bad('Er is net een nieuw profiel bijgekomen — de lijst is bijgewerkt, probeer het nog eens');
     const seen = new Set();
     state.people = (Array.isArray(b.people) ? b.people : []).slice(0, 2000).map((x) => ({
-      id: str(x.id, 20) || newId(), nr: str(x.nr, 20), name: str(x.name, 60), email: isEmail(str(x.email, 120)) ? str(x.email, 120) : '', note: str(x.note, 100), ...(x.self ? { self: true } : {}), ...(x.pending ? { pending: true } : {}),
+      id: str(x.id, 20) || newId(), nr: str(x.nr, 20), name: str(x.name, 60), email: isEmail(str(x.email, 120)) ? str(x.email, 120) : '', note: str(x.note, 100), ...(x.self ? { self: true } : {}), ...(Array.isArray(x.vids) ? { vids: x.vids.filter((v) => /^[0-9a-f]{24}$/.test(v)).slice(-5) } : {}), ...(x.pending ? { pending: true } : {}),
     })).filter((x) => x.nr && x.name && !seen.has(x.nr.toLowerCase()) && seen.add(x.nr.toLowerCase()));
     log('system', `Personenlijst opgeslagen (${state.people.length})`);
   },
@@ -2179,7 +2188,8 @@ function writeBackup(label) {
     try { fs.mkdirSync(copyDir, { recursive: true }); fs.copyFileSync(path.join(BACKUP_DIR, name), path.join(copyDir, name)); resolveAlert('backupcopy', true); }
     catch (e) { raise('backupcopy', `De kopie van de back-up naar “${copyDir}” lukte niet (${e.code || e.message}).`, { cooldownMin: 360 }); }
   }
-  for (const old of listBackups().slice(state.system.backupKeep)) { try { fs.unlinkSync(path.join(BACKUP_DIR, old.name)); } catch {} }
+  const all = listBackups(), auto = all.filter((x) => /_auto\./.test(x.name)), rest = all.filter((x) => !/_auto\./.test(x.name));
+  for (const old of [...rest.slice(state.system.backupKeep), ...auto.slice(7)]) { try { fs.unlinkSync(path.join(BACKUP_DIR, old.name)); } catch {} } // the hourly copies (one file per day, rewritten) are counted apart
   return name;
 }
 // Opens a back-up the way a restore would (decrypts it, reads it, checks it and counts what is in it) without touching the running server.
@@ -2235,8 +2245,9 @@ Object.assign(adminRoutes, {
     const days = Math.max(7, Math.min(90, Number(url.searchParams.get('days')) || 30)), since = Date.now() - days * 864e5;
     const list = state.requests.filter((r) => r.createdAt >= since);
     const byHour = Array(24).fill(0), byDay = {}, byType = {}, topics = {};
-    let replied = 0, replyMs = 0;
+    let replied = 0, replyMs = 0; const seen = new Map();
     for (const r of list) {
+      if (r.vid) seen.set(r.vid, (seen.get(r.vid) || 0) + 1);
       const d = new Date(r.createdAt); byHour[d.getHours()]++;
       const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; byDay[key] = (byDay[key] || 0) + 1;
       byType[r.type] = (byType[r.type] || 0) + 1;
@@ -2245,7 +2256,7 @@ Object.assign(adminRoutes, {
     }
     const out = [];
     for (let i = days - 1; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5); const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; out.push({ day: key, n: byDay[key] || 0 }); }
-    return { days, total: list.length, byHour, byDay: out, byType, topics: Object.entries(topics).sort((a, c) => c[1] - a[1]).slice(0, 6).map(([name, n]) => ({ name, n })), answered: replied, avgReplyMinutes: replied ? Math.round(replyMs / replied / 6e4) : null, busiestHour: byHour.indexOf(Math.max(...byHour)), kept: state.requests.length };
+    return { days, total: list.length, byHour, byDay: out, byType, topics: Object.entries(topics).sort((a, c) => c[1] - a[1]).slice(0, 6).map(([name, n]) => ({ name, n })), answered: replied, avgReplyMinutes: replied ? Math.round(replyMs / replied / 6e4) : null, busiestHour: byHour.indexOf(Math.max(...byHour)), kept: state.requests.length, phones: seen.size, returning: [...seen.values()].filter((n) => n > 1).length };
   },
   // ---- all requests as a spreadsheet file ----
   'GET /api/requests/export': () => {
@@ -2405,6 +2416,15 @@ const lastVisit = new Map();
 const lookups = new Map();
 const profileHits = new Map();
 let lastBellAt = 0;
+// quiet hours: nothing to the phone or the mail
+function quietNow() {
+  const q = state.settings.quiet, d = new Date(), hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return !!(q && q.enabled && (q.from <= q.to ? hm >= q.from && hm < q.to : hm >= q.from || hm < q.to));
+}
+// a cookie that says "this phone was here before" (functional: it is only used to greet you and to see that someone comes back; not shared, not for advertising)
+const VID_RE = /^[0-9a-f]{24}$/;
+function visitorId(req) { const m = /(?:^|;\s*)saga_v=([0-9a-f]{24})(?:;|$)/.exec(String(req.headers.cookie || '')); return m && VID_RE.test(m[1]) ? m[1] : ''; }
+const vidCookie = (id, secure) => `saga_v=${id}; Max-Age=${365 * 86400}; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
 function handleVisit(req, b) {
   const ip = clientIp(req);
   const now = Date.now();
@@ -2451,7 +2471,7 @@ function handleVisit(req, b) {
     email: b.mail === false ? '' : person ? person.email : typedEmail,
     at: b.type === 'appointment' ? ts(b.at) : null,
     phone: b.type === 'callback' ? phone : '', when: b.type === 'callback' ? str(b.when, 40) : '',
-    ip, via,
+    ip, via, ...(via === 'phone' && b.vid ? { vid: b.vid } : {}),
     statusAtTime: view.label, createdAt: now, state: 'new', reply: '', repliedAt: 0,
   };
   if (mod.filter) { // the bad-word filter looks at everything a visitor typed
@@ -2471,12 +2491,12 @@ function handleVisit(req, b) {
   lastVisit.set(ip, now);
   visitLog.set(ip, [...(visitLog.get(ip) || []).filter((t) => now - t < 3600e3), now]);
   if (r.type === 'bell') lastBellAt = now;
+  if (person && r.vid) { person.vids = [...new Set([...(person.vids || []), r.vid])].slice(-5); state.peopleRev = (state.peopleRev || 0) + 1; } // this phone is now known as this person
   state.requests.unshift(r);
   state.requests.length = Math.min(state.requests.length, 300);
   log('visit', describe(r).replace(/\n/g, ' · '));
   let plan = schedule.notifyPlan(state.settings.notifyRules, r);
-  { const q = state.settings.quiet, d = new Date(), hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`; // quiet hours: nothing to the phone or the mail
-    if (q && q.enabled && (q.from <= q.to ? hm >= q.from && hm < q.to : hm >= q.from || hm < q.to)) plan = { ntfy: false, webhook: false, mail: false, quiet: true, rule: plan.rule }; }
+  if (quietNow()) plan = { ntfy: false, webhook: false, mail: false, quiet: true, rule: plan.rule };
   if (plan.ntfy || plan.webhook) notifyExternal(r, undefined, plan).catch(() => {});
   mailVisitor(r, 'confirm');
   if (plan.mail) mailAdmin(r);
@@ -2655,34 +2675,59 @@ const handle = async (req, res) => {
       const hits = (lookups.get(ip) || []).filter((t) => Date.now() - t < 60e3);
       if (hits.length >= 15) return send(res, 429, { error: 'Even wachten en opnieuw proberen' });
       lookups.set(ip, [...hits, Date.now()]);
-      const nr = str((await readBody(req)).nr, 20).toLowerCase();
+      const b0 = await readBody(req), nr = str(b0.nr, 20).toLowerCase();
       const x = state.people.find((y) => y.nr.toLowerCase() === nr);
       if (x && x.pending) return send(res, 200, { found: false, pending: true });
+      if (x && !x.pending) { const vid = visitorId(req); if (vid && b0.phone === true) { x.vids = [...new Set([...(x.vids || []), vid])].slice(-5); } }
       return send(res, 200, x ? { found: true, name: x.name, email: mailOn() && x.email ? maskEmail(x.email) : '' } : { found: false });
     }
     if (req.method === 'POST' && p === '/api/profile') {
-      // visitors make their own profile: username + name + e-mail, so every question can be filled in with one tap
+      // visitors make their own account: name (+ e-mail) and they get a random code (PIN) that works at once and always
       const ip = clientIp(req);
       if (isBlocked(ip, '')) return send(res, 429, { error: 'Dit kan nu even niet — probeer het later nog eens.' });
       const hits = (profileHits.get(ip) || []).filter((t) => Date.now() - t < 3600e3);
-      if (hits.length >= 5) return send(res, 429, { error: 'Je hebt net al een paar profielen gemaakt — probeer het later nog eens' });
+      if (hits.length >= 8) return send(res, 429, { error: 'Je hebt net al een paar accounts gemaakt — probeer het later nog eens' });
       const b = await readBody(req);
-      const nr = str(b.nr, 20).toLowerCase(), name = str(b.name, 60), email = str(b.email, 120);
-      if (!/^[a-z0-9._-]{3,20}$/.test(nr)) throw bad('Gebruikersnaam: 3 tot 20 tekens (letters, cijfers, punt, streepje)');
+      const name = str(b.name, 60), email = str(b.email, 120);
       if (!name) throw bad('Vul je naam in');
       if (email && !isEmail(email)) throw bad('Dat e-mailadres klopt niet');
-      if (state.settings.moderation.filter && (badUsername(nr) || moderate(name).hits.length)) throw bad('Kies een andere naam of gebruikersnaam.');
-      if (state.people.some((x) => x.nr.toLowerCase() === nr)) throw bad('Die gebruikersnaam is al bezet — kies een andere');
-      if (state.people.length >= 2000) throw bad('De lijst met profielen is vol');
+      if (state.settings.moderation.filter && moderate(name).hits.length) throw bad('Kies een andere naam.');
+      if (state.people.length >= 2000) throw bad('De lijst met accounts is vol');
+      let nr = str(b.nr, 20).toLowerCase(); // an older app may still send its own username
+      if (nr) { if (!/^[a-z0-9._-]{3,20}$/.test(nr)) throw bad('Gebruikersnaam: 3 tot 20 tekens (letters, cijfers, punt, streepje)'); if (state.settings.moderation.filter && badUsername(nr)) throw bad('Kies een andere gebruikersnaam.'); if (state.people.some((x) => x.nr.toLowerCase() === nr)) throw bad('Die gebruikersnaam is al bezet — kies een andere'); }
+      else { // a random number, as long as the admin chose (4, 6 or 8 digits), never one that exists
+        const len = [4, 6, 8].includes(Number(state.settings.visitors.pinLength)) ? Number(state.settings.visitors.pinLength) : 6;
+        for (let i = 0; i < 200 && !nr; i++) { const c = String(crypto.randomInt(10 ** (len - 1), 10 ** len)); if (!state.people.some((x) => x.nr === c)) nr = c; }
+        if (!nr) throw bad('Er kon geen pincode gemaakt worden — probeer het later nog eens');
+      }
       const pending = !!state.settings.moderation.profileApproval;
-      state.people.push({ id: newId(), nr, name, email, note: 'Zelf aangemaakt', self: true, ...(pending ? { pending: true } : {}) });
+      const vid = visitorId(req) || crypto.randomBytes(12).toString('hex');
+      state.people.push({ id: newId(), nr, name, email, note: 'Zelf aangemaakt', self: true, vids: [vid], ...(pending ? { pending: true } : {}) });
       state.peopleRev = (state.peopleRev || 0) + 1;
       profileHits.set(ip, [...hits, Date.now()]);
-      log('visit', `Nieuw profiel: ${name} (${nr})`);
+      log('visit', `Nieuw account: ${name}${email ? ' (' + email + ')' : ''}${pending ? ' — wacht op goedkeuring' : ''}`); // the code itself is never written down or sent
+      // you always hear about a new account: on the phone (ntfy), by mail, and in the activity log
+      const text = `Nieuw account: ${name}${email ? ' (' + email + ')' : ''}${pending ? ' — wacht op jouw goedkeuring' : ''}`;
+      if (!quietNow()) {
+        notifyExternal(null, `${state.settings.name}: ${text}`).catch(() => {});
+        try { if (mailOn() && isEmail(state.settings.mail.adminTo)) sendMail(state.settings.mail.adminTo, `Nieuw account — ${state.settings.name}`, text + sign()).catch(() => {}); } catch {}
+      }
       changed();
-      return send(res, 200, { ok: true, nr, pending: !!state.settings.moderation.profileApproval });
+      res.setHeader('Set-Cookie', vidCookie(vid, !!req.socket.encrypted));
+      return send(res, 200, { ok: true, nr, pin: nr, pending });
     }
-    if (req.method === 'POST' && p === '/api/visit') return send(res, 200, handleVisit(req, await readBody(req)));
+    if (req.method === 'POST' && p === '/api/visit') {
+      const body = await readBody(req);
+      let vid = '';
+      if (body.via === 'phone') { vid = visitorId(req) || crypto.randomBytes(12).toString('hex'); body.vid = vid; } // only phones get a cookie; the door screen is shared by everybody
+      const out = handleVisit(req, body);
+      if (vid) { res.setHeader('Set-Cookie', vidCookie(vid, !!req.socket.encrypted)); if (!visitorId(req)) out.firstVisit = true; }
+      return send(res, 200, out);
+    }
+    if (req.method === 'GET' && p === '/api/visitor/me') { // who is this phone? (from the cookie)
+      const vid = visitorId(req), x = vid ? state.people.find((y) => !y.pending && (y.vids || []).includes(vid)) : null;
+      return send(res, 200, x ? { found: true, nr: x.nr, name: x.name, email: mailOn() && x.email ? maskEmail(x.email) : '' } : { found: false });
+    }
 
     const routeKey = `${req.method} ${p}`;
     const route = adminRoutes[routeKey];

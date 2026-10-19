@@ -93,7 +93,7 @@ test('visitors: bell, questions, profiles', async (t) => {
     const look = (await call(srv, 'POST', '/api/lookup', { nr: 'Anna' })).json;
     assert.equal(look.found, true);
     assert.equal(look.name, 'Anna');
-    for (const n of ['b1', 'b2', 'b3', 'b4']) assert.equal((await call(srv, 'POST', '/api/profile', { nr: `user${n}`, name: n })).status, 200);
+    for (const n of ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7']) assert.equal((await call(srv, 'POST', '/api/profile', { nr: `user${n}`, name: n })).status, 200);
     assert.equal((await call(srv, 'POST', '/api/profile', { nr: 'toomany', name: 'x' })).status, 429);
   });
 });

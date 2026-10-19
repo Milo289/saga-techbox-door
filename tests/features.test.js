@@ -121,3 +121,67 @@ test('energy: every common way of writing a time is kept, nothing silently becom
   const got = (await call(srv, 'GET', '/api/admin-state', undefined, a)).json.power;
   for (const k of Object.keys(days)) assert.deepEqual(got.days[k], days[k], `day ${k}`);
 });
+
+test('accounts: a random code for everybody, always a way in, the name is announced, and a phone is recognised by its cookie (the door screen is not)', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const raw = async (method, p, body, headers = {}) => { const r = await fetch(srv.url + p, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, json: await r.json().catch(() => ({})), cookie: r.headers.get('set-cookie') || '' }; };
+  assert.equal((await call(srv, 'GET', '/api/state')).json.settings.visitors.accounts, true, 'the button is there by default');
+  // an account: only a name is needed, the code comes by itself (6 digits by default), and it is always different
+  const pins = new Set();
+  for (let i = 0; i < 4; i++) { const r = await raw('POST', '/api/profile', { name: 'Anna ' + i, email: i === 0 ? 'anna@example.com' : '' }); assert.equal(r.status, 200, JSON.stringify(r.json)); assert.match(r.json.pin, /^\d{6}$/); assert.equal(r.json.nr, r.json.pin); pins.add(r.json.pin); }
+  assert.equal(pins.size, 4);
+  assert.equal((await raw('POST', '/api/profile', { name: '' })).status, 400);
+  // 8 digits when chosen; wrong choices become 6
+  await call(srv, 'POST', '/api/settings', { visitors: { ...(await call(srv, 'GET', '/api/state')).json.settings.visitors, pinLength: 8 } }, a);
+  assert.match((await raw('POST', '/api/profile', { name: 'Bert' })).json.pin, /^\d{8}$/);
+  await call(srv, 'POST', '/api/settings', { visitors: { ...(await call(srv, 'GET', '/api/state')).json.settings.visitors, pinLength: 5 } }, a);
+  assert.match((await raw('POST', '/api/profile', { name: 'Carla' })).json.pin, /^\d{6}$/);
+  // the code is a way in at once: a visit with it carries the name
+  const pin = [...pins][0];
+  assert.equal((await raw('POST', '/api/lookup', { nr: pin })).json.found, true);
+  assert.equal((await raw('POST', '/api/visit', { type: 'message', message: 'Hoi', nr: pin, via: 'door' })).status, 200);
+  const st = (await call(srv, 'GET', '/api/admin-state', undefined, a)).json;
+  assert.ok(st.requests.some((r) => r.name === 'Anna 0' && r.nr === pin), 'the request shows who it is');
+  assert.ok(st.history.some((h) => /Nieuw account: Anna 0 \(anna@example\.com\)/.test(h.text)), 'the new account is announced with the name');
+  assert.equal(JSON.stringify(st.history).includes(pin), false, 'the code itself is never written to the log');
+  // cookies: the door screen gets none; a phone gets one, and is recognised after it used a code
+  await sleep(1300);
+  const door = await raw('POST', '/api/visit', { type: 'bell', via: 'door' });
+  assert.equal(door.cookie, '', 'no cookie for the shared door screen');
+  await sleep(1300);
+  const phone = await raw('POST', '/api/visit', { type: 'message', message: 'Vanaf mijn telefoon', via: 'phone', nr: pin });
+  assert.match(phone.cookie, /^saga_v=[0-9a-f]{24}; Max-Age=\d+; Path=\/; HttpOnly; SameSite=Lax/);
+  const vid = /saga_v=([0-9a-f]{24})/.exec(phone.cookie)[1];
+  const me = await raw('GET', '/api/visitor/me', null, { Cookie: 'saga_v=' + vid });
+  assert.equal(me.json.found, true); assert.equal(me.json.name, 'Anna 0'); assert.equal(me.json.nr, pin);
+  assert.equal((await raw('GET', '/api/visitor/me')).json.found, false, 'a phone without the cookie is not recognised');
+  assert.equal((await raw('GET', '/api/visitor/me', null, { Cookie: 'saga_v=' + '0'.repeat(24) })).json.found, false);
+  // the account button can be switched off
+  await call(srv, 'POST', '/api/settings', { visitors: { ...(await call(srv, 'GET', '/api/state')).json.settings.visitors, accounts: false } }, a);
+  assert.equal((await call(srv, 'GET', '/api/state')).json.settings.visitors.accounts, false);
+});
+
+test('hourly copy: the extra back-up is kept apart from the nightly ones', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  assert.equal((await call(srv, 'POST', '/api/system/backups/create', {}, a)).status, 200);
+  const list = (await call(srv, 'GET', '/api/system', undefined, a)).json.backups;
+  assert.ok(list.length >= 1);
+  assert.ok(list.every((b) => /^state-\d{4}-\d{2}-\d{2}(_[a-z0-9-]+)?\.(json|sbk)$/.test(b.name)), 'names still fit the back-up screen');
+});
+
+test('a button keeps its number when the list is saved again without numbers (apps, “Alle instellingen”)', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  await call(srv, 'POST', '/api/settings', { customButtons: [{ label: 'Pakketje', ask: false, reply: 'Dank' }, { label: 'Wifi', kind: 'wifi', ssid: 'x' }] }, a);
+  const first = (await call(srv, 'GET', '/api/state')).json.settings.customButtons;
+  assert.equal(first.length, 2);
+  await call(srv, 'POST', '/api/settings-schema/save', { values: { customButtons: [{ label: 'Wifi', kind: 'wifi', ssid: 'x', when: 'always', wifiType: 'WPA' }, { label: 'Pakketje', kind: 'form', reply: 'Dank je', when: 'always', wifiType: 'WPA' }] } }, a);
+  const after = (await call(srv, 'GET', '/api/state')).json.settings.customButtons;
+  assert.equal(after.find((x) => x.label === 'Pakketje').id, first.find((x) => x.label === 'Pakketje').id);
+  assert.equal(after.find((x) => x.label === 'Wifi').id, first.find((x) => x.label === 'Wifi').id);
+});
