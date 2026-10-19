@@ -25,12 +25,16 @@ struct VisitRequest: Identifiable, Equatable {
     let phone: String
     let whenText: String
     let flagged: [String]
+    let starred: Bool
+    let note: String
+    let visits: Int
 
     init(_ j: JSON) {
         id = j.id.str; type = j.type.str; name = j.name.str; nr = j.nr.str; topic = j.topic.str
         message = j.message.str; reason = j.reason.str; email = j.email.str; state = j.state.str; reply = j.reply.str
         at = j.at.date; createdAt = j.createdAt.date ?? Date(); repliedAt = j.repliedAt.date; autoReplied = j.autoReplied.bool
         phone = j.phone.str; whenText = j.when.str; flagged = j.flagged.strings
+        starred = j.starred.bool; note = j.note.str; visits = j.visits.int ?? 1
     }
 
     var typeLabel: String {

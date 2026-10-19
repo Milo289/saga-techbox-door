@@ -270,7 +270,8 @@
   @keyframes drift { from { translate: -4vmin -3vmin; } to { translate: 4vmin 3vmin; } }
   /* ---------- more look options (buttons place, slides, event, greeting …) ---------- */
   #app { padding: calc(var(--u)*4.5 + var(--mg, 0px)); }
-  #greet { font-size: calc(var(--u)*3.2); color: var(--dim); font-weight: 500; } #greet:empty, #slide:empty, #event:empty { display: none; }
+  #greet { font-size: calc(var(--u)*3.2); color: var(--dim); font-weight: 500; } #greet:empty, #slide:empty, #event:empty, #waitcount:empty { display: none; }
+  #waitcount { font-size: calc(var(--u)*2.4); color: var(--dim); }
   #slide { font-size: calc(var(--u)*3.4); font-weight: 600; max-width: 28ch; text-wrap: balance; line-height: 1.3; min-height: 1.3em; animation: fadeIn .8s ease; }
   #event { font-size: calc(var(--u)*2.6); color: var(--c); font-weight: 600; background: color-mix(in srgb, var(--c) 14%, transparent); padding: calc(var(--u)*.8) calc(var(--u)*2); border-radius: 999px; }
   body[data-align="left"] .hero { align-items: flex-start; text-align: left; } body[data-align="right"] .hero { align-items: flex-end; text-align: right; }
@@ -310,6 +311,7 @@
       <div id="message" class="ph" data-ph="Bericht"></div>
       <div id="slide"></div>
       <div id="event"></div>
+      <div id="waitcount"></div>
       <div id="note" class="ph" data-ph="Jouw bericht aan bezoekers"></div>
       <div id="extra" class="ph" data-ph="Bezet 13:00–14:00 · Vandaag open 09:00–17:00"></div>
       <div id="agenda"></div>
@@ -340,7 +342,7 @@
   const app = $('app');
   const params = new URLSearchParams(location.search);
   const VISIT = location.pathname.startsWith('/visit');
-  if (VISIT) document.body.classList.add('visit');
+  if (VISIT) { document.body.classList.add('visit'); const l = document.createElement('link'); l.rel = 'manifest'; l.href = '/visit.webmanifest'; document.head.append(l); } // the visitor page can be put on the home screen
 
   let S = null, offset = 0, pending = null, idleTimer = null, wakeUntil = 0, visitorSig = '';
 
@@ -372,33 +374,36 @@
   };
   const pad = (n) => String(n).padStart(2, '0');
   const now = () => Date.now() + offset;
-  const fmtTime = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const EN = () => !!(S && S.settings.language === 'en');
+  const LOC = () => (EN() ? 'en-GB' : 'nl-NL');
+  const lt = (nl, en) => (EN() ? en : nl); // a Dutch or an English text, by the chosen language
+  const fmtTime = (t) => new Date(t).toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit', hour12: false });
   const dayStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
   const dayDiff = (t) => Math.round((dayStart(t) - dayStart(now())) / 864e5);
   function fmtWhen(t) {
     const d = dayDiff(t), time = fmtTime(t);
     if (d === 0) return time;
-    if (d === 1) return `morgen ${time}`;
-    if (d < 7) return `${new Date(t).toLocaleDateString('nl-NL', { weekday: 'long' })} ${time}`;
-    return `${new Date(t).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} ${time}`;
+    if (d === 1) return `${lt('morgen', 'tomorrow')} ${time}`;
+    if (d < 7) return `${new Date(t).toLocaleDateString(LOC(), { weekday: 'long' })} ${time}`;
+    return `${new Date(t).toLocaleDateString(LOC(), { day: 'numeric', month: 'short' })} ${time}`;
   }
   function dayLabel(t) {
     const d = dayDiff(t);
-    return d === 0 ? 'Vandaag' : d === 1 ? 'Morgen' : new Date(t).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+    return d === 0 ? lt('Vandaag', 'Today') : d === 1 ? lt('Morgen', 'Tomorrow') : new Date(t).toLocaleDateString(LOC(), { weekday: 'long', day: 'numeric', month: 'long' });
   }
   // "Over 30 minuten gaan we sluiten" + "om 15:10" — what happens next, in plain words
   function atText(t) {
     const d = dayDiff(t), time = fmtTime(t);
-    if (d === 0) return `om ${time}`;
-    if (d === 1) return `morgen om ${time}`;
-    if (d < 7) return `${new Date(t).toLocaleDateString('nl-NL', { weekday: 'long' })} om ${time}`;
-    return `${new Date(t).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' })} om ${time}`;
+    if (d === 0) return `${lt('om', 'at')} ${time}`;
+    if (d === 1) return `${lt('morgen om', 'tomorrow at')} ${time}`;
+    if (d < 7) return `${new Date(t).toLocaleDateString(LOC(), { weekday: 'long' })} ${lt('om', 'at')} ${time}`;
+    return `${new Date(t).toLocaleDateString(LOC(), { day: 'numeric', month: 'long' })} ${lt('om', 'at')} ${time}`;
   }
   function duration(ms) {
     const mins = Math.max(1, Math.ceil(ms / 60000));
-    if (mins < 60) return mins === 1 ? '1 minuut' : `${mins} minuten`;
+    if (mins < 60) return mins === 1 ? lt('1 minuut', '1 minute') : `${mins} ${lt('minuten', 'minutes')}`;
     const hrs = Math.floor(mins / 60), rest = mins % 60;
-    return rest ? `${hrs} uur en ${rest} min` : `${hrs} uur`;
+    return rest ? `${hrs} ${lt('uur en', 'hours and')} ${rest} min` : `${hrs} ${lt('uur', 'hours')}`;
   }
   function untilText(v, t) {
     const left = v.until - t;
@@ -567,7 +572,7 @@
     const L = (S && S.settings.look) || {}, d = new Date(t);
     const small = $('time'), big = $('bigclock');
     const style = L.clock || 'digital';
-    const dateTxt = L.date === 'long' ? d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }) : L.date === 'short' ? `${DAYS_S[d.getDay()]} ${d.getDate()} ${d.toLocaleDateString('nl-NL', { month: 'short' })}` : '';
+    const dateTxt = L.date === 'long' ? d.toLocaleDateString(LOC(), { weekday: 'long', day: 'numeric', month: 'long' }) : L.date === 'short' ? `${DAYS_S[d.getDay()]} ${d.getDate()} ${d.toLocaleDateString(LOC(), { month: 'short' })}` : '';
     const digital = L.seconds ? `${fmtTime(t)}:${pad(d.getSeconds())}` : fmtTime(t);
     const sig = [style, L.seconds, dateTxt, digital, L.mode, Math.floor(t / (L.seconds ? 1000 : 60000))].join('|');
     if (sig === clockSig) return;
@@ -603,7 +608,8 @@
   function paintExtras(L) {
     if (VISIT) { $('greet').textContent = ''; $('slide').textContent = ''; $('event').textContent = ''; return; }
     const d = new Date(now()), hr = d.getHours();
-    $('greet').textContent = L.greeting ? (hr < 6 ? 'Goedenacht' : hr < 12 ? 'Goedemorgen' : hr < 18 ? 'Goedemiddag' : 'Goedenavond') : '';
+    { const n = Number(S.waiting) || 0; $('waitcount').textContent = L.waiting && n > 0 ? (n === 1 ? lt('1 bezoeker wacht', '1 visitor is waiting') : lt(`${n} bezoekers wachten`, `${n} visitors are waiting`)) : ''; }
+    $('greet').textContent = L.greeting ? (hr < 6 ? lt('Goedenacht', 'Good night') : hr < 12 ? lt('Goedemorgen', 'Good morning') : hr < 18 ? lt('Goedemiddag', 'Good afternoon') : lt('Goedenavond', 'Good evening')) : '';
     // rotating messages
     const sl = L.slides || {}, items = sl.enabled ? (sl.items || []) : [];
     const sig = JSON.stringify([items, sl.seconds]);
@@ -633,7 +639,7 @@
     const L = (S && S.settings.look) || {};
     if (!L.speak || VISIT || !window.speechSynthesis) return;
     const key = S.view.mode + '|' + S.view.label;
-    if (spokenKey && key !== spokenKey) { try { const u = new SpeechSynthesisUtterance(`${S.view.label}. ${S.view.message || ''}`); u.lang = 'nl-NL'; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {} }
+    if (spokenKey && key !== spokenKey) { try { const u = new SpeechSynthesisUtterance(`${S.view.label}. ${S.view.message || ''}`); u.lang = LOC(); speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {} }
     spokenKey = key;
   }
   // a fresh start of this page at a set time (a browser that runs for weeks slowly gets heavy)
@@ -682,6 +688,7 @@
     applyLook();
     speakStatus();
     document.title = `${v.label} — ${st.name}`;
+    document.documentElement.lang = EN() ? 'en' : 'nl';
     renderBlocks();
     layout();
     $('name').textContent = st.name;
@@ -874,12 +881,20 @@
     } finally { sending = false; if (btn) btn.disabled = false; }
   }
 
+  // an appointment request as a calendar file (made here in the browser; nothing is sent anywhere)
+  function downloadIcs(payload) {
+    const z = (t) => new Date(t).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    const len = Math.max(10, Math.min(240, (S && S.settings.slotMinutes) || 30)) * 60000, name = (S && S.settings.name) || 'Deur';
+    const text = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Saga Techbox//NL', 'BEGIN:VEVENT', `UID:${Date.now()}@saga-techbox`, `DTSTAMP:${z(Date.now())}`, `DTSTART:${z(payload.at)}`, `DTEND:${z(payload.at + len)}`, `SUMMARY:${lt('Afspraak', 'Appointment')} — ${String(name).replace(/[,;\n]/g, ' ')}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
+    const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/calendar' })), download: 'afspraak.ics' }); document.body.append(a); a.click(); a.remove();
+  }
   function showSent(payload, mailTo) {
     openSheet('done',
       h('div', { class: 'badge pop' }, payload.type === 'bell' ? icon('bell') : icon('check')),
       h('h3', {}, formCfg().thanksText ? formCfg().thanksText : payload.type === 'bell' ? tx('sentBell') : payload.type === 'appointment' ? tx('sentAppt') : payload.type === 'callback' ? tx('callbackSent') : tx('sent')),
       payload.type === 'appointment' ? h('p', { class: 'muted' }, tx('forTime', { at: atText(payload.at) })) : null,
       mailTo ? h('p', { class: 'muted' }, tx('mailNote', { mail: mailTo })) : null,
+      payload.type === 'appointment' && payload.at ? h('button', { class: 'link', onclick: () => downloadIcs(payload) }, lt('Zet in mijn agenda', 'Add to my calendar')) : null,
       h('div', { id: 'replyBox', class: 'wait-line' }, h('div', { class: 'spin' }), tx('waiting')),
       h('div', { class: 'btns', style: 'width:100%' }, h('button', { class: 'btn', onclick: closeSheet }, tx('close'))));
     bumpIdle(300000);
@@ -954,7 +969,7 @@
     const phone = field('input', { type: 'tel', placeholder: phoneMode === 'required' ? tx('callbackPhone') + ' *' : tx('callbackPhone'), maxlength: 20 });
     const err = h('div', { class: 'err' });
     let when = '';
-    const chips = ['Zo snel mogelijk', 'Vanmiddag', 'Morgen'].map((o) => h('button', { class: 'topic', onclick: (e) => { when = when === o ? '' : o; chips.forEach((x) => x.classList.toggle('sel', x === e.currentTarget && !!when)); bumpIdle(); } }, o));
+    const chips = [lt('Zo snel mogelijk', 'As soon as possible'), lt('Vanmiddag', 'This afternoon'), lt('Morgen', 'Tomorrow')].map((o) => h('button', { class: 'topic', onclick: (e) => { when = when === o ? '' : o; chips.forEach((x) => x.classList.toggle('sel', x === e.currentTarget && !!when)); bumpIdle(); } }, o));
     const go = h('button', { class: 'btn go' }, tx('send'));
     go.onclick = () => {
       const e = pb.check(); if (e) { err.textContent = e; return; }
@@ -1106,7 +1121,7 @@
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => (S.hasPeople ? numberPad(opt) : opt.back()) }, tx('back')), go));
   }
 
-  const shortDay = (t) => { const d = dayDiff(t); if (d === 0) return 'Vandaag'; if (d === 1) return 'Morgen'; const x = new Date(t).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }); return x[0].toUpperCase() + x.slice(1); };
+  const shortDay = (t) => { const d = dayDiff(t); if (d === 0) return lt('Vandaag', 'Today'); if (d === 1) return lt('Morgen', 'Tomorrow'); const x = new Date(t).toLocaleDateString(LOC(), { weekday: 'short', day: 'numeric', month: 'short' }); return x[0].toUpperCase() + x.slice(1); };
 
   // step 1: pick a day (tabs) and a time
   async function openAppointment(preselect) {

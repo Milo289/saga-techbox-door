@@ -39,6 +39,12 @@ public sealed class MainWindow : Window
         C.Changed += () => Dispatcher.UIThread.Post(Redraw);
         C.NeedCode += () => Dispatcher.UIThread.Post(ShowCodeDialog);
         C.NeedTrust += () => Dispatcher.UIThread.Post(ShowTrustDialog);
+        KeyDown += (_, e) =>
+        {
+            if (e.KeyModifiers != Avalonia.Input.KeyModifiers.None || !C.Can("status") || FocusManager?.GetFocusedElement() is TextBox) return;
+            var mode = e.Key switch { Avalonia.Input.Key.O => "open", Avalonia.Input.Key.G => "closed", Avalonia.Input.Key.B => "busy", _ => null };
+            if (mode != null) { e.Handled = true; Run($"De deur staat op {(mode == "open" ? "open" : mode == "closed" ? "gesloten" : "bezet")}", () => C.SetStatusAsync(mode)); }
+        };
         RestoreWindow();
         ActualThemeVariantChanged += (_, _) => Redraw();
         // warnings for you: the server lost for more than a minute and a half, and warnings the server raises itself
@@ -245,7 +251,8 @@ public sealed class MainWindow : Window
             Ui.Wrap(8, durations.ToArray()),
             Ui.Wrap(8,
                 Ui.Btn("Volg de openingstijden", () => Run("Volgt de openingstijden", () => C.PostAsync("/api/status/auto")), Ui.Soft),
-                Ui.Btn("Bezet beëindigen", () => Run("Bezet beëindigd", () => C.PostAsync("/api/busy/end")), Ui.Soft))));
+                Ui.Btn("Bezet beëindigen", () => Run("Bezet beëindigd", () => C.PostAsync("/api/busy/end")), Ui.Soft),
+                Ui.Btn("Test de bel", () => Run("De bel is getest", () => C.PostAsync("/api/bell/test")), Ui.Soft))));
 
         if (_message == "") _message = DoorClient.Str(C.State["settings"]?["note"]);
         var msgBox = Ui.Input(_message, "bijv. Ik ben zo terug", t => _message = t);
@@ -253,7 +260,43 @@ public sealed class MainWindow : Window
             Ui.Row(10, msgBox.W(420), Ui.Btn("Plaatsen", () => Run("Bericht staat op de deur", () => C.PostAsync("/api/settings", new() { ["note"] = _message })), Ui.Accent, "#000000"),
                 Ui.Btn("Wissen", () => { _message = ""; Run("Bericht gewist", () => C.PostAsync("/api/settings", new() { ["note"] = "" })); }, Ui.Soft))));
 
-        return Ui.Page(header, Stats(), C.Can("status") ? QuickBar() : null, Ui.Text("Zet de deur op", 17, true), modes, C.Can("status") ? how : null, C.Can("status") ? msg : null);
+        LoadExtras();
+        return Ui.Page(header, Stats(), BusyCard(), CheckCard(), C.Can("status") ? QuickBar() : null, Ui.Text("Zet de deur op", 17, true), modes, C.Can("status") ? how : null, C.Can("status") ? msg : null);
+    }
+
+    // ---------- how busy the door is, and the first-run list (3.5.0-beta.12) ----------
+    JsonNode? _stats12, _check12; bool _extrasTried;
+    async void LoadExtras()
+    {
+        if (_extrasTried || !C.HasState) return;
+        _extrasTried = true;
+        try { if (C.Can("inbox")) _stats12 = await C.CallAsync("GET", "/api/stats"); } catch { }
+        try { if (C.Can("settings")) _check12 = await C.CallAsync("GET", "/api/checklist"); } catch { }
+        Dispatcher.UIThread.Post(Redraw);
+    }
+    Control? BusyCard()
+    {
+        if (_stats12?["byHour"] is not JsonArray hours || hours.Count != 24) return null;
+        var vals = hours.Select(x => (int?)x?.GetValue<int>() ?? 0).ToArray();
+        var max = Math.Max(1, vals.Max());
+        var bars = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3, Height = 84 };
+        for (int h = 0; h < 24; h++)
+            bars.Children.Add(new Border { Width = 14, Height = Math.Max(4, 80.0 * vals[h] / max), VerticalAlignment = VerticalAlignment.Bottom, CornerRadius = new CornerRadius(3, 3, 0, 0), Background = Ui.Brush(Ui.Accent), Opacity = vals[h] == 0 ? 0.25 : 1 });
+        var total = _stats12["total"]?.GetValue<int>() ?? 0;
+        var busiest = _stats12["busiestHour"]?.GetValue<int>() ?? 0;
+        var avg = _stats12["avgReplyMinutes"] is JsonValue v && v.TryGetValue<int>(out var m) ? $" · antwoord in {m} min" : "";
+        return Ui.Card(Ui.Stack(8, Ui.Text("Drukte, laatste 30 dagen", 16, true), bars,
+            Ui.Text($"{total} verzoeken{(total > 0 ? $" · drukste uur {busiest:00}:00" : "")}{avg}", 12, false, Ui.Muted)), 18);
+    }
+    Control? CheckCard()
+    {
+        if (_check12?["items"] is not JsonArray items) return null;
+        var open = items.Where(i => i?["ok"]?.GetValue<bool>() != true).ToList();
+        if (open.Count == 0) return null;
+        var kids = new List<Control> { Ui.Text($"Eerste keer instellen: {items.Count - open.Count} van {items.Count} klaar", 16, true) };
+        foreach (var i in open) kids.Add(Ui.Stack(1, Ui.Text("○  " + DoorClient.Str(i!["text"]), 14), Ui.Text(DoorClient.Str(i["tip"]), 12, false, Ui.Muted)));
+        kids.Add(Ui.Text("Je regelt dit in het web-paneel van de server.", 12, false, Ui.Muted));
+        return Ui.Card(Ui.Stack(8, kids.ToArray()), 18);
     }
 
     // ---------- visitors ----------

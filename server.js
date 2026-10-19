@@ -82,8 +82,9 @@ const DEFAULT_SETTINGS = {
     shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0,
     ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true,
     buttons: { place: 'below', size: 'normal', columns: 0 }, slides: { enabled: false, seconds: 8, items: [] }, event: { enabled: false, label: '', date: '' },
-    greeting: false, updated: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false,
+    greeting: false, updated: false, waiting: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false,
   },
+  language: 'nl', // the door screen and the visitor page: nl | en
   noteSchedule: [], // a note on the door for a period (shown instead of the note above, by date)
   quiet: { enabled: false, from: '18:00', to: '08:00' }, // no messages to the phone or mail in these hours (the door itself keeps working)
   publicStatus: { enabled: false }, // /status.json, /badge.svg and /widget for a school website
@@ -141,7 +142,7 @@ function cleanLook(l = {}) {
   out.slides = { enabled: !!sl.enabled, seconds: n(sl.seconds, 3, 120, 8), items: (Array.isArray(sl.items) ? sl.items : []).map((x) => str(x, 140)).filter(Boolean).slice(0, 12) };
   const ev = l.event || {};
   out.event = { enabled: !!ev.enabled, label: str(ev.label, 60), date: /^\d{4}-\d{2}-\d{2}$/.test(ev.date) ? ev.date : '' };
-  for (const k of ['greeting', 'updated', 'awake', 'speak', 'mirror']) out[k] = !!l[k];
+  for (const k of ['greeting', 'updated', 'waiting', 'awake', 'speak', 'mirror']) out[k] = !!l[k];
   out.glow = l.glow === undefined ? true : !!l.glow;
   out.bellFlash = ['none', 'flash', 'pulse'].includes(l.bellFlash) ? l.bellFlash : 'none';
   out.dot = ['dot', 'bar', 'none'].includes(l.dot) ? l.dot : 'dot';
@@ -354,7 +355,28 @@ const PALETTES = [
   { id: 'contrast', name: 'Hoog contrast', open: '#00ff6a', closed: '#ff2d2d', busy: '#ffe600', accent: '#ffe600', light: { open: '#007a33', closed: '#c40000', busy: '#8a7400' } },
   { id: 'cb', name: 'Kleurenblind-vriendelijk', open: '#0072b2', closed: '#d55e00', busy: '#f0e442', accent: '#0072b2', light: { open: '#005a8c', closed: '#b34b00', busy: '#a89c00' } },
 ];
-const resolveUi = (over) => Object.fromEntries(Object.entries(UI_TEXTS).map(([k, v]) => [k, (over && String(over[k] || '').trim()) || v[2]]));
+// English standard texts of the door screen (used when the language is English and nobody wrote an own text)
+const UI_EN = {
+  askTitle: 'Please do not knock', account: 'Create account', accountDone: 'Your account is ready', accountPin: 'This is your code. With it you are yourself at every question. Keep it safe.',
+  bell: 'Doorbell', bellOff: 'Doorbell off', bellWait: 'Doorbell · {s}s', book: 'Book a time', question: 'Question', callback: 'Call me back',
+  todayOpen: 'Open today {from}–{to}', todayClosed: 'Closed today', over: 'In {time}', closeSoon: '{over} we close', closeLater: 'We close', openSoon: '{over} we are open again', openLater: 'Open again', busySoon: '{over} we are busy', busyLater: 'Busy from',
+  cancel: 'Cancel', back: 'Back', next: 'Next', send: 'Send', request: 'Request', close: 'Close', wifiPass: 'Password:',
+  aboutWhat: 'What is it about?', tellMore: 'Tell us a bit more (optional)', typeOwn: '+ Add your own words', pickTopic: 'Pick a topic or type your question',
+  bookHint: 'Pick a day and a time.', bookLoading: 'Loading times…', who: 'Who are you?', whoHint: 'Type your code — we will fill in the rest.', yourNumber: 'Your code', typeUsername: 'Type a username', makeProfile: 'Create account', noNumber: 'No code',
+  notYou: 'Not you?', hi: 'Hi {name}!', mailAlso: 'Also email the answer to {email}', yourNameOpt: 'Your name (optional)', yourName: 'Your name',
+  sentBell: 'The bell was rung', sentAppt: 'Request sent', sent: 'Sent', forTime: 'For {at}', mailNote: 'You will get the answer by email too ({mail}).', waiting: 'Waiting for an answer…', profilePending: 'Your account was made and waits for approval.',
+  qrHint: 'Scan and ring with your own phone', callbackHint: 'Leave your number and we will call you back.', callbackPhone: 'Your phone number', callbackSent: 'We will call you back',
+  tryLater: 'This is not possible right now — please try again later.', toastBellOff: 'The doorbell is off — ask a question instead', toastRang: 'Someone rang the bell', toastWait: 'Someone just rang — {s} s left',
+};
+const EN_TEXTS = { open: ['Open', 'Come on in'], closed: ['Closed', 'Please do not enter'], busy: ['Busy', 'Working — please do not disturb'] };
+const resolveUi = (over, lang) => Object.fromEntries(Object.entries(UI_TEXTS).map(([k, v]) => [k, (over && String(over[k] || '').trim()) || (lang === 'en' && UI_EN[k]) || v[2]]));
+// the status texts: when the language is English and the text is still the Dutch standard, the English one is used
+function textOf(mode) {
+  const t = state.settings.texts[mode];
+  if (state.settings.language !== 'en') return t;
+  const nl = DEFAULT_SETTINGS.texts[mode];
+  return { label: t.label === nl.label ? EN_TEXTS[mode][0] : t.label, message: t.message === nl.message ? EN_TEXTS[mode][1] : t.message };
+}
 const UI_DEFAULTS = Object.fromEntries(Object.keys(UI_TEXTS).map((k) => [k, '']));
 DEFAULT_SETTINGS.ui = UI_DEFAULTS;
 
@@ -613,7 +635,7 @@ function computeView(now = Date.now()) {
     const end = new Date(`${away.until}T23:59:59`).getTime();
     if (Number.isFinite(end) && now <= end) v = { mode: 'closed', until: end + 1000, message: away.message, source: 'away' };
   }
-  const t = state.settings.texts[v.mode];
+  const t = textOf(v.mode);
   const then = v.until ? baseModeAt(v.until) : null;
   return {
     mode: v.mode,
@@ -621,7 +643,7 @@ function computeView(now = Date.now()) {
     message: v.message || t.message,
     until: v.until,
     then: then && then !== v.mode ? then : null,
-    thenLabel: then && then !== v.mode ? state.settings.texts[then].label : null,
+    thenLabel: then && then !== v.mode ? textOf(then).label : null,
     source: v.source,
     upcoming: blocks.filter((b) => b.from > now && b.from < now + 24 * 3600e3).slice(0, 3).map(({ from, to, note }) => ({ from, to, note })),
   };
@@ -662,7 +684,8 @@ function publicState() {
   const s = state.settings;
   const settings = {};
   for (const k of Object.keys(s)) if (!PRIVATE_SETTINGS.includes(k)) settings[k] = s[k];
-  settings.ui = resolveUi(s.ui); // the door screen gets the words ready to use
+  settings.ui = resolveUi(s.ui, s.language); // the door screen gets the words ready to use
+  settings.texts = { open: textOf('open'), closed: textOf('closed'), busy: textOf('busy') };
   { const d = new Date(), today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, planned = schedule.noteFor(s.noteSchedule, today); if (planned) settings.note = planned; delete settings.noteSchedule; }
   const now = Date.now();
   return {
@@ -673,6 +696,7 @@ function publicState() {
     bellReadyAt: lastBellAt + bellCooldown(),
     mailOn: mailOn(),
     hasPeople: state.people.length > 0,
+    waiting: state.requests.filter((r) => r.state === 'new' || r.state === 'seen').length, // only a number (the door screen can show it if you want)
     positions: state.positions || {},
     blocks: state.blocks || [],
     weather: state.settings.weather.enabled && weather.ok ? { temp: weather.temp, code: weather.code, city: state.settings.weather.city } : null,
@@ -959,7 +983,7 @@ function adminState(id) {
     view: computeView(),
     busy: [...state.busy].sort((a, b) => a.from - b.from),
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
-    requests: full('inbox') ? state.requests : [],
+    requests: full('inbox') ? requestsForPanel() : [],
     history: full('audit') ? (full('system') ? state.history : state.history.filter((h) => !h.r && h.type !== 'systeem')) : [],
     me: { name: id.name, role: id.role, perms: id.perms, mustSetup2fa: !!id.mustSetup2fa, twoStep: !!((totpOf(id) || {}).enabled), kind: id.kind, noPw: !!id.root, canLock: !!id.sessionId, hasLock: !!lockHashOf(id) },
     permLabels: PUBLIC_PERM_LABELS, rolePresets: ASSIGNABLE,
@@ -1283,7 +1307,12 @@ function tickInner() {
     }
   }
   const before = state.busy.length + state.appointments.length;
-  state.busy = state.busy.filter((b) => b.to > now - 3600e3);
+  state.busy = state.busy.map((b) => { // a block that repeats every week moves to next week when it is over
+    if (!b.weekly) return b;
+    let f = new Date(b.from), t = new Date(b.to);
+    while (t.getTime() < now - 3600e3) { f.setDate(f.getDate() + 7); t.setDate(t.getDate() + 7); }
+    return { ...b, from: f.getTime(), to: t.getTime() };
+  }).filter((b) => b.to > now - 3600e3);
   state.appointments = state.appointments.filter((a) => a.at > now - 24 * 3600e3);
   if (state.busy.length + state.appointments.length !== before) dirty = true;
 
@@ -1670,7 +1699,7 @@ const adminRoutes = {
     if (!from || !to || to <= from) throw bad('De eindtijd moet na de begintijd liggen');
     if (to <= now) throw bad('Die tijd is al voorbij');
     if (from < now) from = now;
-    state.busy.push({ id: newId(), from, to, note: str(b.note, 100) });
+    state.busy.push({ id: newId(), from, to, note: str(b.note, 100), ...(b.weekly ? { weekly: true } : {}) });
     log('busy', `Bezet ${hm(from)}–${hm(to)}${b.note ? ' — ' + str(b.note, 100) : ''}`);
   },
   'POST /api/busy/remove': (b) => { state.busy = state.busy.filter((x) => x.id !== b.id); },
@@ -1687,6 +1716,7 @@ const adminRoutes = {
     if (b.mail && b.mail.pass === PASS_MASK) b.mail = { ...b.mail, pass: state.settings.mail.pass };
     const merged = { ...state.settings };
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
+    merged.language = merged.language === 'en' ? 'en' : 'nl';
     merged.visitors.accounts = merged.visitors.accounts !== false; merged.visitors.pinLength = [4, 6, 8].includes(Number(merged.visitors.pinLength)) ? Number(merged.visitors.pinLength) : 6;
     merged.look = cleanLook(merged.look);
     merged.noteSchedule = schedule.cleanNoteSchedule('noteSchedule' in b ? b.noteSchedule : state.settings.noteSchedule);
@@ -1733,8 +1763,9 @@ const adminRoutes = {
 
   'POST /api/requests/reply': (b) => {
     const r = findReq(b.id);
-    const reply = str(b.reply, 200);
+    let reply = str(b.reply, 200);
     if (!reply) throw bad('Typ eerst een antwoord');
+    reply = reply.replace(/\{naam\}/gi, (r.name || '').split(' ')[0] || 'bezoeker').replace(/\{name\}/gi, (r.name || '').split(' ')[0] || 'visitor');
     Object.assign(r, { reply, repliedAt: Date.now(), autoReplied: false, state: 'replied' });
     log('reply', `→ ${r.name || 'bezoeker'}: ${reply}`);
     mailVisitor(r, 'reply');
@@ -2223,6 +2254,11 @@ function privacyFind(q) {
     logMentions: state.history.filter((h) => has(h.text)).length, // the activity log is chained and keeps its lines
   };
 }
+// the requests as the panel and the apps see them: how often this phone came before, and without the number of the cookie itself
+function requestsForPanel() {
+  const n = new Map(); for (const r of state.requests) if (r.vid) n.set(r.vid, (n.get(r.vid) || 0) + 1);
+  return state.requests.map((r) => { if (!r.vid) return r; const { vid, ...rest } = r; return { ...rest, visits: n.get(vid) || 1 }; });
+}
 // the list for a new installation: what to switch on, where to find it
 function setupChecklist(id) {
   const items = [], add = (key, ok, text, tip, tab) => items.push({ key, ok: !!ok, text, tip: ok ? '' : tip, tab });
@@ -2240,6 +2276,23 @@ function setupChecklist(id) {
 }
 Object.assign(adminRoutes, {
   'GET /api/checklist': (b, id) => setupChecklist(id),
+  // ---- a star and an own note on a request (only the staff sees these) ----
+  'POST /api/requests/star': (b) => { const r = findReq(b.id); r.starred = !!b.on; },
+  'POST /api/requests/note': (b) => { const r = findReq(b.id); r.note = str(b.text, 300); },
+  // ---- ring the bell on every screen without making a request (to test the sound and the notice) ----
+  'POST /api/bell/test': (b, id) => { const now = Date.now(); for (const c of clients) write(c, 'ring', { id: 'test', at: now, test: true }); log('systeem', `${id.name} testte de bel`, 'systeem'); return { ok: true, screens: [...clients].filter((c) => c.role !== 'admin').length }; },
+  // ---- people: a new random code, and the list as a spreadsheet ----
+  'POST /api/people/pin': (b, id) => {
+    const x = state.people.find((y) => y.id === b.id); if (!x) throw bad('Die persoon bestaat niet meer');
+    const len = [4, 6, 8].includes(Number(state.settings.visitors.pinLength)) ? Number(state.settings.visitors.pinLength) : 6;
+    let nr = ''; for (let i = 0; i < 200 && !nr; i++) { const c = String(crypto.randomInt(10 ** (len - 1), 10 ** len)); if (!state.people.some((y) => y.nr === c)) nr = c; }
+    if (!nr) throw bad('Er kon geen pincode gemaakt worden');
+    x.nr = nr; x.vids = []; state.peopleRev = (state.peopleRev || 0) + 1; // the old code and the phones that were known by it stop working
+    log('visit', `${id.name} gaf ${x.name} een nieuwe pincode`, 'systeem');
+    return { ok: true, pin: nr };
+  },
+  'GET /api/people/export': () => { const q = (t) => '"' + String(t == null ? '' : t).replace(/"/g, '""') + '"'; return { __file: { name: 'personen.csv', text: 'Naam,Pincode of nummer,E-mail,Notitie,Zelf gemaakt\n' + state.people.map((p) => [p.name, p.nr, p.email, p.note, p.self ? 'ja' : ''].map(q).join(',')).join('\n') + '\n' } }; },
+  'GET /api/stats/export': (b, id, url) => { const s = adminRoutes['GET /api/stats'](b, id, url); return { __file: { name: 'drukte.csv', text: 'Dag,Verzoeken\n' + s.byDay.map((d) => `${d.day},${d.n}`).join('\n') + '\n\nUur,Verzoeken\n' + s.byHour.map((n, h) => `${String(h).padStart(2, '0')}:00,${n}`).join('\n') + '\n' } }; },
   // ---- statistics: how busy is the door (counts only, no names) ----
   'GET /api/stats': (b, id, url) => {
     const days = Math.max(7, Math.min(90, Number(url.searchParams.get('days')) || 30)), since = Date.now() - days * 864e5;
@@ -2326,6 +2379,7 @@ Object.assign(adminRoutes, {
 });
 
 // Public API for scripts and other programs (use an API key: Authorization: Bearer door_…)
+adminRoutes['GET /api/v1/stats'] = adminRoutes['GET /api/stats'];
 adminRoutes['GET /api/v1/status'] = () => { const v = computeView(); return { mode: v.mode, label: v.label, message: v.message, until: v.until, then: v.then, source: v.source }; };
 adminRoutes['POST /api/v1/status'] = adminRoutes['POST /api/status'];
 adminRoutes['GET /api/v1/requests'] = (b, id, url) => {
@@ -2363,7 +2417,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/checklist': 'settings', 'GET /api/stats': 'inbox', 'GET /api/requests/export': 'export', 'POST /api/privacy/search': 'people', 'POST /api/privacy/erase': 'people', 'POST /api/update/rollback': 'system', 'POST /api/system/backups/verify': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/checklist': 'settings', 'POST /api/requests/star': 'inbox', 'POST /api/requests/note': 'inbox', 'POST /api/bell/test': 'status', 'POST /api/people/pin': 'people', 'GET /api/people/export': 'people', 'GET /api/stats/export': 'inbox', 'GET /api/v1/stats': 'inbox', 'GET /api/stats': 'inbox', 'GET /api/requests/export': 'export', 'POST /api/privacy/search': 'people', 'POST /api/privacy/erase': 'people', 'POST /api/update/rollback': 'system', 'POST /api/system/backups/verify': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -2541,6 +2595,10 @@ const handle = async (req, res) => {
     if (p === '/help' || p === '/handleiding') return serveFile(res, 'help.html', req);
     if (p === '/voorwaarden') return serveFile(res, 'voorwaarden.html', req); // terms of use and privacy statement (from VOORWAARDEN.md and PRIVACY.md)
     if (p === '/privacy' || p === '/privacyverklaring') return serveFile(res, 'privacy.html', req);
+    if (p === '/visit.webmanifest') { // the visitor page can be put on the home screen of a phone
+      res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(JSON.stringify({ name: state.settings.name, short_name: String(state.settings.name).slice(0, 12), start_url: '/visit', scope: '/visit', display: 'standalone', background_color: '#000000', theme_color: '#000000', lang: state.settings.language === 'en' ? 'en' : 'nl', icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] }));
+    }
     if (p === '/poster') return serveFile(res, 'poster.html', req); // a page to print: the code that opens the visitor page
     if (p === '/widget') return serveFile(res, 'widget.html', req);
     if (p === '/status.json' || p === '/badge.svg') { // for a school website; only when it is switched on

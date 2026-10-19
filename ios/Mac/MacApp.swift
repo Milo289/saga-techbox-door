@@ -27,6 +27,11 @@ struct DeurBeheerMacApp: App {
         }
         .defaultSize(width: 980, height: 660)
         .commands {
+            CommandMenu("Pagina") { // ⌘1 … ⌘5: go to a page
+                ForEach(Array([MacPage.status, .inbox, .manage, .form, .activity].enumerated()), id: \.offset) { i, p in
+                    Button(p.title) { NotificationCenter.default.post(name: .sagaGoPage, object: p.rawValue) }.keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: .command)
+                }
+            }
             CommandMenu("Deur") {
                 Button("Open") { Task { await store.setStatus("open") } }.keyboardShortcut("1", modifiers: [.command, .option])
                 Button("Gesloten") { Task { await store.setStatus("closed") } }.keyboardShortcut("2", modifiers: [.command, .option])
@@ -46,6 +51,8 @@ struct DeurBeheerMacApp: App {
         Settings { MacSettings(store: store).frame(width: 760, height: 640).modifier(SchemeModifier()) }
     }
 }
+
+extension Notification.Name { static let sagaGoPage = Notification.Name("saga.goPage") }
 
 struct SchemeModifier: ViewModifier {
     @AppStorage(MacPref.appearance) private var appearance = "system"

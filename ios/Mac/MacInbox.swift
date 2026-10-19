@@ -57,6 +57,8 @@ struct MacInbox: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(r.name.isEmpty ? "Anoniem" : r.name).font(.headline)
+                    if r.starred { Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption) }
+                    if r.visits > 1 { Text("\(r.visits)e keer").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1).background(.quaternary, in: Capsule()) }
                     if r.state == "new" { Text("NIEUW").font(.caption2.bold()).padding(.horizontal, 5).padding(.vertical, 1).background(Palette.accent, in: Capsule()).foregroundStyle(.black) }
                     Spacer()
                     Text(r.createdAt.ago).font(.caption).foregroundStyle(.secondary)
@@ -95,7 +97,7 @@ struct MacRequestDetail: View {
                 if !request.flagged.isEmpty { Label("Gemarkeerd door het filter: \(request.flagged.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
                 VStack(alignment: .leading, spacing: 6) {
                     if let at = request.at { Label("Gevraagde tijd: \(at.whenText)", systemImage: "calendar") }
-                    if !request.nr.isEmpty { Label("Nummer \(request.nr)", systemImage: "number") }
+                    if !request.nr.isEmpty { Label("Herkend met pincode", systemImage: "number") }
                     if !request.email.isEmpty { Label(request.email, systemImage: "envelope") }
                     if !request.phone.isEmpty { Label("Bel terug: \(request.phone)\(request.whenText.isEmpty ? "" : " (\(request.whenText))")", systemImage: "phone.fill") }
                 }.foregroundStyle(.secondary)
@@ -107,6 +109,7 @@ struct MacRequestDetail: View {
                             Button("Bevestig afspraak") { Task { await store.run("Afspraak bevestigd") { _ = try await store.post("api/requests/accept", ["id": request.id, "at": ms(apptTime)]) } } }.buttonStyle(.borderedProminent) }.padding(6)
                     }
                 }
+                RequestExtras(store: store, request: request)
                 GroupBox("Antwoord op de deur") {
                     VStack(alignment: .leading, spacing: 10) {
                         Flow(spacing: 8) { ForEach(store.quickReplies, id: \.self) { q in Button(q) { send(q) }.buttonStyle(.bordered) } }

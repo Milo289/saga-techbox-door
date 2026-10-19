@@ -41,6 +41,9 @@ struct StatusView: View {
                 hero
                 modeButtons
                 if store.hasState { todayCard }
+                if store.can("inbox") { BusyChartCard(store: store) }
+                if store.can("settings") { ChecklistCard(store: store) }
+                if canChange { TestBellButton(store: store).buttonStyle(.bordered).frame(maxWidth: .infinity, alignment: .leading) }
                 if canChange, !quick.isEmpty { quickCard }
                 if store.hasState && !canChange { Label("Je hebt geen recht om de status te wijzigen.", systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary) }
                 if showDuration { durationCard }

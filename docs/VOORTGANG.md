@@ -61,3 +61,6 @@ Niet getest: echte schermen en tv's (marge, spiegelen), spraak (browser blokkeer
 - **Energie**: tijden kiezen met uur- en minutenlijsten (24 uur), zodat AM/PM-velden in Safari niet meer lukraak leeg blijven. De server begrijpt ook 7:05, 07.05 en 07:05:00.
 - **Reserve**: een uurlijkse reservekopie (alleen als er iets veranderd is, bewaard per dag, 7 dagen) naast de nachtelijke back-ups. Knoppen houden hun nummer bij opslaan vanuit de apps.
 - Niet getest: cookies via https op een echte telefoon, de melding van een nieuw account op je telefoon, 4 en 8 cijfers op het deurscherm zelf.
+
+## 3.5.0-beta.12 — zie docs/PLAN-beta12.md
+Gemak, functies en schermen in het paneel, het deurscherm en de apps (iPhone/iPad/Mac, Windows/Linux, desktop-app). Niet getest: Engels op een echt scherm (alleen de zichtbaarste teksten zijn vertaald), de pagina's in de apps op een echt apparaat, de Windows/Linux-app (alleen door de bouw op GitHub).

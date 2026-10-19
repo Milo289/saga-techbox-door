@@ -81,6 +81,7 @@ targetTemplates:
       - path: App/Profiles.swift
       - path: App/SecurityUI.swift
       - path: App/FormSettings.swift
+      - path: App/Comfort12.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

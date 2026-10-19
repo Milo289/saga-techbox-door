@@ -104,6 +104,8 @@ struct InboxView: View {
             VStack(alignment: .leading, spacing: compact ? 2 : 5) {
                 HStack {
                     Text(r.name.isEmpty ? "Anoniem" : r.name).font(.headline).foregroundStyle(.white)
+                    if r.starred { Image(systemName: "star.fill").foregroundStyle(.yellow).font(.caption) }
+                    if r.visits > 1 { Text("\(r.visits)e keer").font(.caption2).padding(.horizontal, 6).padding(.vertical, 2).background(Color.white.opacity(0.12), in: Capsule()).foregroundStyle(.secondary) }
                     if r.state == "new" { Text("NIEUW").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2).background(Palette.open, in: Capsule()).foregroundStyle(.black) }
                     Spacer()
                     Text(r.createdAt.ago).font(.caption).foregroundStyle(.secondary)
@@ -142,7 +144,7 @@ struct RequestDetail: View {
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         if let at = request.at { Label("Gevraagde tijd: \(at.whenText)", systemImage: "calendar") }
-                        if !request.nr.isEmpty { Label("Nummer \(request.nr)", systemImage: "number") }
+                        if !request.nr.isEmpty { Label("Herkend met pincode", systemImage: "number") }
                         if !request.email.isEmpty { Label(request.email, systemImage: "envelope") }
                     }.font(.subheadline).foregroundStyle(.secondary)
                     if !request.reply.isEmpty { Label(request.reply, systemImage: "arrowshape.turn.up.left.fill").foregroundStyle(Palette.open).card() }
@@ -156,6 +158,8 @@ struct RequestDetail: View {
                             }.buttonStyle(PrimaryButton(tint: Palette.open))
                         }.card()
                     }
+
+                    RequestExtras(store: store, request: request)
 
                     VStack(alignment: .leading, spacing: 10) {
                         SectionTitle("Antwoord op de deur", symbol: "arrowshape.turn.up.left")

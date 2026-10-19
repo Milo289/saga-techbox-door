@@ -21,6 +21,8 @@ struct MacStatus: View {
                     StatTile(value: "\(today.bells)", label: "keer aangebeld", symbol: "bell.fill")
                     StatTile(value: today.averageReplyMinutes.map { "\($0) min" } ?? "—", label: "gemiddeld antwoord", symbol: "timer")
                 }
+                if store.can("inbox") { BusyChartCard(store: store) }
+                if store.can("settings") { ChecklistCard(store: store) }
                 if store.can("status"), !quick.isEmpty {
                     Text("Snelle acties").font(.headline)
                     Flow(spacing: 10) {
@@ -30,7 +32,7 @@ struct MacStatus: View {
                         }
                     }
                 }
-                Text("Zet de deur op").font(.headline)
+                HStack { Text("Zet de deur op").font(.headline); Spacer(); TestBellButton(store: store).buttonStyle(.bordered) }
                 HStack(spacing: 14) {
                     ForEach(DoorModeKind.allCases) { m in modeButton(m) }
                 }

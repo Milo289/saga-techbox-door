@@ -62,6 +62,7 @@ struct MacRoot: View {
                 .tint(Palette.accent)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .sagaGoPage)) { n in if let raw = n.object as? String, let p = MacPage(rawValue: raw) { page = p } }
         .preferredColorScheme(appearance.colorScheme)
         .securitySheets(store)
         .sheet(isPresented: Binding(get: { configured == true && !UserDefaults.standard.bool(forKey: "tour.done") && store.hasState }, set: { _ in })) { HelpTour() }

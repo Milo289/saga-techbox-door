@@ -50,7 +50,7 @@ function build(ctx) {
     C('look.buttons.size', 'Grootte van de knoppen', [['small', 'Klein'], ['normal', 'Normaal'], ['large', 'Groot']]), N('look.buttons.columns', 'Kolommen met knoppen (0 = vanzelf)', 0, 4),
     B('look.slides.enabled', 'Wisselende berichten'), N('look.slides.seconds', 'Seconden per bericht', 3, 120), F('look.slides.items', 'Berichten (één per regel)', 'lines', { max: 140, value: ((s.look || {}).slides || {}).items || [] }),
     B('look.event.enabled', 'Aftellen naar een gebeurtenis'), T('look.event.label', 'Naam van de gebeurtenis', 60), F('look.event.date', 'Datum van de gebeurtenis', 'date'),
-    B('look.greeting', 'Groet (goedemorgen …)'), B('look.updated', 'Toon wanneer het scherm voor het laatst bijgewerkt is'), C('look.bellFlash', 'Bij aanbellen', [['none', 'Geen flits'], ['flash', 'Scherm flitst'], ['pulse', 'Rand knippert']]),
+    B('look.greeting', 'Groet (goedemorgen …)'), B('look.waiting', 'Toon hoeveel bezoekers er wachten'), B('look.updated', 'Toon wanneer het scherm voor het laatst bijgewerkt is'), C('look.bellFlash', 'Bij aanbellen', [['none', 'Geen flits'], ['flash', 'Scherm flitst'], ['pulse', 'Rand knippert']]),
     B('look.awake', 'Scherm aan houden'), B('look.speak', 'Status hardop zeggen bij een wijziging'), T('look.reloadAt', 'Elke dag verversen om (UU:MM, leeg = nooit)', 5),
     C('look.dot', 'Statuspunt', [['dot', 'Punt'], ['bar', 'Balk'], ['none', 'Geen']]), C('look.align', 'Uitlijning', [['left', 'Links'], ['center', 'Midden'], ['right', 'Rechts']]),
     B('look.glow', 'Gloed rond het statuspunt'), N('look.margin', 'Marge rond het beeld (%)', 0, 12), B('look.mirror', 'Spiegelen'),
@@ -95,7 +95,7 @@ function build(ctx) {
     B('mail.digest', 'Elke dag een samenvatting'), TM('mail.digestAt', 'Samenvatting om'), B('mail.weekly', 'Elke week een overzicht'), C('mail.weeklyDay', 'Overzicht op', DAYS),
   ]);
   add('screen', 'Scherm', 'settings', 'Hoe het deurscherm eruitziet.', [
-    C('theme', 'Thema', [['dark', 'Donker'], ['light', 'Licht']]), C('layout.orientation', 'Indeling', [['auto', 'Automatisch'], ['portrait', 'Verticaal'], ['landscape', 'Horizontaal']]),
+    C('language', 'Taal van het deurscherm en de bezoekerspagina', [['nl', 'Nederlands'], ['en', 'English']]), C('theme', 'Thema', [['dark', 'Donker'], ['light', 'Licht']]), C('layout.orientation', 'Indeling', [['auto', 'Automatisch'], ['portrait', 'Verticaal'], ['landscape', 'Horizontaal']]),
     C('layout.rotate', 'Draaien', [[0, 'Niet'], [90, '90° met de klok mee'], [180, '180°'], [270, '90° tegen de klok in']], { numeric: true }), B('layout.hour12', 'Tijd met AM/PM'), B('layout.keyboard', 'Aanraaktoetsenbord'),
     B('dim.enabled', 'In de nacht dimmen'), TM('dim.from', 'Dimmen vanaf'), TM('dim.to', 'Dimmen tot'), C('dim.level', 'Helderheid in de nacht', [[0.1, '10%'], [0.2, '20%'], [0.3, '30%'], [0.5, '50%'], [0.7, '70%']], { numeric: true }),
     B('themeSchedule.enabled', 'Licht overdag, donker ’s nachts'), TM('themeSchedule.lightFrom', 'Licht vanaf'), TM('themeSchedule.darkFrom', 'Donker vanaf'),

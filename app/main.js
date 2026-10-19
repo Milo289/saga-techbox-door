@@ -268,6 +268,7 @@ function sendStatus(mode) {
   win.webContents.send('tray-status', mode); // the page does the change itself, with your own login
 }
 function openServerPage(p) { if (localServerUrl) shell.openExternal(localServerUrl + p); }
+function openAnyPage(p) { const base = localServerUrl || (config.serverMode === 'remote' ? config.url : ''); if (base) openSafe(String(base).replace(/\/+$/, '') + p); }
 // switch what this computer is, straight from the tray icon (the same four choices as in the settings)
 const currentDevice = () => (config.role === 'server' ? 'server' : config.role === 'door' ? 'door' : config.serverMode === 'remote' ? 'control' : 'all');
 async function switchDevice(d) {
@@ -607,6 +608,15 @@ function buildMenu() {
     ...(process.platform === 'darwin' ? [{ label: app.name, submenu: [{ role: 'about', label: 'Over Saga Techbox Deur' }, { type: 'separator' }, { label: 'Instellingen…', accelerator: 'Cmd+,', click: openSetup }, { type: 'separator' }, { role: 'hide', label: 'Verberg' }, { role: 'quit', label: 'Stop' }] }] : []),
     { label: 'Bestand', submenu: [{ label: 'Instellingen…', accelerator: `${mod}+Shift+S`, click: openSetup }, { label: 'Op updates controleren…', click: openSetup }, { type: 'separator' }, { role: 'quit', label: 'Afsluiten', accelerator: `${mod}+Shift+Q` }] },
     { label: 'Bewerken', submenu: [{ role: 'undo', label: 'Ongedaan maken' }, { role: 'redo', label: 'Opnieuw' }, { type: 'separator' }, { role: 'cut', label: 'Knippen' }, { role: 'copy', label: 'Kopiëren' }, { role: 'paste', label: 'Plakken' }, { role: 'selectAll', label: 'Alles selecteren' }] },
+    { label: 'Pagina’s', submenu: [ // pages of the server that are not in the panel itself
+      { label: 'Poster met QR-code printen', click: () => openAnyPage('/poster') },
+      { label: 'Bezoekerspagina', click: () => openAnyPage('/visit') },
+      { label: 'Testpagina (alles controleren)', click: () => openAnyPage('/check') },
+      { type: 'separator' },
+      { label: 'Handleiding', click: () => openAnyPage('/help') },
+      { label: 'Gebruiksvoorwaarden', click: () => openAnyPage('/voorwaarden') },
+      { label: 'Privacyverklaring', click: () => openAnyPage('/privacy') },
+    ] },
     { label: 'Weergave', submenu: [{ role: 'reload', label: 'Opnieuw laden' }, { role: 'togglefullscreen', label: 'Volledig scherm' }, { type: 'separator' }, { role: 'resetZoom', label: 'Ware grootte' }, { role: 'zoomIn', label: 'Inzoomen' }, { role: 'zoomOut', label: 'Uitzoomen' }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));

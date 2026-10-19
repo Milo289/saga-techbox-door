@@ -65,3 +65,9 @@ Aanpak: eerst de server (met tests), dan het web-paneel en het deurscherm, dan d
 3. Apps: Swift (Mac-schema bouwt lokaal), Avalonia (bouwt lokaal met de .NET-SDK), Electron (syntaxis en test).
 4. Alle tests, daarna uitgave `v3.5.0-beta.12`.
 Alleen wat echt gebouwd en gecontroleerd is, telt in het verslag mee.
+
+## Uitkomst (wat echt gebouwd en gecontroleerd is)
+- **Gemak (15):** A1 waarschuwing bij weggaan, A2 Ctrl/⌘+S, A4 kopieerknoppen, A5 inbox-filter blijft, A6 adresbalk en terugknop, A7 knop {naam} bij een antwoord, A8 zoeken in het logboek, A9 afdrukken, A10 "Opgeslagen om …", A11 klokwaarschuwing, A12 test de bel, A13 {naam} in antwoorden, A14 wachtenden op het deurscherm, plus de sneltoets R (antwoord typen) en de status in de titel van het tabblad. (A3 bestond al, A15 is vervangen door deze twee.)
+- **Functies (15):** B1 t/m B15 zoals in de tabel, allemaal gebouwd.
+- **Schermen:** C1 grafiek Drukte, C2 checklist, C3 test de bel, C4 ster/notitie/terugkerend (iPhone, iPad, Mac); C6 ⌘1–⌘5 (Mac); C7 Drukte, C8 test de bel, C9 sneltoetsen O/G/B, extra: checklist (Windows/Linux); C10 menu Pagina's (desktop-app); C12 ster en notitie, C13 pincode-knop, C14 test de bel en klokbanner, C15 wachtenden en Engels (web). C5 bestond al (het menubalk-icoon toont al het aantal), C11 is niet gebouwd. De pincode wordt in de apps niet meer getoond ("Herkend met pincode").
+- **Getest:** 199 tests, de testpagina, het Mac-schema en het iOS-schema bouwen. **Niet lokaal gebouwd:** de Windows/Linux-app (de .NET-SDK staat niet op deze Mac; GitHub bouwt en test haar bij de uitgave).

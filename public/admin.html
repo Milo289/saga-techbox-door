@@ -271,6 +271,7 @@
     main { grid-column: 2; grid-row: 2; max-width: 1080px; width: 100%; margin: 0; padding: 30px 36px 90px; }
     #saveBar { left: calc(50% + 126px); }
   }
+  @media print { #tabs, .side, #saveBar, #conn, #toast, button, .caret, .qm, #tools { display: none !important; } body { background: #fff !important; color: #000 !important; } .card { border: 1px solid #999 !important; box-shadow: none !important; break-inside: avoid; } }
   html.dense body { font-size: 14px; } html.dense .card { padding: 12px 14px; } html.dense .urow { padding: 6px 0; } html.roomy .card { padding: 26px 24px; } html.roomy .urow { padding: 14px 0; }
   html { zoom: var(--ui-scale, 1); } html.nomotion *, html.nomotion *::before, html.nomotion *::after { animation: none !important; transition: none !important; }
   html.hicontrast { --dim: #e2e2e8; --mute: #c2c2ca; --line: #5a5a62; } html.light.hicontrast { --dim: #22252b; --mute: #33373f; --line: #777c86; }
@@ -349,9 +350,10 @@
   const authHeaders = () => (TOKEN ? { authorization: 'Bearer ' + TOKEN } : PIN ? { 'x-pin': PIN } : {});
   const can = (p) => !!S?.me?.perms.includes(p);
   let S = null;
-  let tab = store.get('doorTab', 'now');
+  const TAB_KEYS = ['now', 'inbox', 'settings', 'all', 'design', 'admin', 'security', 'system'];
+  let tab = TAB_KEYS.includes(location.hash.slice(1)) ? location.hash.slice(1) : store.get('doorTab', 'now'); // the address bar follows the page: refresh and the back button keep you where you were
   if (!['now', 'inbox', 'settings', 'all', 'design', 'admin', 'security', 'system'].includes(tab)) tab = 'now';
-  let inboxFilter = 'open';
+  let inboxFilter = store.get('doorInboxFilter', 'open'), clockDrift = 0;
   let alertId = null;
   let es = null, lastMsg = 0;
 
@@ -472,6 +474,7 @@
     } catch { toast('Geen verbinding met de deurserver'); throw new Error('offline'); }
     if (res.status === 401) { const had = TOKEN || PIN; TOKEN = ''; store.set('doorToken', ''); showLogin(had ? 'Je bent uitgelogd — log opnieuw in' : ''); throw new Error('auth'); }
     if (res.status === 423) { showLock(); throw new Error('locked'); }
+    { const sd = Date.parse(res.headers.get('date') || ''); if (sd) clockDrift = Date.now() - sd; }
     const out = await res.json().catch(() => ({}));
     if (!res.ok) { toast(out.error || 'Er ging iets mis'); throw new Error(out.error); }
     if (prevView) setTimeout(() => undoStatus(prevView), 50); // shown after the normal message
@@ -817,7 +820,8 @@
     const list = S.health || [];
     if (!list.length) return null;
     const open = list.filter((x) => !x.ok);
-    return h('div', { class: 'card' }, h('h2', {}, 'Controle', h('span', { class: 'sp' }), h('a', { href: '/help', target: '_blank', class: 'muted', style: 'font-size:14px;margin-right:10px' }, 'Handleiding'), h('span', { class: 'tag ' + (open.length ? '' : 'ok') }, open.length ? `${open.length} tip${open.length > 1 ? 's' : ''}` : 'alles in orde')),
+    const testBell = can('status') ? h('button', { class: 'sm', onclick: async () => { try { const r = await api('/api/bell/test', {}); toast(r.screens ? `De bel gaat op ${r.screens} scherm${r.screens === 1 ? '' : 'en'}` : 'Er is nu geen deurscherm verbonden'); } catch {} } }, 'Test de bel') : null;
+    return h('div', { class: 'card' }, h('h2', {}, 'Controle', h('span', { class: 'sp' }), testBell, h('a', { href: '/help', target: '_blank', class: 'muted', style: 'font-size:14px;margin-right:10px' }, 'Handleiding'), h('span', { class: 'tag ' + (open.length ? '' : 'ok') }, open.length ? `${open.length} tip${open.length > 1 ? 's' : ''}` : 'alles in orde')),
       h('div', { class: 'list' }, ...list.map((x) => h('div', { class: 'row' }, h('span', { style: 'width:22px;font-weight:700;color:' + (x.ok ? 'var(--ok,#30d158)' : 'var(--warn,#ff9f0a)') }, x.ok ? '✓' : '!'), h('span', {}, x.text), x.ok ? null : h('span', { class: 'muted' }, '— ' + x.tip)))));
   }
 
@@ -949,13 +953,14 @@
     let on = false, n = 0;
     flashT = setInterval(() => { document.title = (on = !on) ? msg : 'Deurbediening'; if (++n > 20 || !document.hidden) { clearInterval(flashT); updateTitle(); } }, 900);
   }
-  function updateTitle() { const n = S ? S.requests.filter((r) => r.state === 'new').length : 0; document.title = (n ? `(${n}) ` : '') + 'Deurbediening'; }
+  function updateTitle() { const n = S ? S.requests.filter((r) => r.state === 'new').length : 0; document.title = (n ? `(${n}) ` : '') + (S && S.view && S.view.label ? S.view.label + ' · ' : '') + 'Deurbediening'; } // the tab says what the door says
 
   // ---------- frame ----------
   const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], can('settings') && ['all', 'Alle instellingen'], can('settings') && ['design', 'Ontwerp'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer'], S.me.kind !== 'open' && ['security', 'Beveiliging'], can('system') && ['system', 'Systeem']].filter(Boolean);
   let userDraft = null, keyDraft = null, newKey = null;
   const editing = () => tab === 'all' || tab === 'security' || tab === 'settings' || tab === 'design' || tab === 'system' || (tab === 'admin' && (userDraft || keyDraft));
-  function setTab(t) { tab = t; clData = null; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
+  window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (S && t !== tab && visibleTabs().some((x) => x[0] === t)) setTab(t); });
+  function setTab(t) { tab = t; clData = null; if (location.hash.slice(1) !== t) { try { location.hash = t; } catch {} } store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
 
   // never redraw while a finger/mouse button is down, or that click would get lost
   let pressing = false, redrawLater = false;
@@ -1086,13 +1091,20 @@
     });
   }
 
+  // an own note on a request: only the staff sees it
+  function noteBox(r) {
+    const area = h('textarea', { placeholder: 'Eigen notitie (alleen jij ziet die)', maxlength: 300, rows: 2, 'data-keep': 'note-' + r.id, style: 'width:100%;margin-top:6px;' + (r.note ? '' : 'display:none') }, r.note || '');
+    area.onblur = async () => { if ((area.value || '') !== (r.note || '')) { try { await api('/api/requests/note', { id: r.id, text: area.value }); r.note = area.value; toast('Notitie bewaard'); } catch {} } };
+    const open = h('button', { class: 'sm ghost', style: 'margin-top:6px' + (r.note ? ';display:none' : ''), onclick: () => { area.style.display = ''; open.style.display = 'none'; area.focus(); } }, '+ Notitie');
+    return h('div', {}, open, area);
+  }
   function replyControls(r, after) {
     const input = h('input', { class: 'grow', placeholder: 'Typ een antwoord…', 'data-keep': 'reply-' + r.id, maxlength: 200 });
     const send = async (text) => { if (!text.trim()) return toast('Typ eerst een antwoord'); await api('/api/requests/reply', { id: r.id, reply: text }); toast('Getoond op de deur'); after && after(); };
     input.onkeydown = (e) => { if (e.key === 'Enter') send(input.value); };
     const wrap = h('div', { class: 'list' },
       h('div', { class: 'seg' }, ...S.settings.quickReplies.map((q) => h('button', { class: 'sm', onclick: () => send(q) }, q))),
-      h('div', { class: 'row' }, input, h('button', { class: 'white sm', onclick: () => send(input.value) }, 'Stuur')));
+      h('div', { class: 'row' }, input, h('button', { class: 'sm ghost', title: 'Voeg de voornaam van de bezoeker in', onclick: () => { const i = input.selectionStart ?? input.value.length; input.value = input.value.slice(0, i) + '{naam}' + input.value.slice(i); input.focus(); } }, '{naam}'), h('button', { class: 'white sm', onclick: () => send(input.value) }, 'Stuur')));
     if (r.type === 'appointment') {
       const date = dayPicker(r.at ? ymd(new Date(r.at)) : ymd(), 'ad-' + r.id);
       const time = timePicker(r.at ? hmOf(r.at) : nextHour(), null, 5, 'at-' + r.id);
@@ -1246,11 +1258,15 @@
   }
 
   function auditCard() {
-    return h('div', { class: 'card' }, h('h2', {}, 'Activiteitenlog'),
-      S.history.length ? h('div', { class: 'tablewrap' }, h('table', {}, ...S.history.slice(0, 200).map((e) => h('tr', {},
-        h('td', { class: 'muted', style: 'white-space:nowrap' }, dt(e.at)),
-        h('td', { style: 'white-space:nowrap' }, e.by || '—'),
-        h('td', {}, e.text))))) : h('p', { class: 'muted', style: 'margin:0' }, 'Nog niets gelogd.'));
+    const tbl = h('table', {}), find = h('input', { type: 'search', placeholder: 'Zoek in het logboek…', 'data-keep': 'auditq', style: 'width:100%;margin:8px 0' });
+    const draw = () => {
+      const q = find.value.trim().toLowerCase();
+      const rows = S.history.filter((e) => !q || `${e.text} ${e.by || ''}`.toLowerCase().includes(q)).slice(0, 200);
+      tbl.replaceChildren(...rows.map((e) => h('tr', {}, h('td', { class: 'muted', style: 'white-space:nowrap' }, dt(e.at)), h('td', { style: 'white-space:nowrap' }, e.by || '—'), h('td', {}, e.text))));
+      if (!rows.length) tbl.replaceChildren(h('tr', {}, h('td', { class: 'muted' }, q ? 'Niets gevonden.' : 'Nog niets gelogd.')));
+    };
+    find.oninput = draw; draw();
+    return h('div', { class: 'card' }, h('h2', {}, 'Activiteitenlog'), find, h('div', { class: 'tablewrap' }, tbl));
   }
 
   function serverCard() {
@@ -1293,6 +1309,7 @@
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Kies een kant-en-klaar ontwerp, of stel hieronder alles zelf in. Een ontwerp is meteen zichtbaar op het deurscherm.'),
       h('div', { class: 'row', style: 'flex-wrap:wrap;margin-bottom:12px' }, ...LOOK_PRESETS.map((p) => h('button', { class: 'sm', title: p[1], onclick: () => apply(p) }, p[0]))),
       h('div', { class: 'form' },
+        ...row('Taal', sel(st, 'language', [['nl', 'Nederlands'], ['en', 'English']])),
         ...row('Weergavemodus', sel(L, 'mode', [['standard', 'Standaard'], ['status', 'Alleen de status (groot)'], ['clock', 'Grote klok met status'], ['agenda', 'Status met planning'], ['strip', 'Smalle balk (breed, laag scherm)'], ['minimal', 'Alleen kleur en woord']])),
         ...row('Lettertype', sel(L, 'font', [['system', 'Systeem'], ['rounded', 'Afgerond'], ['serif', 'Met schreef'], ['mono', 'Vaste breedte'], ['readable', 'Goed leesbaar']])),
         ...row('Tekstgrootte', text(L, 'textScale', { type: 'number', min: 70, max: 160, style: 'width:90px' }), h('span', { class: 'muted' }, '% (70–160)')),
@@ -1311,7 +1328,7 @@
         ...row('Wisselende berichten', chk(L.slides, 'enabled', 'Aan'), text(L.slides, 'seconds', { type: 'number', min: 3, max: 120, style: 'width:70px' }), h('span', { class: 'muted' }, 'seconden per bericht')),
         h('span', {}), h('textarea', { placeholder: 'Eén bericht per regel', oninput: (e) => { L.slides.items = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12); } }, L.slides.items.join('\n')),
         ...row('Aftellen naar', chk(L.event, 'enabled', 'Aan'), text(L.event, 'label', { maxlength: 60, placeholder: 'bijv. de zomervakantie' }), h('input', { type: 'date', value: L.event.date || '', oninput: (e) => { L.event.date = e.target.value; } })),
-        ...row('Op het scherm', chk(L, 'greeting', 'Groet (goedemorgen …)'), chk(L, 'updated', 'Laatst bijgewerkt'), sel(L, 'dot', [['dot', 'Statuspunt'], ['bar', 'Statusbalk'], ['none', 'Geen punt']]), sel(L, 'align', [['left', 'Links'], ['center', 'Midden'], ['right', 'Rechts']]), chk(L, 'glow', 'Gloed')),
+        ...row('Op het scherm', chk(L, 'greeting', 'Groet (goedemorgen …)'), chk(L, 'updated', 'Laatst bijgewerkt'), chk(L, 'waiting', 'Wachtenden tonen'), sel(L, 'dot', [['dot', 'Statuspunt'], ['bar', 'Statusbalk'], ['none', 'Geen punt']]), sel(L, 'align', [['left', 'Links'], ['center', 'Midden'], ['right', 'Rechts']]), chk(L, 'glow', 'Gloed')),
         ...row('Bij aanbellen', sel(L, 'bellFlash', [['none', 'Geen flits'], ['flash', 'Scherm flitst'], ['pulse', 'Rand knippert']])),
         ...row('Het scherm zelf', chk(L, 'awake', 'Scherm aan houden'), chk(L, 'speak', 'Status hardop zeggen bij een wijziging'), chk(L, 'mirror', 'Spiegelen')),
         ...row('Ververs elke dag om', text(L, 'reloadAt', { placeholder: '04:00 (leeg = nooit)', maxlength: 5, style: 'width:90px' }), h('span', { class: 'muted' }, 'Marge rond het beeld'), text(L, 'margin', { type: 'number', min: 0, max: 12, style: 'width:70px' }), h('span', { class: 'muted' }, '% (voor tv’s die de rand afsnijden)')),
@@ -1365,7 +1382,8 @@
       h('div', { class: 'muted', style: 'margin-top:12px' }, 'Per dag'), bars(d.byDay.map((x) => x.n), maxD, (i, v) => `${d.byDay[i].day} — ${v}`),
       Object.keys(d.byType).length ? h('p', { class: 'muted', style: 'margin:12px 0 0' }, Object.entries(d.byType).map(([k, n]) => `${TYPE[k] || k}: ${n}`).join(' · ')) : null,
       d.topics.length ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, 'Meest gekozen: ' + d.topics.map((t) => `${t.name} (${t.n})`).join(', ')) : null,
-      h('div', { class: 'row', style: 'margin-top:12px' }, can('export') ? h('button', { class: 'sm', onclick: () => getFile('/api/requests/export', 'bezoekersverzoeken.csv') }, 'Alle verzoeken als Excel-bestand (CSV)') : null, h('button', { class: 'sm ghost', onclick: () => { statsData = null; renderAll(true); } }, 'Vernieuwen')));
+      (() => { const t = d.byDay[d.byDay.length - 1], y = d.byDay[d.byDay.length - 2]; return t && y ? h('p', { class: 'muted', style: 'margin:10px 0 0' }, `Vandaag ${t.n}, gisteren ${y.n}${t.n > y.n ? ' (drukker)' : t.n < y.n ? ' (rustiger)' : ''}.`) : null; })(),
+      h('div', { class: 'row', style: 'margin-top:12px' }, can('export') ? h('button', { class: 'sm', onclick: () => getFile('/api/requests/export', 'bezoekersverzoeken.csv') }, 'Alle verzoeken als Excel-bestand (CSV)') : null, h('button', { class: 'sm', onclick: () => getFile('/api/stats/export', 'drukte.csv') }, 'Drukte als Excel-bestand'), h('button', { class: 'sm ghost', onclick: () => { statsData = null; renderAll(true); } }, 'Vernieuwen')));
   }
   // ---------- Privacy: find everything about one person, and erase it (AVG) ----------
   function privacyCard() {
@@ -1392,20 +1410,36 @@
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Vraagt iemand welke gegevens je van hem of haar hebt, of wil iemand dat ze gewist worden? Zoek hier op naam, e-mailadres of nummer, bekijk wat er staat en wis het in één keer.'),
       h('div', { class: 'row' }, q, h('button', { onclick: search }, 'Zoeken')), out);
   }
+  // ---------- leaving with unsaved changes, and Ctrl/Cmd+S ----------
+  window.addEventListener('beforeunload', (e) => { if (dirtyCards.size) { e.preventDefault(); e.returnValue = ''; } });
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's' && S && !$('shell').classList.contains('hidden')) {
+      e.preventDefault();
+      const b = $('saveAll');
+      if (b && !$('saveBar').classList.contains('hidden')) b.click(); else toast('Er is niets om op te slaan');
+    }
+  });
   // ---------- keyboard: o / g / b change the status, ? shows the list ----------
   document.addEventListener('keydown', (e) => {
     if (!S || $('shell').classList.contains('hidden') || e.metaKey || e.ctrlKey || e.altKey) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || (document.activeElement || {}).isContentEditable) return;
     const k = e.key.toLowerCase(), MODE = { o: 'open', g: 'closed', b: 'busy' };
+    if (k === 'r' && tab === 'inbox') { const f = document.querySelector('#view input[placeholder^="Typ een antwoord"]'); if (f) { e.preventDefault(); f.focus(); f.scrollIntoView({ block: 'center' }); return; } }
     if (MODE[k] && can('status')) { e.preventDefault(); api('/api/status', { mode: MODE[k] }).then(() => toast('Status: ' + S.settings.texts[MODE[k]].label)).catch(() => {}); }
     else if (e.key === '?' && !$('keyhelp')) {
       const close = () => { const x = $('keyhelp'); if (x) x.remove(); };
       const row = ([a, b]) => h('div', { class: 'urow' }, h('div', { class: 'who' }, h('b', {}, a), h('span', { class: 'muted' }, b)));
       document.body.append(h('div', { id: 'keyhelp', style: 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:grid;place-items:center;padding:16px', onclick: (ev) => { if (ev.target.id === 'keyhelp') close(); } },
-        h('div', { class: 'card', style: 'max-width:420px;width:100%' }, h('h2', {}, 'Sneltoetsen'), ...[['O', 'Deur op Open'], ['G', 'Deur op Gesloten'], ['B', 'Deur op Bezet'], ['/ of Ctrl+K', 'Zoeken in alle instellingen'], ['?', 'Dit overzicht']].map(row), h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { onclick: close }, 'Sluiten')))));
+        h('div', { class: 'card', style: 'max-width:420px;width:100%' }, h('h2', {}, 'Sneltoetsen'), ...[['O', 'Deur op Open'], ['G', 'Deur op Gesloten'], ['B', 'Deur op Bezet'], ['R', 'Antwoord typen (bij Bezoekers)'], ['Ctrl/⌘+S', 'Alles opslaan'], ['/ of Ctrl+K', 'Zoeken in alle instellingen'], ['?', 'Dit overzicht']].map(row), h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { onclick: close }, 'Sluiten')))));
       const onEsc = (ev) => { if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); } }; document.addEventListener('keydown', onEsc);
     }
   });
+  // the clock of this computer against the clock of the server (the opening hours and the energy schedule use the server's clock)
+  function clockCard() {
+    if (Math.abs(clockDrift) < 120000) return null;
+    const min = Math.round(Math.abs(clockDrift) / 60000);
+    return h('div', { class: 'card', style: 'border-color:#ff9f0a' }, h('h2', {}, 'De klok klopt niet'), h('p', { class: 'muted', style: 'margin:0' }, `De klok van deze computer en die van de server lopen ${min} ${min === 1 ? 'minuut' : 'minuten'} uit elkaar (de server loopt ${clockDrift > 0 ? 'achter' : 'voor'}). Openingstijden, het Energieschema en de bezette tijden gebruiken de klok van de server. Zet daar de juiste tijd of tijdzone goed.`));
+  }
   // ---------- Eerste keer instellen: what to switch on, where to find it ----------
   let clData = null, clLoading = false;
   async function loadChecklist() {
@@ -1730,7 +1764,7 @@
         h('label', {}, 'Rustige uren'), h('div', { class: 'row' }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!st.quiet.enabled, onchange: (e) => { st.quiet.enabled = e.target.checked; } }), 'Geen meldingen naar mijn telefoon of mail van'), timePicker(st.quiet.from, (x) => { st.quiet.from = x; }, 15), h('span', { class: 'muted' }, 'tot'), timePicker(st.quiet.to, (x) => { st.quiet.to = x; }, 15)),
         h('span', {}), h('span', { class: 'muted' }, 'Bezoekers kunnen gewoon aanbellen en berichten sturen; je ziet ze in het paneel. Alleen de meldingen buiten het paneel blijven weg.'),
         h('label', {}, 'Status op je website'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!st.publicStatus.enabled, onchange: (e) => { st.publicStatus.enabled = e.target.checked; } }), 'Toon de status openbaar (/status.json, /badge.svg en /widget)'),
-        h('span', {}), h('div', { class: 'muted' }, 'Zet dit alleen aan als de server van buitenaf te bereiken is en je de status wilt laten zien. Dan kun je dit in een pagina zetten: ', h('code', {}, '<iframe src="' + location.origin + '/widget" width="320" height="48" style="border:0"></iframe>')),
+        h('span', {}), h('div', { class: 'muted' }, 'Zet dit alleen aan als de server van buitenaf te bereiken is en je de status wilt laten zien. Dan kun je dit in een pagina zetten: ', h('code', {}, '<iframe src="' + location.origin + '/widget" width="320" height="48" style="border:0"></iframe>'), ' ', copyBtn('<iframe src="' + location.origin + '/widget" width="320" height="48" style="border:0"></iframe>', 'Kopieer de code'), h('div', { class: 'row', style: 'margin-top:8px' }, copyBtn(location.origin + '/status.json', 'Kopieer /status.json'), copyBtn(location.origin + '/badge.svg', 'Kopieer /badge.svg'), copyBtn(location.origin + '/visit', 'Kopieer het adres van de bezoekerspagina'))),
         h('label', {}, 'Poster'), h('div', { class: 'row' }, h('button', { class: 'sm', onclick: () => window.open('/poster', '_blank') }, 'Poster met QR-code printen'), h('span', { class: 'muted' }, 'Voor op de deur of in de gang: bezoekers scannen de code en komen op de bezoekerspagina.'))));
     const hoursExtra = h('div', { class: 'card' }, h('h2', {}, 'Openingstijden: uitzonderingen'),
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Andere tijden op één dag, een pauze (de deur staat dan op Gesloten) en vrije dagen. Dit werkt samen met de openingstijden hierboven; zet die aan.'),
@@ -1799,7 +1833,10 @@
       const rows = peopleDraft.filter((x) => !q || `${x.nr} ${x.name} ${x.email} ${x.note}`.toLowerCase().includes(q));
       body.replaceChildren(...rows.map((x) => h('tr', {},
         ...['nr', 'name', 'email', 'note'].map((k) => h('td', {}, h('input', { value: x[k] || '', placeholder: { nr: 'nr', name: 'naam', email: 'e-mail', note: 'notitie' }[k], style: k === 'nr' ? 'width:90px' : '', oninput: (e) => { x[k] = e.target.value; } }))),
-        h('td', {}, h('button', { class: 'sm ghost danger', onclick: () => { peopleDraft.splice(peopleDraft.indexOf(x), 1); draw(); } }, '✕')))));
+        h('td', {}, x.id ? h('button', { class: 'sm ghost', title: 'Nieuwe willekeurige pincode (de oude werkt dan niet meer)', onclick: async () => {
+          if (!confirm(`${x.name} krijgt een nieuwe pincode. De oude werkt dan niet meer. Doorgaan?`)) return;
+          try { const r = await api('/api/people/pin', { id: x.id }); S = await api('/api/admin-state'); peopleDraft = null; renderAll(true); alert(`Nieuwe pincode van ${x.name}: ${r.pin}\n\nGeef hem alleen aan deze persoon.`); } catch {}
+        } }, '🔑') : null, h('button', { class: 'sm ghost danger', onclick: () => { peopleDraft.splice(peopleDraft.indexOf(x), 1); draw(); } }, '✕')))));
       count.textContent = `${peopleDraft.length} ${peopleDraft.length === 1 ? 'persoon' : 'personen'}`;
     };
     draw();
@@ -1808,7 +1845,8 @@
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Bij “Vraagje” en “Tijd booken” tikt een bezoeker zijn nummer in (bijv. personeels-, student- of laptopnummer). Naam en e-mail worden dan vanzelf ingevuld. Op de deur is het e-mailadres half verborgen.'),
       h('div', { class: 'row', style: 'margin-bottom:10px' },
         h('input', { class: 'grow', placeholder: 'Zoeken…', value: peopleFilter, oninput: (e) => { peopleFilter = e.target.value; draw(); } }),
-        h('button', { onclick: () => { peopleDraft.unshift({ nr: '', name: '', email: '', note: '' }); peopleFilter = ''; draw(); body.querySelector('input')?.focus(); } }, '+ Persoon')),
+        h('button', { onclick: () => { peopleDraft.unshift({ nr: '', name: '', email: '', note: '' }); peopleFilter = ''; draw(); body.querySelector('input')?.focus(); } }, '+ Persoon'),
+        h('button', { class: 'ghost', title: 'Alle personen als Excel-bestand', onclick: () => getFile('/api/people/export', 'personen.csv') }, 'Excel')),
       h('div', { class: 'tablewrap' }, h('table', { class: 'people' }, h('thead', {}, h('tr', {}, h('th', {}, 'Nummer'), h('th', {}, 'Naam'), h('th', {}, 'E-mail'), h('th', {}, 'Notitie'), h('th', {}))), body)),
       h('details', { style: 'margin-top:12px' }, h('summary', {}, 'Lijst plakken'), paste,
         h('button', { class: 'sm', style: 'margin-top:8px', onclick: () => {
@@ -2086,7 +2124,7 @@
   const VIEWS = {
     security: securityView,
     all: allSettingsView,
-    now() { return [wizardCard(), checklistCard(true), ...nowMain(), statsCard()].filter(Boolean); },
+    now() { return [clockCard(), wizardCard(), checklistCard(true), ...nowMain(), statsCard()].filter(Boolean); },
     inbox() { return inboxMain(); },
     nowMain() {
       const v = S.view;
@@ -2125,18 +2163,19 @@
       const bFrom = timePicker(nextHour(), null, 5, 'bfrom');
       const bTo = timePicker(nextHour(2), null, 5, 'bto');
       const bNote = h('input', { class: 'grow', placeholder: 'Notitie (optioneel), bijv. Teamoverleg', maxlength: 100, 'data-keep': 'bnote' });
+      const bWeekly = h('input', { type: 'checkbox', 'data-keep': 'bweekly' });
       const addBusy = async () => {
         const from = atLocal(bDay.value, bFrom.get());
         let to = atLocal(bDay.value, bTo.get());
         if (to <= from) to += 864e5; // e.g. 23:00 – 01:00
-        await api('/api/busy/add', { from, to, note: bNote.value });
+        await api('/api/busy/add', { from, to, note: bNote.value, weekly: bWeekly.checked });
         bNote.value = '';
         toast('Bezette tijd gepland');
       };
       const nowTs = Date.now();
       const blocks = S.busy.map((b) => h('div', { class: 'block' + (b.from <= nowTs && nowTs < b.to ? (v.source === 'planned' ? ' active' : ' paused') : '') },
         h('span', { class: 'd' }),
-        h('div', {}, h('div', { class: 't' }, `${dayLabel(b.from)} ${fmt(b.from)} – ${fmt(b.to)}`), b.note ? h('div', { class: 'muted' }, b.note) : null),
+        h('div', {}, h('div', { class: 't' }, `${dayLabel(b.from)} ${fmt(b.from)} – ${fmt(b.to)}${b.weekly ? ' · elke week' : ''}`), b.note ? h('div', { class: 'muted' }, b.note) : null),
         h('button', { class: 'sm ghost danger x', onclick: () => { if (confirm('Dit bezet-blok verwijderen?')) api('/api/busy/remove', { id: b.id }); } }, 'Verwijderen')));
 
       const note = h('input', { class: 'grow bigin', value: S.settings.note, placeholder: 'Bijv. “Pakketjes graag bij de receptie”', maxlength: 120, 'data-keep': 'note' });
@@ -2176,7 +2215,7 @@
         h('div', { class: 'card' },
           h('h2', {}, 'Bezet tijdens'),
           h('div', { class: 'row' }, bDay, h('span', { class: 'muted' }, 'van'), bFrom, h('span', { class: 'muted' }, 'tot'), bTo),
-          h('div', { class: 'row', style: 'margin-top:10px' }, bNote, h('button', { class: 'white', onclick: addBusy }, 'Toevoegen')),
+          h('div', { class: 'row', style: 'margin-top:10px' }, bNote, h('label', { class: 'check', title: 'Dit blok komt elke week terug, op dezelfde dag en tijd' }, bWeekly, 'Elke week'), h('button', { class: 'white', onclick: addBusy }, 'Toevoegen')),
           S.busy.length ? h('div', { style: 'margin-top:10px' }, ...blocks) : h('p', { class: 'muted', style: 'margin:12px 0 0' }, 'Niets gepland. De deur springt op de begintijd vanzelf op Bezet, en daarna weer terug.')),
       ];
     },
@@ -2185,6 +2224,7 @@
       const F = {
         open: ['Open', (r) => r.state === 'new' || r.state === 'seen'],
         bell: ['Aangebeld', (r) => r.type === 'bell'],
+        star: ['Met ster', (r) => !!r.starred],
         message: ['Vraagjes', (r) => r.type === 'message'],
         appointment: ['Afspraken', (r) => r.type === 'appointment'],
         all: ['Alles', () => true],
@@ -2195,7 +2235,7 @@
       const search = h('input', { type: 'search', placeholder: 'Zoek op naam of tekst…', 'data-keep': 'inboxq', value: store.get('doorInboxQ', ''), style: 'flex:1;min-width:0', oninput: (e) => { store.set('doorInboxQ', e.target.value); clearTimeout(search.t); search.t = setTimeout(() => renderAll(true), 250); } });
       const bulk = reqs.length > 1 ? h('button', { class: 'sm ghost', onclick: async () => { if (!confirm(`${reqs.filter((r) => r.state !== 'done').length} verzoeken afhandelen?`)) return; for (const r of reqs) if (r.state !== 'done') await api('/api/requests/done', { id: r.id }); toast('Afgehandeld'); } }, 'Deze lijst afhandelen') : null;
       const filters = h('div', { class: 'filters' }, ...Object.entries(F).map(([k, [label, fn]]) =>
-        h('button', { class: 'sm' + (inboxFilter === k ? ' on' : ''), onclick: () => { inboxFilter = k; renderAll(true); } }, `${label} (${S.requests.filter(fn).length})`)));
+        h('button', { class: 'sm' + (inboxFilter === k ? ' on' : ''), onclick: () => { inboxFilter = k; store.set('doorInboxFilter', k); renderAll(true); } }, `${label} (${S.requests.filter(fn).length})`)));
       const appts = S.appointments.filter((a) => a.at > Date.now() - 3600e3);
       return [
         S.pendingProfiles && S.pendingProfiles.length ? h('div', { class: 'card' }, h('h2', {}, 'Profielen ter goedkeuring'),
@@ -2208,10 +2248,11 @@
             h('button', { class: 'sm ghost', onclick: () => { if (confirm('Alle afgehandelde verzoeken wissen?')) api('/api/requests/clear'); } }, 'Afgehandelde wissen')),
           filters, h('div', { class: 'row', style: 'margin:8px 0' }, search, bulk),
           reqs.length ? h('div', { class: 'list' }, ...reqs.map((r) => h('div', { class: `req ${r.state}${seenReq.has(r.id) ? '' : ' enter'}` },
-            h('div', { class: 'head' }, h('span', { class: 'type' }, icon(TYPE_ICON[r.type]), TYPE[r.type] || 'Verzoek'), h('span', {}, r.name || 'Anoniem', r.nr ? h('span', { class: 'muted' }, ` · nr ${r.nr}`) : null), h('span', { class: 'muted' }, `${ago(r.createdAt)} · status was ${r.statusAtTime}`),
-              h('span', { style: 'flex:1' }), h('button', { class: 'sm ghost', onclick: () => modDialog(r) }, 'Modereren'), r.state !== 'done' ? h('button', { class: 'sm ghost', onclick: () => api('/api/requests/done', { id: r.id }) }, 'Afgehandeld') : h('span', { class: 'muted' }, 'Afgehandeld')),
+            h('div', { class: 'head' }, h('span', { class: 'type' }, icon(TYPE_ICON[r.type]), TYPE[r.type] || 'Verzoek'), h('span', {}, r.name || 'Anoniem', r.nr ? h('span', { class: 'muted' }, ' · met pincode') : null, r.visits > 1 ? h('span', { class: 'tag', style: 'margin-left:8px' }, `${r.visits}e keer`) : null), h('span', { class: 'muted' }, `${ago(r.createdAt)} · status was ${r.statusAtTime}`),
+              h('span', { style: 'flex:1' }), h('button', { class: 'sm ghost', title: r.starred ? 'Ster weghalen' : 'Ster erbij', 'aria-pressed': String(!!r.starred), style: r.starred ? 'color:#ffcc00' : '', onclick: () => api('/api/requests/star', { id: r.id, on: !r.starred }) }, r.starred ? '★' : '☆'), h('button', { class: 'sm ghost', onclick: () => modDialog(r) }, 'Modereren'), r.state !== 'done' ? h('button', { class: 'sm ghost', onclick: () => api('/api/requests/done', { id: r.id }) }, 'Afgehandeld') : h('span', { class: 'muted' }, 'Afgehandeld')),
             what(r) ? h('div', { class: 'what' }, what(r)) : null,
             reqTags(r),
+            noteBox(r),
             r.reply ? h('div', { class: 'reply' }, `${r.autoReplied ? 'Automatisch antwoord' : 'Jouw antwoord'}: ${r.reply}`) : null,
             r.state !== 'done' ? replyControls(r) : null)))
             : h('p', { class: 'muted', style: 'margin:0' }, inboxFilter === 'open' ? 'Alles is afgehandeld.' : 'Hier staat nog niets. Als iemand op de deur een knop aantikt, zie je het hier meteen.')),
@@ -2370,7 +2411,7 @@
       const days = (obj) => { const wrap = h('div', { class: 'days' }); const draw = () => wrap.replaceChildren(...DAYS.map((d, n) => h('button', { type: 'button', class: obj.days.includes(n) ? 'on' : '', onclick: () => { obj.days = obj.days.includes(n) ? obj.days.filter((x) => x !== n) : [...obj.days, n]; draw(); } }, d))); draw(); return wrap; };
       const save = async () => {
         if (can('power') && powerChanged()) { await api('/api/power/settings', powerDraft); if (await powerSavedOk(powerDraft)) powerDraft = null; } // the Energie card keeps its own draft: it goes along with the big button
-        await api('/api/settings', payloadFor(st)); S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true);
+        await api('/api/settings', payloadFor(st)); S = await api('/api/admin-state'); toast(`Opgeslagen om ${hmOf(Date.now())}`); renderAll(true);
       };
 
       const importFile = h('input', { type: 'file', accept: '.json,application/json', class: 'hidden', onchange: async (e) => {
