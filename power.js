@@ -25,7 +25,13 @@ function defaults() {
   for (const k of DAY_KEYS) days[k] = { screenOff: '', screenOn: '', off: '', on: '' };
   return { enabled: false, how: 'computer', warnMinutes: 2, skipIfBusy: true, pauseUntil: '', watts: 50, days, wol: [] };
 }
-const hm = (v) => (HM.test(String(v || '')) ? String(v) : '');
+// a time in any common form ("7:05", "07:05", "07:05:00", "07.05", "7:05 uur") becomes "07:05"; anything else is empty
+const hm = (v) => {
+  const m = /^\s*(\d{1,2})\s*[:.]\s*(\d{2})(?:\s*[:.]\s*\d{2}(?:\.\d+)?)?\s*(?:uur)?\s*$/i.exec(String(v == null ? '' : v));
+  if (!m) return '';
+  const t = `${m[1].padStart(2, '0')}:${m[2]}`;
+  return HM.test(t) ? t : '';
+};
 function clean(raw) {
   const d = defaults();
   if (!raw || typeof raw !== 'object') return d;

@@ -709,7 +709,16 @@
     const d = powerDraft;
     const est = h('div', { class: 'muted' });
     const paintEst = () => { const hrs = offHours(d); est.textContent = hrs ? `Zo staat de computer ongeveer ${hrs} uur per week uit: ongeveer ${Math.round(hrs * d.watts / 10) / 100} kWh minder stroom.` : 'Vul een uit- en een aanzet-tijd in om te zien hoeveel stroom je bespaart.'; };
-    const timeIn = (k, key) => h('input', { type: 'time', value: d.days[k][key], oninput: (e) => { d.days[k][key] = e.target.value; paintEst(); } });
+    // a time is picked with two lists (hour and minutes) instead of a typed time field: every browser fills those the same way, and the choice counts at once
+    const timeIn = (k, key) => {
+      const cur = String(d.days[k][key] || ''), [ch, cm] = /^\d\d:\d\d$/.test(cur) ? cur.split(':') : ['', '00'];
+      const mins = Array.from({ length: 12 }, (_, i) => pad(i * 5)); if (ch && !mins.includes(cm)) { mins.push(cm); mins.sort(); }
+      const hs = h('select', { class: 'tp', 'aria-label': `uur ${key}` }, h('option', { value: '' }, '—'), ...Array.from({ length: 24 }, (_, i) => h('option', { value: pad(i), selected: pad(i) === ch }, pad(i))));
+      const ms = h('select', { class: 'tp', 'aria-label': `minuten ${key}`, disabled: !ch }, ...mins.map((m) => h('option', { value: m, selected: m === (ch ? cm : '00') }, m)));
+      const sync = () => { ms.disabled = !hs.value; d.days[k][key] = hs.value ? `${hs.value}:${ms.value || '00'}` : ''; paintEst(); };
+      hs.onchange = ms.onchange = sync;
+      return h('span', { class: 'tcell', style: 'display:inline-flex;gap:4px;align-items:center' }, hs, ms);
+    };
     const week = h('table', { class: 'week' }, h('thead', {}, h('tr', {}, ...['Dag', 'Scherm uit', 'Scherm aan', 'Computer uit', 'Computer aan'].map((t) => h('th', {}, t)))),
       h('tbody', {}, ...DAYS_NL.map(([k, name]) => h('tr', {}, h('td', {}, name), ...['screenOff', 'screenOn', 'off', 'on'].map((key) => h('td', {}, timeIn(k, key)))))));
     const copyWork = () => { for (const k of ['2', '3', '4', '5']) d.days[k] = { ...d.days['1'] }; powerDraft = d; renderAll(true); restoreDirty(); toast('Maandag is naar dinsdag t/m vrijdag gekopieerd. Vergeet niet op Opslaan te drukken.'); };
@@ -751,7 +760,7 @@
             h('button', { class: 'sm ghost', onclick: async () => { try { const r = await api('/api/power/wake-status'); status.textContent = r.installed ? 'Er staat een wekschema op deze computer.' : 'Er staat geen wekschema op deze computer.'; } catch {} } }, 'Controleren')), status),
         h('label', {}, 'Andere computers wakker maken'), h('div', {}, h('div', { class: 'muted', style: 'margin-bottom:8px' }, 'Wake-on-LAN: deze server stuurt een wekpakket naar een computer in hetzelfde netwerk (die moet dat in zijn BIOS aan hebben staan).'), wolRows,
           h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { d.wol.push({ name: '', mac: '' }); drawWol(); } }, '+ Computer toevoegen'))),
-        h('span', {}), h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => { try { await api('/api/power/settings', d); powerDraft = null; S = await api('/api/admin-state'); toast('Energie opgeslagen'); renderAll(true); } catch {} } }, 'Energie opslaan'))));
+        h('span', {}), h('div', { class: 'row' }, h('button', { class: 'white', onclick: async () => { try { await api('/api/power/settings', d); const ok = await powerSavedOk(d); if (ok) { powerDraft = null; toast('Energie opgeslagen'); } renderAll(true); } catch {} } }, 'Energie opslaan'))));
   }
 
   // ----- Bezoekersformulier: drawn from the description the server sends (the apps do the same, so a new option appears everywhere at once) -----
@@ -989,6 +998,14 @@
   }
   // one bar for all unsaved changes on a settings page: it presses the save button of every card that was changed
   // some cards keep what you typed in a draft that survives a redraw (Energie, Personen, Koppelingen): after every redraw they must still count as "not saved"
+  // after saving, ask the server what it kept and tell if that is not what was sent
+  async function powerSavedOk(sent) {
+    S = await api('/api/admin-state');
+    const bad = [];
+    for (const k of Object.keys(sent.days || {})) for (const f of ['screenOff', 'screenOn', 'off', 'on']) if ((sent.days[k][f] || '') !== ((S.power.days[k] || {})[f] || '')) bad.push(`${f} ${k}`);
+    if (bad.length) { toast(`Let op: ${bad.length} tijd(en) zijn niet bewaard (${bad.slice(0, 3).join(', ')}). Probeer het opnieuw.`); return false; }
+    return true;
+  }
   const powerKeys = (o) => JSON.stringify({ enabled: o.enabled, how: o.how, warnMinutes: o.warnMinutes, skipIfBusy: o.skipIfBusy, pauseUntil: o.pauseUntil, watts: o.watts, days: o.days, wol: o.wol });
   const powerChanged = () => !!(powerDraft && S && S.power && powerKeys(powerDraft) !== powerKeys(S.power));
   function restoreDirty() {
@@ -2351,7 +2368,7 @@
       const lines = (key) => h('textarea', { oninput: (e) => { st[key] = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); } }, st[key].join('\n'));
       const days = (obj) => { const wrap = h('div', { class: 'days' }); const draw = () => wrap.replaceChildren(...DAYS.map((d, n) => h('button', { type: 'button', class: obj.days.includes(n) ? 'on' : '', onclick: () => { obj.days = obj.days.includes(n) ? obj.days.filter((x) => x !== n) : [...obj.days, n]; draw(); } }, d))); draw(); return wrap; };
       const save = async () => {
-        if (can('power') && powerChanged()) { await api('/api/power/settings', powerDraft); powerDraft = null; } // the Energie card keeps its own draft: it goes along with the big button
+        if (can('power') && powerChanged()) { await api('/api/power/settings', powerDraft); if (await powerSavedOk(powerDraft)) powerDraft = null; } // the Energie card keeps its own draft: it goes along with the big button
         await api('/api/settings', payloadFor(st)); S = await api('/api/admin-state'); toast('Opgeslagen'); renderAll(true);
       };
 

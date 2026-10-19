@@ -107,3 +107,17 @@ test('rollback: back to the version before the update, or to the disk when there
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'current.json'), 'utf8')).dir, '1.0.0-beta.1');
   assert.equal(u.rollback().version, '', 'then to the disk'); assert.equal(fs.existsSync(path.join(root, 'current.json')), false);
 });
+
+test('energy: every common way of writing a time is kept, nothing silently becomes empty, all four times of a day are saved', async (t) => {
+  const power = require('../power.js');
+  const c = power.clean({ enabled: true, days: { 1: { screenOff: '17:05:00', screenOn: '7:30', off: '17.45', on: '06:00 uur' }, 2: { screenOff: '25:00', screenOn: 'nu', off: '', on: '08:61' } } });
+  assert.deepEqual(c.days['1'], { screenOff: '17:05', screenOn: '07:30', off: '17:45', on: '06:00' });
+  assert.deepEqual(c.days['2'], { screenOff: '', screenOn: '', off: '', on: '' }, 'wrong times become empty, they do not break the others');
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const days = Object.fromEntries(['0', '1', '2', '3', '4', '5', '6'].map((k) => [k, { screenOff: '17:00', screenOn: '08:00', off: '17:55', on: '06:40' }]));
+  assert.equal((await call(srv, 'POST', '/api/power/settings', { enabled: true, how: 'computer', warnMinutes: 2, skipIfBusy: true, pauseUntil: '', watts: 50, days, wol: [] }, a)).status, 200);
+  const got = (await call(srv, 'GET', '/api/admin-state', undefined, a)).json.power;
+  for (const k of Object.keys(days)) assert.deepEqual(got.days[k], days[k], `day ${k}`);
+});

@@ -168,7 +168,8 @@ test('saving: survives restarts and damage', async (t) => {
   await call(srv1, 'POST', '/api/settings', { ui: { askTitle: 'Bewaar mij' } }, tok);
   await sleep(400); // saves close together are merged into one
   await call(srv1, 'POST', '/api/settings', { note: 'tweede opslag' }, tok); // a second save: now there is a .bak
-  await sleep(600);
+  for (let i = 0; i < 50 && !fs.readdirSync(srv1.dataDir).some((f) => /\.bak$/.test(f)); i++) await sleep(100); // a busy computer needs longer than a fixed pause
+  await sleep(300);
   await srv1.stop();
   const state = path.join(srv1.dataDir, 'state.json');
   assert.ok(fs.existsSync(state));

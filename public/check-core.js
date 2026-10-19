@@ -316,17 +316,18 @@
       try {
         const d = await openPanel(); await goTab(d, 'Instellingen');
         const card = cardNamed(d, 'Energie'); must(card, 'de kaart Energie staat er niet');
-        const monday = card.querySelectorAll('table.week tbody tr')[0], off = monday.querySelectorAll('input[type=time]')[2]; must(off, 'het veld “Computer uit” voor maandag staat er niet');
-        type(off, '17:41'); await sleep(300);
+        const setTime = (cell, v) => { const [hs, ms] = cell.querySelectorAll('select'), [hh, mm] = v.split(':'); P.type(hs, hh); P.type(ms, mm); };
+        const monday = card.querySelectorAll('table.week tbody tr')[0], off = monday.querySelectorAll('.tcell')[2]; must(off, 'het veld “Computer uit” voor maandag staat er niet');
+        setTime(off, '17:40'); await sleep(300);
         const copy = [...card.querySelectorAll('button')].find((b) => b.textContent.includes('Maandag kopiëren')); must(copy, 'de knop om maandag te kopiëren staat er niet'); copy.click(); await sleep(1000);
         must(!d.getElementById('saveBar').classList.contains('hidden'), 'na het kopiëren verscheen de balk “Alles opslaan” niet (de wijziging kan zo verloren gaan)');
         d.getElementById('saveAll').click(); await sleep(3200);
         const now = (await get('/api/admin-state')).json.power;
-        for (const k of ['1', '2', '3', '4', '5']) must(now.days[k].off === '17:41', `dag ${k} staat op “${now.days[k].off}” in plaats van 17:41 (niet bewaard)`);
+        for (const k of ['1', '2', '3', '4', '5']) must(now.days[k].off === '17:40', `dag ${k} staat op “${now.days[k].off}” in plaats van 17:40 (niet bewaard)`);
         // the same, but with the big button “Instellingen opslaan” at the bottom of the page
-        const off2 = cardNamed(d, 'Energie').querySelectorAll('table.week tbody tr')[0].querySelectorAll('input[type=time]')[2]; type(off2, '17:52'); await sleep(300);
+        const off2 = cardNamed(d, 'Energie').querySelectorAll('table.week tbody tr')[0].querySelectorAll('.tcell')[2]; setTime(off2, '17:55'); await sleep(300);
         const big = d.querySelector('#view .save button.white'); must(big, 'de grote knop onderaan staat er niet'); big.click(); await sleep(3200);
-        const after = (await get('/api/admin-state')).json.power; must(after.days['1'].off === '17:52', `met de grote knop onderaan werd de tijd niet bewaard (staat op “${after.days['1'].off}”, op het scherm stond 17:52)`);
+        const after = (await get('/api/admin-state')).json.power; must(after.days['1'].off === '17:55', `met de grote knop onderaan werd de tijd niet bewaard (staat op “${after.days['1'].off}”, op het scherm stond 17:55)`);
       } finally { await post('/api/power/settings', { enabled: before.enabled, how: before.how, warnMinutes: before.warnMinutes, skipIfBusy: before.skipIfBusy, pauseUntil: before.pauseUntil, watts: before.watts, days: before.days, wol: before.wol }); }
       return 'maandag t/m vrijdag bewaard en weer teruggezet';
     });
