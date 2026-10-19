@@ -744,7 +744,7 @@
         h('label', {}, 'Weer aanzetten'), h('div', {}, h('div', { class: 'muted', style: 'margin-bottom:8px' }, wakeHint),
           h('div', { class: 'row' },
             h('button', { class: 'sm', onclick: async () => { try { await api('/api/power/settings', d); const r = await api('/api/power/wake/apply', {}); if (r.ok) { toast('Wekschema gezet'); S = await api('/api/admin-state'); renderAll(true); } else { $('alertCard').className = 'card'; $('alertCard').replaceChildren(h('div', { class: 'poptitle' }, 'Zelf doen'), h('p', { class: 'muted' }, r.message || ''), r.manual ? h('pre', { class: 'code' }, r.manual) : null, h('div', { class: 'row' }, h('span', { style: 'flex:1' }), h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten'))); $('alert').classList.add('open'); } } catch {} } }, 'Wekschema op deze computer zetten'),
-            h('button', { class: 'sm ghost', onclick: async () => { try { const r = await api('/api/power/wake/remove', {}); toast(r.ok ? 'Wekschema verwijderd' : (r.message || 'Dat lukte niet')); S = await api('/api/admin-state'); renderAll(true); } catch {} } }, 'Verwijderen'),
+            h('button', { class: 'sm ghost', onclick: async () => { if (!confirm('Het wekschema verwijderen?')) return; try { const r = await api('/api/power/wake/remove', {}); toast(r.ok ? 'Wekschema verwijderd' : (r.message || 'Dat lukte niet')); S = await api('/api/admin-state'); renderAll(true); } catch {} } }, 'Verwijderen'),
             h('button', { class: 'sm ghost', onclick: async () => { try { const r = await api('/api/power/wake-status'); status.textContent = r.installed ? 'Er staat een wekschema op deze computer.' : 'Er staat geen wekschema op deze computer.'; } catch {} } }, 'Controleren')), status),
         h('label', {}, 'Andere computers wakker maken'), h('div', {}, h('div', { class: 'muted', style: 'margin-bottom:8px' }, 'Wake-on-LAN: deze server stuurt een wekpakket naar een computer in hetzelfde netwerk (die moet dat in zijn BIOS aan hebben staan).'), wolRows,
           h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm', onclick: () => { d.wol.push({ name: '', mac: '' }); drawWol(); } }, '+ Computer toevoegen'))),
@@ -878,7 +878,7 @@
 
     const devs = S.devices || [];
     parts.push(h('div', { class: 'form' }, h('label', {}, 'Apparaten'), h('div', { class: 'list' }, devs.length ? devs.map((x) => h('div', { class: 'row' }, h('b', {}, x.name), h('span', { class: 'muted' }, `laatst gezien ${fmtWhen(x.lastSeen)}${x.last && x.last.event ? ' · ' + x.last.event : ''}${x.battery ? ' · accu ' + x.battery + '%' : ''}`), h('span', { class: 'sp' }),
-      h('button', { class: 'sm ghost danger', onclick: async () => { try { await api('/api/devices/remove', { id: x.id }); S = await api('/api/admin-state'); renderAll(true); } catch {} } }, '✕'))) : h('span', { class: 'muted' }, 'Nog geen apparaten. Een ESP32 of Raspberry Pi Pico W meldt zich vanzelf zodra hij een bericht stuurt (zie docs/APPARATEN.md).'))));
+      h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm('Dit apparaat verwijderen? Het wordt direct uitgelogd.')) return; try { await api('/api/devices/remove', { id: x.id }); S = await api('/api/admin-state'); renderAll(true); } catch {} } }, '✕'))) : h('span', { class: 'muted' }, 'Nog geen apparaten. Een ESP32 of Raspberry Pi Pico W meldt zich vanzelf zodra hij een bericht stuurt (zie docs/APPARATEN.md).'))));
 
     return h('div', { class: 'card' }, h('h2', {}, 'Koppelingen'),
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Microcontrollers (ESP32, Pico), het slot met RFID, camera’s en regels die ze met de deurstatus verbinden. Alles staat uit tot je het zelf aanzet.'), ...parts);
@@ -897,7 +897,7 @@
         ? h('div', { class: 'list', style: 'margin-top:8px' }, h('div', { class: 'muted' }, r.nr ? `Blokkeer profiel “${r.nr}”${personal ? ' en deze telefoon' : ''} voor:` : 'Blokkeer deze telefoon voor:'),
           h('div', { class: 'row' }, ...[['1 uur', 60], ['1 dag', 1440], ['1 week', 10080], ['Voor altijd', 0]].map(([l, m]) => h('button', { class: 'sm', onclick: () => act('/api/moderation/block', { id: r.id, minutes: m }, 'Geblokkeerd') }, l))))
         : h('p', { class: 'muted' }, 'Dit bericht komt van het deurscherm zelf, en dat scherm gebruikt iedereen. Daar kun je niemand mee blokkeren. Verwijder het bericht, of laat bezoekers een profiel maken: dan kun je dat profiel blokkeren.'),
-      h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'danger sm', onclick: () => act('/api/requests/delete', { id: r.id }, 'Bericht verwijderd') }, 'Bericht verwijderen'), h('span', { style: 'flex:1' }), h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten')),
+      h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'danger sm', onclick: () => { if (confirm('Dit bericht verwijderen? Dat kan niet ongedaan worden gemaakt.')) act('/api/requests/delete', { id: r.id }, 'Bericht verwijderd'); } }, 'Bericht verwijderen'), h('span', { style: 'flex:1' }), h('button', { class: 'ghost', onclick: closeAlert }, 'Sluiten')),
     ].filter(Boolean));
     $('alert').classList.add('open');
   }
@@ -1199,7 +1199,7 @@
   function sessionsCard() {
     const others = S.sessions.filter((x) => !x.current);
     const device = (ua) => (/iPhone|iPad/.test(ua) ? 'iPhone/iPad' : /Android/.test(ua) ? 'Android' : /Electron/.test(ua) ? 'Desktop-app' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Onbekend apparaat');
-    return h('div', { class: 'card' }, h('h2', {}, 'Ingelogd', h('span', { class: 'sp' }), others.length ? h('button', { class: 'sm ghost danger', onclick: async () => { await api('/api/sessions/revoke', { all: true }); toast('Alle andere sessies beëindigd'); refresh(); } }, 'Alle andere uitloggen') : null),
+    return h('div', { class: 'card' }, h('h2', {}, 'Ingelogd', h('span', { class: 'sp' }), others.length ? h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm('Alle andere sessies beëindigen?')) return; await api('/api/sessions/revoke', { all: true }); toast('Alle andere sessies beëindigd'); refresh(); } }, 'Alle andere uitloggen') : null),
       S.sessions.length ? h('div', {}, ...S.sessions.map((x) => h('div', { class: 'urow' },
         h('div', { class: 'who' }, h('b', {}, x.who, x.current ? h('span', { class: 'tag ok', style: 'margin-left:8px' }, 'dit apparaat') : null), h('span', { class: 'muted' }, `${device(x.ua)} · ${x.ip || '—'} · laatst actief ${dt(x.lastSeen)}`)),
         x.current ? null : h('button', { class: 'sm ghost danger', onclick: async () => { await api('/api/sessions/revoke', { id: x.id }); refresh(); } }, 'Uitloggen')))) : h('p', { class: 'muted', style: 'margin:0' }, 'Geen sessies.'));
@@ -1681,7 +1681,7 @@
     box.append(h('p', { class: 'muted' }, 'Inloggen met je vingerafdruk, gezicht of toestelcode, zonder wachtwoord. Werkt alleen met een beveiligde verbinding (https) en een naam in plaats van een IP-adres, bijvoorbeeld https://saga-deur.local.'), out);
     async function draw() {
       const list = (await api('/api/passkeys')).passkeys;
-      fill(out, ...list.map((k) => h('div', { class: 'row', style: 'margin:6px 0' }, h('div', { class: 'grow' }, k.name, h('span', { class: 'muted' }, k.lastUsed ? ` — laatst gebruikt ${ago(k.lastUsed)}` : ' — nog niet gebruikt')), h('button', { class: 'sm danger', onclick: async () => { await api('/api/passkeys/remove', { id: k.id }); draw(); } }, 'Verwijderen'))),
+      fill(out, ...list.map((k) => h('div', { class: 'row', style: 'margin:6px 0' }, h('div', { class: 'grow' }, k.name, h('span', { class: 'muted' }, k.lastUsed ? ` — laatst gebruikt ${ago(k.lastUsed)}` : ' — nog niet gebruikt')), h('button', { class: 'sm danger', onclick: async () => { if (!confirm(`Passkey “${k.name || 'zonder naam'}” verwijderen? Daarmee kun je niet meer inloggen.`)) return; await api('/api/passkeys/remove', { id: k.id }); draw(); } }, 'Verwijderen'))),
         window.PublicKeyCredential ? h('button', { class: 'white', onclick: add }, 'Passkey toevoegen') : h('p', { class: 'muted' }, 'Deze browser kent geen passkeys.'));
     }
     async function add() {
@@ -1920,7 +1920,7 @@
       const blocks = S.busy.map((b) => h('div', { class: 'block' + (b.from <= nowTs && nowTs < b.to ? (v.source === 'planned' ? ' active' : ' paused') : '') },
         h('span', { class: 'd' }),
         h('div', {}, h('div', { class: 't' }, `${dayLabel(b.from)} ${fmt(b.from)} – ${fmt(b.to)}`), b.note ? h('div', { class: 'muted' }, b.note) : null),
-        h('button', { class: 'sm ghost danger x', onclick: () => api('/api/busy/remove', { id: b.id }) }, 'Verwijderen')));
+        h('button', { class: 'sm ghost danger x', onclick: () => { if (confirm('Dit bezet-blok verwijderen?')) api('/api/busy/remove', { id: b.id }); } }, 'Verwijderen')));
 
       const note = h('input', { class: 'grow bigin', value: S.settings.note, placeholder: 'Bijv. “Pakketjes graag bij de receptie”', maxlength: 120, 'data-keep': 'note' });
       const saveNote = () => api('/api/settings', { note: note.value }).then(() => toast(note.value.trim() ? 'Bericht staat op de deur' : 'Bericht weggehaald'));
@@ -1988,7 +1988,7 @@
         h('div', { class: 'card' },
           h('h2', {}, 'Bezoekers', h('span', { class: 'sp' }),
             h('button', { class: 'sm ghost', onclick: () => api('/api/requests/seen') }, 'Alles gezien'),
-            h('button', { class: 'sm ghost', onclick: () => api('/api/requests/clear') }, 'Afgehandelde wissen')),
+            h('button', { class: 'sm ghost', onclick: () => { if (confirm('Alle afgehandelde verzoeken wissen?')) api('/api/requests/clear'); } }, 'Afgehandelde wissen')),
           filters, h('div', { class: 'row', style: 'margin:8px 0' }, search, bulk),
           reqs.length ? h('div', { class: 'list' }, ...reqs.map((r) => h('div', { class: `req ${r.state}${seenReq.has(r.id) ? '' : ' enter'}` },
             h('div', { class: 'head' }, h('span', { class: 'type' }, icon(TYPE_ICON[r.type]), TYPE[r.type] || 'Verzoek'), h('span', {}, r.name || 'Anoniem', r.nr ? h('span', { class: 'muted' }, ` · nr ${r.nr}`) : null), h('span', { class: 'muted' }, `${ago(r.createdAt)} · status was ${r.statusAtTime}`),
@@ -2000,7 +2000,7 @@
             : h('p', { class: 'muted', style: 'margin:0' }, inboxFilter === 'open' ? 'Alles is afgehandeld.' : 'Hier staat nog niets. Als iemand op de deur een knop aantikt, zie je het hier meteen.')),
         appts.length ? h('div', { class: 'card' }, h('h2', {}, 'Afspraken'),
           ...appts.map((a) => h('div', { class: 'block' }, h('div', {}, h('div', { class: 't' }, fmtWhen(a.at)), h('div', { class: 'muted' }, `${a.name}${a.reason ? ' — ' + a.reason : ''}`)),
-            h('button', { class: 'sm ghost danger x', onclick: () => api('/api/appointments/remove', { id: a.id }) }, 'Verwijderen')))) : null,
+            h('button', { class: 'sm ghost danger x', onclick: () => { if (confirm('Deze afspraak verwijderen?')) api('/api/appointments/remove', { id: a.id }); } }, 'Verwijderen')))) : null,
       ];
     },
 
@@ -2128,7 +2128,7 @@
           h('label', {}, 'Bel'), h('div', { class: 'row' }, toneSel('bell', ['classic', 'soft', 'double', 'chime', 'digital', ...(st.sound.custom ? ['custom'] : [])]), h('button', { class: 'sm', onclick: () => preview(st.sound.bell) }, '▶ Luister')),
           h('label', {}, 'Antwoord'), h('div', { class: 'row' }, toneSel('reply', ['soft', 'classic', 'chime', 'none']), h('button', { class: 'sm', onclick: () => preview(st.sound.reply) }, '▶ Luister')),
           h('label', {}, 'Eigen bestand'), h('div', { class: 'row' }, h('button', { class: 'sm', onclick: () => soundFile.click() }, st.sound.custom ? 'Ander bestand kiezen' : 'Bestand kiezen'), soundFile,
-            st.sound.custom ? h('button', { class: 'sm ghost danger', onclick: async () => { await api('/api/sound/remove', {}); st.sound.custom = false; if (st.sound.bell === 'custom') st.sound.bell = 'classic'; keepDraft(); renderAll(true); toast('Eigen beltoon verwijderd'); } }, 'Verwijderen') : null)));
+            st.sound.custom ? h('button', { class: 'sm ghost danger', onclick: async () => { if (!confirm('Je eigen geluid verwijderen?')) return; await api('/api/sound/remove', {}); st.sound.custom = false; if (st.sound.bell === 'custom') st.sound.bell = 'classic'; keepDraft(); renderAll(true); toast('Eigen beltoon verwijderd'); } }, 'Verwijderen') : null)));
       // ---- clock, weather, QR code ----
       const cityIn = h('input', { value: st.weather.city, placeholder: 'Plaats, bijv. Utrecht', maxlength: 80, oninput: (e) => { st.weather.city = e.target.value; } });
       const extrasCard = h('div', { class: 'card' }, h('h2', {}, 'Extra’s op het scherm'),
@@ -2262,7 +2262,7 @@
             h('label', {}, 'Deurscherm weg?'), h('div', { class: 'row' }, h('input', { type: 'number', min: 0, max: 1440, value: st.watch.screenMinutes, style: 'width:90px', oninput: (e) => { st.watch.screenMinutes = Number(e.target.value) || 0; } }), h('span', { class: 'muted' }, 'minuten zonder verbonden deurscherm (0 = niet waarschuwen)')),
             h('label', {}, 'Proberen'), h('div', { class: 'row' },
               h('button', { class: 'sm', onclick: async () => { try { await api('/api/alerts/test', {}); toast('Testwaarschuwing verstuurd'); } catch {} } }, 'Stuur een testwaarschuwing'),
-              h('button', { class: 'sm ghost', onclick: async () => { try { await api('/api/alerts/clear', {}); toast('Gewist'); } catch {} } }, 'Waarschuwingen wissen')))),
+              h('button', { class: 'sm ghost', onclick: async () => { if (!confirm('Alle waarschuwingen wissen?')) return; try { await api('/api/alerts/clear', {}); toast('Gewist'); } catch {} } }, 'Waarschuwingen wissen')))),
 
         h('div', { class: 'card' }, h('h2', {}, 'Afwezig'),
           h('p', { class: 'muted', style: 'margin-top:0' }, 'Zet de deur tot een datum op Gesloten, met je eigen bericht. Daarna gaat alles vanzelf weer door.'),
