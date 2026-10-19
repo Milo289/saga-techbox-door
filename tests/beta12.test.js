@@ -108,3 +108,17 @@ test('the desktop apps and the Apple apps carry the new screens', () => {
   for (const f of ['ios/Mac/MacInbox.swift', 'ios/App/InboxView.swift']) assert.ok(fs.readFileSync(path.join(root, f), 'utf8').includes('RequestExtras'), f);
   assert.ok(fs.readFileSync(path.join(root, 'ios', 'Mac', 'MacApp.swift'), 'utf8').includes('CommandMenu("Pagina")'));
 });
+
+test('after ringing: a close button (standard) or no button and a sheet that closes by itself', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const look = async () => (await call(srv, 'GET', '/api/state')).json.settings.look;
+  assert.equal((await look()).sentClose, 'button');
+  await call(srv, 'POST', '/api/settings', { look: { sentClose: 'auto', sentSeconds: 1 } }, a);
+  const l = await look(); assert.equal(l.sentClose, 'auto'); assert.equal(l.sentSeconds, 3, 'at least three seconds');
+  await call(srv, 'POST', '/api/settings', { look: { sentClose: 'zap' } }, a);
+  assert.equal((await look()).sentClose, 'button');
+  const sch = (await call(srv, 'GET', '/api/settings-schema', undefined, a)).json.groups.find((g) => g.id === 'weergave');
+  assert.ok(sch.fields.some((f) => f.key === 'look.sentClose'));
+});

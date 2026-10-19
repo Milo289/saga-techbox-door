@@ -889,6 +889,7 @@
     const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/calendar' })), download: 'afspraak.ics' }); document.body.append(a); a.click(); a.remove();
   }
   function showSent(payload, mailTo) {
+    const L = (S && S.settings.look) || {}, autoClose = L.sentClose === 'auto';
     openSheet('done',
       h('div', { class: 'badge pop' }, payload.type === 'bell' ? icon('bell') : icon('check')),
       h('h3', {}, formCfg().thanksText ? formCfg().thanksText : payload.type === 'bell' ? tx('sentBell') : payload.type === 'appointment' ? tx('sentAppt') : payload.type === 'callback' ? tx('callbackSent') : tx('sent')),
@@ -896,8 +897,9 @@
       mailTo ? h('p', { class: 'muted' }, tx('mailNote', { mail: mailTo })) : null,
       payload.type === 'appointment' && payload.at ? h('button', { class: 'link', onclick: () => downloadIcs(payload) }, lt('Zet in mijn agenda', 'Add to my calendar')) : null,
       h('div', { id: 'replyBox', class: 'wait-line' }, h('div', { class: 'spin' }), tx('waiting')),
-      h('div', { class: 'btns', style: 'width:100%' }, h('button', { class: 'btn', onclick: closeSheet }, tx('close'))));
+      autoClose ? null : h('div', { class: 'btns', style: 'width:100%' }, h('button', { class: 'btn', onclick: closeSheet }, tx('close'))));
     bumpIdle(300000);
+    if (autoClose) { const secs = Math.max(3, Number(L.sentSeconds) || 10); clearTimeout(idleTimer); idleTimer = setTimeout(closeSheet, secs * 1000); } // no button: it closes by itself (a tap next to it closes it too)
     checkReply();
   }
 

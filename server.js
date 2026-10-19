@@ -82,7 +82,7 @@ const DEFAULT_SETTINGS = {
     shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0,
     ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true,
     buttons: { place: 'below', size: 'normal', columns: 0 }, slides: { enabled: false, seconds: 8, items: [] }, event: { enabled: false, label: '', date: '' },
-    greeting: false, updated: false, waiting: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false,
+    greeting: false, updated: false, waiting: false, sentClose: 'button', sentSeconds: 10, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false,
   },
   language: 'nl', // the door screen and the visitor page: nl | en
   noteSchedule: [], // a note on the door for a period (shown instead of the note above, by date)
@@ -145,6 +145,8 @@ function cleanLook(l = {}) {
   for (const k of ['greeting', 'updated', 'waiting', 'awake', 'speak', 'mirror']) out[k] = !!l[k];
   out.glow = l.glow === undefined ? true : !!l.glow;
   out.bellFlash = ['none', 'flash', 'pulse'].includes(l.bellFlash) ? l.bellFlash : 'none';
+  out.sentClose = l.sentClose === 'auto' ? 'auto' : 'button'; // after ringing or sending: a close button, or no button and the screen closes by itself
+  out.sentSeconds = n(l.sentSeconds, 3, 120, 10);
   out.dot = ['dot', 'bar', 'none'].includes(l.dot) ? l.dot : 'dot';
   out.align = ['left', 'center', 'right'].includes(l.align) ? l.align : 'center';
   out.reloadAt = /^([01]\d|2[0-3]):[0-5]\d$/.test(l.reloadAt) ? l.reloadAt : '';
