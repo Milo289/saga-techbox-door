@@ -46,6 +46,14 @@ function build(ctx) {
     B('look.ticker.enabled', 'Lopende tekst onderaan'), T('look.ticker.text', 'Tekst van de lopende regel', 200), T('look.footer', 'Vaste regel onderaan', 120),
     B('look.idle.enabled', 'Schermbeveiliging als niemand het scherm aanraakt'), N('look.idle.minutes', 'Schermbeveiliging na (minuten)', 1, 240),
     B('look.shift', 'Beeld af en toe een paar pixels verschuiven (tegen inbranden)'), B('look.contrast', 'Hoog contrast'), B('look.motion', 'Bewegingen en animaties'),
+    C('look.buttons.place', 'Plaats van de eigen knoppen', [['below', 'Onder, bij de gewone knoppen'], ['top', 'Boven in beeld'], ['side', 'Zijkant (rechts)'], ['floating', 'Zwevend rechtsonder'], ['hidden', 'Niet tonen']]),
+    C('look.buttons.size', 'Grootte van de knoppen', [['small', 'Klein'], ['normal', 'Normaal'], ['large', 'Groot']]), N('look.buttons.columns', 'Kolommen met knoppen (0 = vanzelf)', 0, 4),
+    B('look.slides.enabled', 'Wisselende berichten'), N('look.slides.seconds', 'Seconden per bericht', 3, 120), F('look.slides.items', 'Berichten (één per regel)', 'lines', { max: 140, value: ((s.look || {}).slides || {}).items || [] }),
+    B('look.event.enabled', 'Aftellen naar een gebeurtenis'), T('look.event.label', 'Naam van de gebeurtenis', 60), F('look.event.date', 'Datum van de gebeurtenis', 'date'),
+    B('look.greeting', 'Groet (goedemorgen …)'), B('look.updated', 'Toon wanneer het scherm voor het laatst bijgewerkt is'), C('look.bellFlash', 'Bij aanbellen', [['none', 'Geen flits'], ['flash', 'Scherm flitst'], ['pulse', 'Rand knippert']]),
+    B('look.awake', 'Scherm aan houden'), B('look.speak', 'Status hardop zeggen bij een wijziging'), T('look.reloadAt', 'Elke dag verversen om (UU:MM, leeg = nooit)', 5),
+    C('look.dot', 'Statuspunt', [['dot', 'Punt'], ['bar', 'Balk'], ['none', 'Geen']]), C('look.align', 'Uitlijning', [['left', 'Links'], ['center', 'Midden'], ['right', 'Rechts']]),
+    B('look.glow', 'Gloed rond het statuspunt'), N('look.margin', 'Marge rond het beeld (%)', 0, 12), B('look.mirror', 'Spiegelen'),
   ]);
   add('visitors', 'Bezoekers', 'settings', 'Wat bezoekers op het deurscherm kunnen doen.', [
     B('visitors.doorbell', 'Deurbel'), B('visitors.bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'), B('visitors.reasons', 'Redenen'), B('visitors.appointments', 'Tijd booken'), B('visitors.messages', 'Vraagje'), B('visitors.callback', 'Terugbellen'),
@@ -53,7 +61,15 @@ function build(ctx) {
     N('slotMinutes', 'Lengte van een afspraak (minuten)', 10, 240),
   ]);
   add('buttons', 'Eigen knoppen', 'settings', 'Extra knoppen op het deurscherm: één tik, eventueel met een korte tekst en een eigen antwoord.', [
-    F('customButtons', 'Knoppen', 'records', { columns: [{ key: 'label', label: 'Naam van de knop', type: 'text', max: 40 }, { key: 'ask', label: 'Vraag om tekst', type: 'toggle' }, { key: 'askLabel', label: 'Wat vraag je?', type: 'text', max: 60 }, { key: 'reply', label: 'Antwoord op de deur', type: 'text', max: 140 }], value: s.customButtons || [], blank: { label: '', ask: false, askLabel: '', reply: '' }, addLabel: 'Knop toevoegen' }),
+    F('customButtons', 'Knoppen', 'records', { columns: [
+      { key: 'icon', label: 'Symbool (emoji)', type: 'text', max: 4 }, { key: 'label', label: 'Naam van de knop', type: 'text', max: 40 },
+      { key: 'kind', label: 'Soort', type: 'choice', options: o([['form', 'Vraag aan mij (formulier)'], ['info', 'Informatie'], ['link', 'Webadres (QR)'], ['phone', 'Telefoonnummer (QR)'], ['wifi', 'Wifi (QR)']]) },
+      { key: 'when', label: 'Wanneer te zien', type: 'choice', options: o([['always', 'Altijd'], ['open', 'Alleen bij Open'], ['closed', 'Alleen bij Gesloten'], ['busy', 'Alleen bij Bezet']]) }, { key: 'color', label: 'Kleur', type: 'color' },
+      { key: 'ask', label: 'Vraag om tekst', type: 'toggle' }, { key: 'askLabel', label: 'Wat vraag je?', type: 'text', max: 60 }, { key: 'reply', label: 'Antwoord op de deur', type: 'text', max: 140 },
+      { key: 'text', label: 'Tekst of uitleg', type: 'text', max: 600 }, { key: 'url', label: 'Webadres', type: 'text', max: 300 }, { key: 'phone', label: 'Telefoonnummer', type: 'text', max: 30 },
+      { key: 'ssid', label: 'Wifi-naam', type: 'text', max: 60 }, { key: 'wifiPass', label: 'Wifi-wachtwoord', type: 'text', max: 80 }, { key: 'wifiType', label: 'Wifi-beveiliging', type: 'choice', options: o([['WPA', 'Met wachtwoord'], ['nopass', 'Zonder wachtwoord']]) },
+    ], value: s.customButtons || [], blank: { icon: '', label: '', kind: 'form', when: 'always', color: '', ask: false, askLabel: '', reply: '', text: '', url: '', phone: '', ssid: '', wifiPass: '', wifiType: 'WPA' }, addLabel: 'Knop toevoegen' }),
+    F('noteSchedule', 'Bericht op de deur per datum', 'records', { columns: [{ key: 'from', label: 'Van', type: 'date' }, { key: 'to', label: 'Tot en met', type: 'date' }, { key: 'text', label: 'Bericht', type: 'text', max: 140 }], value: s.noteSchedule || [], blank: { from: '', to: '', text: '' }, addLabel: 'Bericht toevoegen' }),
   ]);
   add('replies', 'Automatisch antwoorden', 'settings', 'Een antwoord dat meteen op de deur verschijnt bij de bezoeker.', [
     N('autoReplyMinutes', 'Antwoord als je niet reageert, na (minuten, 0 = uit)', 0, 120), T('autoReplyText', 'Tekst van dat antwoord', 140), T('closedReply', 'Antwoord als je gesloten bent', 140),
@@ -66,7 +82,9 @@ function build(ctx) {
     C('moderation.action', 'Wat gebeurt er?', [['mask', 'Het woord verbergen en het bericht markeren'], ['flag', 'Alleen het bericht markeren'], ['block', 'Het bericht niet versturen']]),
     N('moderation.maxPerHour', 'Berichten per uur per telefoon', 1, 500), B('moderation.profileApproval', 'Nieuwe profielen eerst goedkeuren'),
   ]);
-  add('notify', 'Meldingen', 'mail', 'Meldingen op je telefoon (ntfy) of via een webhook.', [T('ntfyServer', 'ntfy-server', 120), T('ntfyTopic', 'ntfy-onderwerp (een geheime naam)', 80), T('webhookUrl', 'Webhook (Slack, Discord, Home Assistant)', 300)]);
+  add('notify', 'Meldingen', 'mail', 'Meldingen op je telefoon (ntfy) of via een webhook.', [T('ntfyServer', 'ntfy-server', 120), T('ntfyTopic', 'ntfy-onderwerp (een geheime naam)', 80), T('webhookUrl', 'Webhook (Slack, Discord, Home Assistant)', 300),
+    B('quiet.enabled', 'Rustige uren: geen meldingen naar telefoon of mail'), TM('quiet.from', 'Rustig vanaf'), TM('quiet.to', 'Rustig tot')]);
+  add('share', 'Delen', 'settings', 'De status laten zien op een website.', [B('publicStatus.enabled', 'Status openbaar tonen (/status.json, /badge.svg en /widget)')]);
   add('notifyRules', 'Meldingen per soort en persoon', 'settings', 'De eerste regel die past, geldt. Zonder regels krijg je van alles een melding.', [
     F('notifyRules', 'Regels', 'records', { columns: [{ key: 'type', label: 'Soort', type: 'choice', options: o(TYPES) }, { key: 'person', label: 'Naam of nummer (leeg = iedereen)', type: 'text', max: 60 }, { key: 'mute', label: 'Geen melding', type: 'toggle' }, { key: 'ntfy', label: 'Telefoon', type: 'toggle' }, { key: 'mail', label: 'Mail', type: 'toggle' }, { key: 'webhook', label: 'Webhook', type: 'toggle' }, { key: 'quietFrom', label: 'Niet van', type: 'time' }, { key: 'quietTo', label: 'Tot', type: 'time' }], value: s.notifyRules || [], blank: { type: 'bell', person: '', mute: false, ntfy: true, mail: true, webhook: true, quietFrom: '', quietTo: '' }, addLabel: 'Regel toevoegen' }),
   ]);
@@ -139,7 +157,7 @@ function parse(ctx, values) {
       else throw bad(`“${spec.label}” heeft ongeldige tijden`);
     } else if (spec.type === 'records') {
       if (!Array.isArray(v)) throw bad(`“${spec.label}” moet een lijst zijn`);
-      val = v.slice(0, 50).map((row) => { const r = {}; for (const c of spec.columns) r[c.key] = one({ ...c, label: `${spec.label}: ${c.label}` }, row && row[c.key] !== undefined ? row[c.key] : (c.type === 'toggle' ? false : '')); return r; });
+      val = v.slice(0, 50).map((row) => { const r = {}; for (const c of spec.columns) { let x = row && row[c.key] !== undefined ? row[c.key] : (c.type === 'toggle' ? false : ''); if (c.type === 'choice' && (x === '' || x == null)) x = c.options[0][0]; /* an older app does not know the new columns */ r[c.key] = one({ ...c, label: `${spec.label}: ${c.label}` }, x); } return r; });
     } else if (spec.type === 'password') { val = one(spec, v); if (val === ctx.PASS_MASK) continue; }
     else val = one(spec, v);
     (key.startsWith('system.') ? out.system : out.settings)[key.replace(/^system\./, '')] = val;

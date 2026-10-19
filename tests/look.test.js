@@ -43,3 +43,20 @@ test('the door screen and the panel scripts are valid JavaScript and carry the n
   const door = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
   for (const part of ['id="bigclock"', 'id="bar"', 'id="agenda"', 'id="ticker"', 'id="foot"', 'function applyLook', 'function paintClock', 'function paintSaver', 'data-mode="strip"'.replace('data-mode="strip"', '#app.strip')]) assert.ok(door.includes(part), part);
 });
+
+test('the file with recommended settings is accepted by the server and changes only what it lists', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: fs.mkdtempSync(path.join(os.tmpdir(), 'rec-')) });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const file = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'saga-aanbevolen-instellingen.json'), 'utf8'));
+  assert.equal(file.format, 'saga-instellingen');
+  await call(srv, 'POST', '/api/settings', { name: 'Mijn eigen deur', hours: { enabled: true, days: [1, 2, 3], from: '08:15', to: '16:45' } }, a);
+  await call(srv, 'POST', '/api/visit', { type: 'message', message: 'Blijft staan' });
+  const r = await call(srv, 'POST', '/api/settings-schema/save', { values: file.values }, a);
+  assert.equal(r.status, 200, r.text);
+  const st = (await call(srv, 'GET', '/api/admin-state', undefined, a)).json;
+  assert.equal(st.settings.name, 'Mijn eigen deur'); assert.equal(st.settings.hours.from, '08:15'); assert.deepEqual(st.settings.hours.days, [1, 2, 3]);
+  assert.equal(st.settings.look.font, 'rounded'); assert.equal(st.settings.look.countdown, true); assert.equal(st.settings.dim.enabled, true); assert.equal(st.settings.watch.screenMinutes, 15);
+  assert.ok(st.requests.some((x) => x.message === 'Blijft staan'), 'visitors stay');
+  assert.equal((await call(srv, 'GET', '/api/system', undefined, a)).json.system.retentionDays, 90);
+});

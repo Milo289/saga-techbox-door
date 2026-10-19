@@ -81,7 +81,12 @@ const DEFAULT_SETTINGS = {
     mode: 'standard', font: 'system', textScale: 100, weight: 'normal', clock: 'digital', seconds: false, date: 'none', transition: 'slide',
     shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0,
     ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true,
+    buttons: { place: 'below', size: 'normal', columns: 0 }, slides: { enabled: false, seconds: 8, items: [] }, event: { enabled: false, label: '', date: '' },
+    greeting: false, updated: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false,
   },
+  noteSchedule: [], // a note on the door for a period (shown instead of the note above, by date)
+  quiet: { enabled: false, from: '18:00', to: '08:00' }, // no messages to the phone or mail in these hours (the door itself keeps working)
+  publicStatus: { enabled: false }, // /status.json, /badge.svg and /widget for a school website
   ntfyServer: 'https://ntfy.sh',
   ntfyTopic: '',
   webhookUrl: '',
@@ -130,6 +135,19 @@ function cleanLook(l = {}) {
   out.ticker = { enabled: !!(l.ticker && l.ticker.enabled), text: str(l.ticker && l.ticker.text, 200) };
   out.idle = { enabled: !!(l.idle && l.idle.enabled), minutes: n(l.idle && l.idle.minutes, 1, 240, 10) };
   out.footer = str(l.footer, 120);
+  const b = l.buttons || {};
+  out.buttons = { place: ['below', 'top', 'side', 'floating', 'hidden'].includes(b.place) ? b.place : 'below', size: ['small', 'normal', 'large'].includes(b.size) ? b.size : 'normal', columns: n(b.columns, 0, 4, 0) };
+  const sl = l.slides || {};
+  out.slides = { enabled: !!sl.enabled, seconds: n(sl.seconds, 3, 120, 8), items: (Array.isArray(sl.items) ? sl.items : []).map((x) => str(x, 140)).filter(Boolean).slice(0, 12) };
+  const ev = l.event || {};
+  out.event = { enabled: !!ev.enabled, label: str(ev.label, 60), date: /^\d{4}-\d{2}-\d{2}$/.test(ev.date) ? ev.date : '' };
+  for (const k of ['greeting', 'updated', 'awake', 'speak', 'mirror']) out[k] = !!l[k];
+  out.glow = l.glow === undefined ? true : !!l.glow;
+  out.bellFlash = ['none', 'flash', 'pulse'].includes(l.bellFlash) ? l.bellFlash : 'none';
+  out.dot = ['dot', 'bar', 'none'].includes(l.dot) ? l.dot : 'dot';
+  out.align = ['left', 'center', 'right'].includes(l.align) ? l.align : 'center';
+  out.reloadAt = /^([01]\d|2[0-3]):[0-5]\d$/.test(l.reloadAt) ? l.reloadAt : '';
+  out.margin = n(l.margin, 0, 12, 0);
   return out;
 }
 const maskSystem = (sys) => ({ ...sys, backupPassword: sys.backupPassword ? PASS_MASK : '', updateToken: sys.updateToken ? PASS_MASK : '' });
@@ -216,7 +234,7 @@ function applyFormValues(values) {
   return n;
 }
 
-const PRIVATE_SETTINGS = ['notifyRules', 'autoReplies', 'ntfyServer', 'ntfyTopic', 'webhookUrl', 'quickReplies', 'autoReplyText', 'closedReply', 'autoReplyMinutes', 'mail'];
+const PRIVATE_SETTINGS = ['quiet', 'notifyRules', 'autoReplies', 'ntfyServer', 'ntfyTopic', 'webhookUrl', 'quickReplies', 'autoReplyText', 'closedReply', 'autoReplyMinutes', 'mail'];
 const PASS_MASK = '••••••••'; // the mail password is never sent back to the browser
 
 const freshState = () => ({
@@ -287,6 +305,7 @@ const UI_TEXTS = {
   send: ['Knoppen', 'Versturen', 'Versturen'],
   request: ['Knoppen', 'Aanvragen', 'Aanvragen'],
   close: ['Knoppen', 'Sluiten', 'Sluiten'],
+  wifiPass: ['Knoppen', 'Wifi-wachtwoord (voor een wifi-knop)', 'Wachtwoord:'],
   aboutWhat: ['Vraagje', 'Titel', 'Waarover gaat het?'],
   tellMore: ['Vraagje', 'Tekstveld', 'Vertel er iets meer over (optioneel)'],
   typeOwn: ['Vraagje', 'Eigen tekst toevoegen', '+ Typ er zelf iets bij'],
@@ -640,6 +659,7 @@ function publicState() {
   const settings = {};
   for (const k of Object.keys(s)) if (!PRIVATE_SETTINGS.includes(k)) settings[k] = s[k];
   settings.ui = resolveUi(s.ui); // the door screen gets the words ready to use
+  { const d = new Date(), today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, planned = schedule.noteFor(s.noteSchedule, today); if (planned) settings.note = planned; delete settings.noteSchedule; }
   const now = Date.now();
   return {
     build: BUILD,
@@ -1662,6 +1682,9 @@ const adminRoutes = {
     const merged = { ...state.settings };
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
     merged.look = cleanLook(merged.look);
+    merged.noteSchedule = schedule.cleanNoteSchedule('noteSchedule' in b ? b.noteSchedule : state.settings.noteSchedule);
+    merged.quiet = { enabled: !!merged.quiet.enabled, from: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.from) ? merged.quiet.from : '18:00', to: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.to) ? merged.quiet.to : '08:00' };
+    merged.publicStatus = { enabled: !!merged.publicStatus.enabled };
     if (![0, 90, 180, 270].includes(merged.layout.rotate)) merged.layout.rotate = 0;
     if (!['auto', 'portrait', 'landscape'].includes(merged.layout.orientation)) merged.layout.orientation = 'auto';
     if (!['dark', 'light'].includes(merged.theme)) merged.theme = 'dark';
@@ -1909,7 +1932,7 @@ const adminRoutes = {
     const q = (t) => '"' + String(t).replace(/"/g, '""') + '"';
     return { __file: { name: 'logboek.csv', text: 'Tijd,Soort,Wat,Wie,Vingerafdruk\n' + rows.map((h) => [new Date(h.at).toISOString(), h.type, h.text, h.by || '', h.h || ''].map(q).join(',')).join('\n') + '\n' } };
   },
-  'GET /api/update': () => ({ ...serverUpdater.status(), channel: state.system.updateChannel, hasToken: !!state.system.updateToken, ...updates.persistence(DATA_DIR), supervised: process.env.SAGA_SUPERVISED === '1', via: process.env.SAGA_SUPERVISED === '1' ? 'boot' : 'other' }),
+  'GET /api/update': () => ({ ...serverUpdater.status(), channel: state.system.updateChannel, hasToken: !!state.system.updateToken, ...updates.persistence(DATA_DIR), canRollback: serverUpdater.canRollback(), supervised: process.env.SAGA_SUPERVISED === '1', via: process.env.SAGA_SUPERVISED === '1' ? 'boot' : 'other' }),
   'POST /api/update/settings': (b, id) => {
     const next = { ...state.system };
     if (b.channel !== undefined) next.updateChannel = b.channel === 'beta' ? 'beta' : 'stable';
@@ -2180,6 +2203,16 @@ function verifyBackupFile(name) {
   else raise('backupcheck', `De laatste back-up (${r.name}) kan niet worden teruggezet: ${r.error}. Maak een nieuwe en controleer het back-upwachtwoord.`, { cooldownMin: 360 });
   return r;
 }
+function privacyFind(q) {
+  const has = (v) => String(v == null ? '' : v).toLowerCase().includes(q);
+  const requests = state.requests.filter((r) => [r.name, r.email, r.phone, r.nr].some(has));
+  const people = state.people.filter((p) => [p.name, p.email, p.nr].some(has));
+  return {
+    requests: requests.map((r) => ({ id: r.id, type: r.type, at: r.createdAt, name: r.name, message: String(r.message || '').slice(0, 80) })),
+    people: people.map((p) => ({ id: p.id, name: p.name, nr: p.nr, email: p.email })),
+    logMentions: state.history.filter((h) => has(h.text)).length, // the activity log is chained and keeps its lines
+  };
+}
 // the list for a new installation: what to switch on, where to find it
 function setupChecklist(id) {
   const items = [], add = (key, ok, text, tip, tab) => items.push({ key, ok: !!ok, text, tip: ok ? '' : tip, tab });
@@ -2197,6 +2230,52 @@ function setupChecklist(id) {
 }
 Object.assign(adminRoutes, {
   'GET /api/checklist': (b, id) => setupChecklist(id),
+  // ---- statistics: how busy is the door (counts only, no names) ----
+  'GET /api/stats': (b, id, url) => {
+    const days = Math.max(7, Math.min(90, Number(url.searchParams.get('days')) || 30)), since = Date.now() - days * 864e5;
+    const list = state.requests.filter((r) => r.createdAt >= since);
+    const byHour = Array(24).fill(0), byDay = {}, byType = {}, topics = {};
+    let replied = 0, replyMs = 0;
+    for (const r of list) {
+      const d = new Date(r.createdAt); byHour[d.getHours()]++;
+      const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; byDay[key] = (byDay[key] || 0) + 1;
+      byType[r.type] = (byType[r.type] || 0) + 1;
+      const t = r.reason || r.topic; if (t) topics[t] = (topics[t] || 0) + 1;
+      if (r.reply && r.repliedAt && !r.autoReplied) { replied++; replyMs += Math.max(0, r.repliedAt - r.createdAt); }
+    }
+    const out = [];
+    for (let i = days - 1; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5); const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; out.push({ day: key, n: byDay[key] || 0 }); }
+    return { days, total: list.length, byHour, byDay: out, byType, topics: Object.entries(topics).sort((a, c) => c[1] - a[1]).slice(0, 6).map(([name, n]) => ({ name, n })), answered: replied, avgReplyMinutes: replied ? Math.round(replyMs / replied / 6e4) : null, busiestHour: byHour.indexOf(Math.max(...byHour)), kept: state.requests.length };
+  },
+  // ---- all requests as a spreadsheet file ----
+  'GET /api/requests/export': () => {
+    const q = (t) => '"' + String(t == null ? '' : t).replace(/"/g, '""') + '"';
+    const rows = state.requests.map((r) => [new Date(r.createdAt).toISOString(), r.type, r.name, r.nr, r.email, r.phone, r.reason || r.topic, r.message, r.statusAtTime, r.state, r.reply, r.repliedAt ? new Date(r.repliedAt).toISOString() : ''].map(q).join(','));
+    return { __file: { name: `bezoekersverzoeken-${new Date().toISOString().slice(0, 10)}.csv`, text: 'Tijd,Soort,Naam,Nummer,E-mail,Telefoon,Reden of onderwerp,Bericht,Status toen,Stand,Antwoord,Beantwoord op\n' + rows.join('\n') + '\n' } };
+  },
+  // ---- privacy (AVG): find everything about a person, and erase it ----
+  'POST /api/privacy/search': (b) => {
+    const q = str(b.q, 80).toLowerCase();
+    if (q.length < 2) throw bad('Typ minstens twee tekens (een naam, e-mailadres of nummer)');
+    return privacyFind(q);
+  },
+  'POST /api/privacy/erase': (b, id) => {
+    const q = str(b.q, 80).toLowerCase();
+    if (q.length < 2) throw bad('Typ minstens twee tekens');
+    const found = privacyFind(q);
+    const ids = new Set(found.requests.map((r) => r.id)), pids = new Set(found.people.map((p) => p.id));
+    state.requests = state.requests.filter((r) => !ids.has(r.id));
+    state.people = state.people.filter((p) => !pids.has(p.id));
+    log('privacy', `${id.name} wiste de gegevens van één persoon (${ids.size} verzoek(en), ${pids.size} persoon/personen)`, 'systeem'); // the search word itself is not written down
+    return { ok: true, requests: ids.size, people: pids.size, logMentions: found.logMentions };
+  },
+  'POST /api/update/rollback': (b, id) => {
+    if (process.env.SAGA_SUPERVISED !== '1') throw bad('Deze server wordt niet door een starter bewaakt, dus terugdraaien kan hier niet.');
+    const r = serverUpdater.rollback();
+    securityEvent(`${id.name} draait de server terug${r.version ? ' naar ' + r.version : ''}`);
+    setTimeout(() => { flushSave(); process.exit(0); }, 800);
+    return r;
+  },
   'POST /api/system/backups/verify': () => { const l = listBackups(); if (!l.length) throw bad('Er is nog geen back-up. Maak er eerst een.'); return verifyBackupFile(l[0].name); },
   'GET /api/system': (b, id) => ({ system: maskSystem(state.system), backups: listBackups(), backupCheck, yourIp: id.ip || '', serverTime: Date.now() }),
   'POST /api/system/settings': (b) => { if (b.backupPassword === PASS_MASK) b.backupPassword = state.system.backupPassword; if (b.updateToken === PASS_MASK || b.updateToken === undefined) b.updateToken = state.system.updateToken; if (b.updateChannel === undefined) b.updateChannel = state.system.updateChannel; state.system = cleanSystem(b); log('systeem', `Systeeminstellingen gewijzigd${state.system.maintenance ? ' (onderhoudsmodus aan)' : ''}`); },
@@ -2273,7 +2352,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/checklist': 'settings', 'POST /api/system/backups/verify': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/checklist': 'settings', 'GET /api/stats': 'inbox', 'GET /api/requests/export': 'export', 'POST /api/privacy/search': 'people', 'POST /api/privacy/erase': 'people', 'POST /api/update/rollback': 'system', 'POST /api/system/backups/verify': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -2395,7 +2474,9 @@ function handleVisit(req, b) {
   state.requests.unshift(r);
   state.requests.length = Math.min(state.requests.length, 300);
   log('visit', describe(r).replace(/\n/g, ' · '));
-  const plan = schedule.notifyPlan(state.settings.notifyRules, r);
+  let plan = schedule.notifyPlan(state.settings.notifyRules, r);
+  { const q = state.settings.quiet, d = new Date(), hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`; // quiet hours: nothing to the phone or the mail
+    if (q && q.enabled && (q.from <= q.to ? hm >= q.from && hm < q.to : hm >= q.from || hm < q.to)) plan = { ntfy: false, webhook: false, mail: false, quiet: true, rule: plan.rule }; }
   if (plan.ntfy || plan.webhook) notifyExternal(r, undefined, plan).catch(() => {});
   mailVisitor(r, 'confirm');
   if (plan.mail) mailAdmin(r);
@@ -2440,6 +2521,17 @@ const handle = async (req, res) => {
     if (p === '/help' || p === '/handleiding') return serveFile(res, 'help.html', req);
     if (p === '/voorwaarden') return serveFile(res, 'voorwaarden.html', req); // terms of use and privacy statement (from VOORWAARDEN.md and PRIVACY.md)
     if (p === '/privacy' || p === '/privacyverklaring') return serveFile(res, 'privacy.html', req);
+    if (p === '/poster') return serveFile(res, 'poster.html', req); // a page to print: the code that opens the visitor page
+    if (p === '/widget') return serveFile(res, 'widget.html', req);
+    if (p === '/status.json' || p === '/badge.svg') { // for a school website; only when it is switched on
+      if (!state.settings.publicStatus || !state.settings.publicStatus.enabled) return send(res, 404, { error: 'Staat uit' });
+      const v = computeView(Date.now());
+      if (p === '/status.json') { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-cache' }); return res.end(JSON.stringify({ name: state.settings.name, mode: v.mode, label: v.label, message: v.message, until: v.until || null })); }
+      const col = { open: '#30d158', closed: '#ff453a', busy: '#ff9f0a' }[v.mode] || '#8e8e93', esc = (t) => String(t).replace(/[<>&"]/g, ''), name = esc(state.settings.name).slice(0, 30), label = esc(v.label).slice(0, 20);
+      const w1 = 20 + name.length * 7.4, w2 = 24 + label.length * 7.8;
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-cache' });
+      return res.end(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(w1 + w2)}" height="26" role="img" aria-label="${name}: ${label}"><rect width="${Math.round(w1)}" height="26" rx="5" fill="#2c2c2e"/><rect x="${Math.round(w1)}" width="${Math.round(w2)}" height="26" rx="5" fill="${col}"/><rect x="${Math.round(w1) - 5}" width="10" height="26" fill="${col}"/><g fill="#fff" font-family="Verdana,Arial,sans-serif" font-size="12" font-weight="600"><text x="10" y="17">${name}</text><text x="${Math.round(w1) + 12}" y="17">${label}</text></g></svg>`);
+    }
     if (p === '/events') {
       const role = url.searchParams.get('role') === 'admin' ? 'admin' : 'display';
       const eid = role === 'admin' ? identify(req, url) : null;

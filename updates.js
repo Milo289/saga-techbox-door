@@ -142,7 +142,21 @@ function create({ dataDir, appDir, currentVersion, getToken, getChannel, log = (
       return { ok: true, version: r.version };
     } catch (e) { throw Object.assign(new Error(friendly(e)), { code: 400 }); } finally { busy = false; }
   }
-  return { check, apply, status: pub };
+  // back to the version before the last update (or to the version of the disk when there was none)
+  function rollback() {
+    const cur = readCurrent(dataDir);
+    if (!cur) throw Object.assign(new Error('Er is geen update om terug te draaien'), { code: 400 });
+    const prev = cur.previous;
+    if (prev && prev.dir && fs.existsSync(path.join(root, path.basename(String(prev.dir)), 'server.js'))) {
+      fs.writeFileSync(path.join(root, 'current.json.tmp'), JSON.stringify({ version: prev.version, dir: path.basename(String(prev.dir)), at: new Date().toISOString(), previous: null, rolledBack: true }));
+      fs.renameSync(path.join(root, 'current.json.tmp'), path.join(root, 'current.json'));
+    } else fs.renameSync(path.join(root, 'current.json'), path.join(root, 'teruggedraaid.json'));
+    fs.rmSync(path.join(root, 'tries.json'), { force: true });
+    log(`Server teruggedraaid naar ${prev && prev.version ? prev.version : 'de versie van de schijf'} (herstart volgt)`);
+    return { ok: true, version: prev && prev.version ? prev.version : '' };
+  }
+  const canRollback = () => !!readCurrent(dataDir);
+  return { check, apply, rollback, canRollback, status: pub };
 }
 
 function readCurrent(dataDir) { try { return JSON.parse(fs.readFileSync(path.join(dataDir, 'app', 'current.json'), 'utf8')); } catch { return null; } }

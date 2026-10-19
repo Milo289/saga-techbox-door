@@ -1253,7 +1253,7 @@
   // ---------- moving everything from another door server to this one ----------
   const transferDraft = { url: '', username: '', password: '', code: '' };
   // ---------- Weergave: how the door screen looks (modes, fonts, clock, background …) with ready-made designs ----------
-  const LOOK_DEFAULT = { mode: 'standard', font: 'system', textScale: 100, weight: 'normal', clock: 'digital', seconds: false, date: 'none', transition: 'slide', shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0, ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true };
+  const LOOK_DEFAULT = { mode: 'standard', font: 'system', textScale: 100, weight: 'normal', clock: 'digital', seconds: false, date: 'none', transition: 'slide', shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0, ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true, buttons: { place: 'below', size: 'normal', columns: 0 }, slides: { enabled: false, seconds: 8, items: [] }, event: { enabled: false, label: '', date: '' }, greeting: false, updated: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false };
   const LOOK_PRESETS = [
     ['Standaard', 'Zoals het was', {}],
     ['Rustig', 'Zacht, afgerond, langzaam', { font: 'rounded', background: 'gradient', transition: 'fade', cards: 'soft' }],
@@ -1264,12 +1264,12 @@
     ['Gang (smalle balk)', 'Voor een breed, laag scherm', { mode: 'strip', border: 'thick', weight: 'bold', clock: 'digital' }],
   ];
   function lookCard(st, sel, chk, text) {
-    st.look = { ...structuredClone(LOOK_DEFAULT), ...(st.look || {}), ticker: { ...LOOK_DEFAULT.ticker, ...((st.look || {}).ticker || {}) }, idle: { ...LOOK_DEFAULT.idle, ...((st.look || {}).idle || {}) } };
+    st.look = { ...structuredClone(LOOK_DEFAULT), ...(st.look || {}), ticker: { ...LOOK_DEFAULT.ticker, ...((st.look || {}).ticker || {}) }, idle: { ...LOOK_DEFAULT.idle, ...((st.look || {}).idle || {}) }, buttons: { ...LOOK_DEFAULT.buttons, ...((st.look || {}).buttons || {}) }, slides: { ...LOOK_DEFAULT.slides, ...((st.look || {}).slides || {}), items: [...(((st.look || {}).slides || {}).items || [])] }, event: { ...LOOK_DEFAULT.event, ...((st.look || {}).event || {}) } };
     const L = st.look, row = (label, ...kids) => [h('label', {}, label), kids.length > 1 ? h('div', { class: 'row' }, ...kids) : kids[0]];
     const apply = async (preset) => {
       const next = { ...structuredClone(LOOK_DEFAULT), ...structuredClone(preset[2]) };
       next.ticker = { ...LOOK_DEFAULT.ticker, ...(preset[2].ticker || {}), text: L.ticker.text }; // your own texts stay
-      next.footer = L.footer; next.motion = L.motion;
+      next.footer = L.footer; next.motion = L.motion; next.buttons = { ...LOOK_DEFAULT.buttons, ...(preset[2].buttons || {}) }; next.slides = L.slides; next.event = L.event; next.reloadAt = L.reloadAt; next.speak = L.speak; next.awake = L.awake;
       try { await api('/api/settings', { look: next }); S = await api('/api/admin-state'); toast(`Ontwerp “${preset[0]}” staat aan`); renderAll(true); } catch {}
     };
     return h('div', { class: 'card' }, h('h2', {}, 'Weergave'),
@@ -1289,7 +1289,17 @@
         ...row('Vaste regel', text(L, 'footer', { maxlength: 120, placeholder: 'Klein, onderaan het scherm' })),
         ...row('Schermbeveiliging', chk(L.idle, 'enabled', 'Dim het scherm na'), text(L.idle, 'minutes', { type: 'number', min: 1, max: 240, style: 'width:70px' }), h('span', { class: 'muted' }, 'minuten zonder aanraking')),
         ...row('Het scherm sparen', chk(L, 'shift', 'Beeld af en toe een paar pixels verschuiven (tegen inbranden)'), chk(L, 'contrast', 'Hoog contrast'), chk(L, 'motion', 'Bewegingen en animaties')),
-        h('span', {}), h('div', { class: 'row' }, ...[['Bekijk het deurscherm', '/'], ['Bekijk als telefoon', '/visit']].map(([t, u]) => h('button', { class: 'sm', onclick: () => window.open(u, '_blank') }, t)))));
+        ...row('Eigen knoppen', sel(L.buttons, 'place', [['below', 'Onder, bij de gewone knoppen'], ['top', 'Boven in beeld'], ['side', 'Zijkant (rechts)'], ['floating', 'Zwevend rechtsonder'], ['hidden', 'Niet tonen']]), sel(L.buttons, 'size', [['small', 'Klein'], ['normal', 'Normaal'], ['large', 'Groot']]), text(L.buttons, 'columns', { type: 'number', min: 0, max: 4, style: 'width:70px', title: 'Kolommen (0 = vanzelf)' }), h('span', { class: 'muted' }, 'kolommen (0 = vanzelf)')),
+        h('span', {}), h('span', { class: 'muted' }, 'De knoppen zelf maak je hieronder bij “Eigen knoppen”: formulier, tekst, wifi-code, telefoonnummer of webadres.'),
+        ...row('Wisselende berichten', chk(L.slides, 'enabled', 'Aan'), text(L.slides, 'seconds', { type: 'number', min: 3, max: 120, style: 'width:70px' }), h('span', { class: 'muted' }, 'seconden per bericht')),
+        h('span', {}), h('textarea', { placeholder: 'Eén bericht per regel', oninput: (e) => { L.slides.items = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12); } }, L.slides.items.join('\n')),
+        ...row('Aftellen naar', chk(L.event, 'enabled', 'Aan'), text(L.event, 'label', { maxlength: 60, placeholder: 'bijv. de zomervakantie' }), h('input', { type: 'date', value: L.event.date || '', oninput: (e) => { L.event.date = e.target.value; } })),
+        ...row('Op het scherm', chk(L, 'greeting', 'Groet (goedemorgen …)'), chk(L, 'updated', 'Laatst bijgewerkt'), sel(L, 'dot', [['dot', 'Statuspunt'], ['bar', 'Statusbalk'], ['none', 'Geen punt']]), sel(L, 'align', [['left', 'Links'], ['center', 'Midden'], ['right', 'Rechts']]), chk(L, 'glow', 'Gloed')),
+        ...row('Bij aanbellen', sel(L, 'bellFlash', [['none', 'Geen flits'], ['flash', 'Scherm flitst'], ['pulse', 'Rand knippert']])),
+        ...row('Het scherm zelf', chk(L, 'awake', 'Scherm aan houden'), chk(L, 'speak', 'Status hardop zeggen bij een wijziging'), chk(L, 'mirror', 'Spiegelen')),
+        ...row('Ververs elke dag om', text(L, 'reloadAt', { placeholder: '04:00 (leeg = nooit)', maxlength: 5, style: 'width:90px' }), h('span', { class: 'muted' }, 'Marge rond het beeld'), text(L, 'margin', { type: 'number', min: 0, max: 12, style: 'width:70px' }), h('span', { class: 'muted' }, '% (voor tv’s die de rand afsnijden)')),
+        h('span', {}), h('div', { class: 'row' }, ...[['Bekijk het deurscherm', '/'], ['Bekijk als telefoon', '/visit']].map(([t, u]) => h('button', { class: 'sm', onclick: () => window.open(u, '_blank') }, t)), h('button', { class: 'sm', onclick: () => { const f = document.getElementById('lookPreview'); if (f) f.src = f.src; } }, 'Voorbeeld verversen')),
+        h('span', {}), h('iframe', { id: 'lookPreview', src: '/', title: 'Voorbeeld van het deurscherm', style: 'width:100%;max-width:560px;height:315px;border:1px solid var(--line);border-radius:12px;background:#000' })));
   }
   // ---------- how this panel looks on this device only (kept in the browser) ----------
   const PANEL_PREFS_KEY = 'doorPanelPrefs';
@@ -1314,6 +1324,70 @@
         h('label', {}, 'Rustig'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p.reduceMotion, onchange: (e) => save({ reduceMotion: e.target.checked }) }), 'Geen animaties in dit paneel'),
         h('label', {}, 'Contrast'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p.contrast, onchange: (e) => save({ contrast: e.target.checked }) }), 'Sterker contrast (randen en grijze tekst)')));
   }
+  // ---------- Drukte: how busy is the door (counts only) ----------
+  let statsData = null, statsLoading = false;
+  async function loadStats() {
+    if (statsLoading) return; statsLoading = true;
+    try { statsData = await api('/api/stats?days=30'); } catch { statsData = statsData || { total: 0, byHour: Array(24).fill(0), byDay: [], byType: {}, topics: [] }; }
+    statsLoading = false; if (tab === 'now') renderAll(true);
+  }
+  function statsCard() {
+    if (!can('inbox')) return null;
+    if (!statsData) { if (!statsLoading) loadStats(); return null; }
+    const d = statsData, maxH = Math.max(1, ...d.byHour), maxD = Math.max(1, ...d.byDay.map((x) => x.n));
+    const TYPE = { bell: 'Aanbellen', reason: 'Een reden', message: 'Een vraagje', appointment: 'Afspraak', callback: 'Terugbellen' };
+    const bars = (vals, max, label) => h('div', { style: 'display:flex;align-items:flex-end;gap:2px;height:64px;margin:6px 0 2px' }, ...vals.map((v, i) => h('div', { title: label(i, v), style: `flex:1;min-width:2px;border-radius:3px 3px 0 0;background:var(--accent,var(--open));opacity:${v ? 1 : .18};height:${Math.max(4, Math.round((v / max) * 64))}px` })));
+    return h('div', { class: 'card' }, h('h2', {}, 'Drukte', h('span', { class: 'sp' }), h('span', { class: 'muted', style: 'font-size:13px;font-weight:500' }, 'laatste 30 dagen')),
+      h('div', { class: 'stats' },
+        h('div', { class: 'stat' }, h('b', {}, d.total), h('span', {}, 'verzoeken')),
+        h('div', { class: 'stat' }, h('b', {}, d.total ? `${String(d.busiestHour).padStart(2, '0')}:00` : '—'), h('span', {}, 'drukste uur')),
+        h('div', { class: 'stat' }, h('b', {}, d.avgReplyMinutes == null ? '—' : d.avgReplyMinutes + ' min'), h('span', {}, 'gemiddeld antwoord'))),
+      h('div', { class: 'muted', style: 'margin-top:12px' }, 'Per uur van de dag'), bars(d.byHour, maxH, (i, v) => `${String(i).padStart(2, '0')}:00 — ${v}`),
+      h('div', { class: 'muted', style: 'display:flex;justify-content:space-between' }, h('span', {}, '0u'), h('span', {}, '12u'), h('span', {}, '24u')),
+      h('div', { class: 'muted', style: 'margin-top:12px' }, 'Per dag'), bars(d.byDay.map((x) => x.n), maxD, (i, v) => `${d.byDay[i].day} — ${v}`),
+      Object.keys(d.byType).length ? h('p', { class: 'muted', style: 'margin:12px 0 0' }, Object.entries(d.byType).map(([k, n]) => `${TYPE[k] || k}: ${n}`).join(' · ')) : null,
+      d.topics.length ? h('p', { class: 'muted', style: 'margin:6px 0 0' }, 'Meest gekozen: ' + d.topics.map((t) => `${t.name} (${t.n})`).join(', ')) : null,
+      h('div', { class: 'row', style: 'margin-top:12px' }, can('export') ? h('button', { class: 'sm', onclick: () => getFile('/api/requests/export', 'bezoekersverzoeken.csv') }, 'Alle verzoeken als Excel-bestand (CSV)') : null, h('button', { class: 'sm ghost', onclick: () => { statsData = null; renderAll(true); } }, 'Vernieuwen')));
+  }
+  // ---------- Privacy: find everything about one person, and erase it (AVG) ----------
+  function privacyCard() {
+    const out = h('div', { class: 'muted', style: 'margin-top:10px' }), q = h('input', { placeholder: 'Naam, e-mailadres of nummer', style: 'flex:1;min-width:220px', maxlength: 80 });
+    let last = '';
+    const search = async () => {
+      const term = q.value.trim(); if (term.length < 2) { out.textContent = 'Typ minstens twee tekens.'; return; }
+      try {
+        const r = await api('/api/privacy/search', { q: term }); last = term;
+        const lines = [h('b', {}, `${r.requests.length} bezoekersverzoek(en), ${r.people.length} persoon/personen`)];
+        for (const x of r.requests.slice(0, 8)) lines.push(h('div', {}, `• ${new Date(x.at).toLocaleDateString('nl-NL')} — ${x.name || '(zonder naam)'}${x.message ? ': ' + x.message : ''}`));
+        if (r.requests.length > 8) lines.push(h('div', {}, `… en nog ${r.requests.length - 8}`));
+        for (const x of r.people) lines.push(h('div', {}, `• Persoon: ${x.name}${x.nr ? ' (' + x.nr + ')' : ''}`));
+        if (r.logMentions) lines.push(h('div', {}, `Het logboek noemt dit ${r.logMentions} keer. Het logboek is vastgemaakt en blijft staan.`));
+        if (r.requests.length || r.people.length) lines.push(h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'danger sm', onclick: async () => {
+          if (!confirm(`Alle gegevens over “${last}” wissen (${r.requests.length} verzoek(en), ${r.people.length} persoon/personen)? Dit kan niet ongedaan worden gemaakt, behalve met een back-up.`)) return;
+          try { const e = await api('/api/privacy/erase', { q: last }); out.textContent = `Gewist: ${e.requests} verzoek(en) en ${e.people} persoon/personen.`; toast('Gegevens gewist'); S = await api('/api/admin-state'); renderAll(true); } catch {}
+        } }, 'Alles over deze persoon wissen')));
+        out.replaceChildren(...lines);
+      } catch {}
+    };
+    q.onkeydown = (e) => { if (e.key === 'Enter') search(); };
+    return h('div', { class: 'card', 'data-nosave': '1' }, h('h2', {}, 'Privacy: gegevens van één persoon'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Vraagt iemand welke gegevens je van hem of haar hebt, of wil iemand dat ze gewist worden? Zoek hier op naam, e-mailadres of nummer, bekijk wat er staat en wis het in één keer.'),
+      h('div', { class: 'row' }, q, h('button', { onclick: search }, 'Zoeken')), out);
+  }
+  // ---------- keyboard: o / g / b change the status, ? shows the list ----------
+  document.addEventListener('keydown', (e) => {
+    if (!S || $('shell').classList.contains('hidden') || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '') || (document.activeElement || {}).isContentEditable) return;
+    const k = e.key.toLowerCase(), MODE = { o: 'open', g: 'closed', b: 'busy' };
+    if (MODE[k] && can('status')) { e.preventDefault(); api('/api/status', { mode: MODE[k] }).then(() => toast('Status: ' + S.settings.texts[MODE[k]].label)).catch(() => {}); }
+    else if (e.key === '?' && !$('keyhelp')) {
+      const close = () => { const x = $('keyhelp'); if (x) x.remove(); };
+      const row = ([a, b]) => h('div', { class: 'urow' }, h('div', { class: 'who' }, h('b', {}, a), h('span', { class: 'muted' }, b)));
+      document.body.append(h('div', { id: 'keyhelp', style: 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:grid;place-items:center;padding:16px', onclick: (ev) => { if (ev.target.id === 'keyhelp') close(); } },
+        h('div', { class: 'card', style: 'max-width:420px;width:100%' }, h('h2', {}, 'Sneltoetsen'), ...[['O', 'Deur op Open'], ['G', 'Deur op Gesloten'], ['B', 'Deur op Bezet'], ['/ of Ctrl+K', 'Zoeken in alle instellingen'], ['?', 'Dit overzicht']].map(row), h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { onclick: close }, 'Sluiten')))));
+      const onEsc = (ev) => { if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); } }; document.addEventListener('keydown', onEsc);
+    }
+  });
   // ---------- Eerste keer instellen: what to switch on, where to find it ----------
   let clData = null, clLoading = false;
   async function loadChecklist() {
@@ -1368,7 +1442,11 @@
       out,
       u.live && !u.persistent ? h('p', { style: 'margin:10px 0;color:#ffcc66' }, 'Let op: deze server draait van een live-schijf zonder eigen gegevensschijf. Na een herstart van de computer zijn de gegevens én de update weg. Koppel een lege tweede schijf (de schijf neemt hem dan zelf in gebruik) of maak een back-up.') : null,
       u.supervised === false ? h('p', { class: 'muted', style: 'margin:10px 0' }, 'Deze server wordt niet door een starter bewaakt (zoals op de Linux-schijf), dus de knop Bijwerken werkt hier niet. Installeer de nieuwe versie op de gewone manier.') : null,
-      h('div', { class: 'form' }, h('label', {}, 'Welke versies'), channel, h('label', {}, 'Toegangscode voor GitHub'), token, h('span', {}, ''), h('div', { class: 'row' }, check, apply)),
+      u.notes && u.newer ? h('details', { style: 'margin:8px 0' }, h('summary', {}, 'Wat is er nieuw in ' + u.version + '?'), h('pre', { style: 'white-space:pre-wrap;font:13px/1.45 inherit;margin:8px 0 0' }, u.notes.replace(/\r/g, ''))) : null,
+      h('div', { class: 'form' }, h('label', {}, 'Welke versies'), channel, h('label', {}, 'Toegangscode voor GitHub'), token, h('span', {}, ''), h('div', { class: 'row' }, check, apply, u.canRollback && u.supervised ? h('button', { class: 'sm danger', onclick: async () => {
+        if (!confirm('De server gaat terug naar de vorige versie (of de versie van de schijf) en herstart. Je gegevens blijven. Doorgaan?')) return;
+        try { await api('/api/update/rollback', {}); updMsg = 'De server herstart met de vorige versie…'; renderAll(true); setTimeout(() => location.reload(), 15000); } catch {}
+      } }, 'Terug naar de vorige versie') : null)),
       h('p', { class: 'muted', style: 'font-size:13px;margin-bottom:0' }, 'De controlesom beschermt tegen een beschadigd bestand, niet tegen iemand die de uitgave op GitHub zelf vervangt (er is nog geen ondertekening). De toegangscode (GitHub → Instellingen → Developer settings → Fine-grained token, alleen lezen op deze opslagplaats) wordt versleuteld opgeslagen.'));
   }
   function transferCard() {
@@ -1609,9 +1687,33 @@
   function smartCards(st) {
     st.customButtons = st.customButtons || []; st.notifyRules = st.notifyRules || []; st.autoReplies = st.autoReplies || [];
     st.hours.perDay = st.hours.perDay || {}; st.hours.breaks = st.hours.breaks || []; st.hours.holidays = st.hours.holidays || [];
+    const KINDS = [['form', 'Vraag aan mij (formulier)'], ['info', 'Informatie (een tekst)'], ['link', 'Webadres (met QR-code)'], ['phone', 'Telefoonnummer (met QR-code)'], ['wifi', 'Wifi (met QR-code)']];
+    const WHENS = [['always', 'Altijd'], ['open', 'Alleen bij Open'], ['closed', 'Alleen bij Gesloten'], ['busy', 'Alleen bij Bezet']];
+    const bsel = (o, k, list, def, draw) => h('select', { onchange: (e) => { o[k] = e.target.value; if (draw) draw(); } }, ...list.map(([v, l]) => h('option', { value: v, selected: (o[k] || def) === v }, l)));
     const buttons = h('div', { class: 'card' }, h('h2', {}, 'Eigen knoppen'),
-      h('p', { class: 'muted', style: 'margin-top:0' }, 'Extra knoppen op het deurscherm, bijvoorbeeld “Pakketje bezorgd”. Eén tik is genoeg. Je kunt ook om een korte tekst vragen en een eigen antwoord laten zien.'),
-      listEditor(st.customButtons, (b) => [tin(b, 'label', { placeholder: 'Naam van de knop', maxlength: 40, style: 'width:190px' }), tchk(b, 'ask', 'Vraag om tekst'), tin(b, 'askLabel', { placeholder: 'Wat vraag je? (bijv. Wat lever je in?)', maxlength: 60, style: 'width:230px' }), tin(b, 'reply', { placeholder: 'Antwoord op de deur (optioneel)', maxlength: 140, style: 'flex:1;min-width:200px' })], () => ({ id: newId(), label: '', ask: false, askLabel: '', reply: '' }), 'Knop toevoegen'));
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Extra knoppen op het deurscherm: een snelle melding (“Pakketje bezorgd”), een tekst, het wifi-wachtwoord als QR-code, een telefoonnummer of een webadres. Kies per knop een symbool, een kleur en wanneer hij te zien is. Waar de knoppen op het scherm staan kies je bij Weergave (Plaats van de knoppen).'),
+      listEditor(st.customButtons, (b, i, draw) => {
+        const kind = b.kind || 'form';
+        const common = [tin(b, 'icon', { placeholder: '🔔', maxlength: 2, style: 'width:52px;text-align:center', title: 'Symbool (een emoji)' }), tin(b, 'label', { placeholder: 'Naam van de knop', maxlength: 40, style: 'width:170px' }), bsel(b, 'kind', KINDS, 'form', draw), bsel(b, 'when', WHENS, 'always'), h('input', { type: 'color', value: /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color : '#0a84ff', title: 'Kleur van de knop', oninput: (e) => { b.color = e.target.value; } }), h('button', { class: 'sm ghost', type: 'button', title: 'Geen eigen kleur', onclick: () => { b.color = ''; toast('Standaardkleur'); } }, '×')];
+        const more = kind === 'form' ? [tchk(b, 'ask', 'Vraag om tekst'), tin(b, 'askLabel', { placeholder: 'Wat vraag je? (bijv. Wat lever je in?)', maxlength: 60, style: 'width:230px' }), tin(b, 'reply', { placeholder: 'Antwoord op de deur (optioneel)', maxlength: 140, style: 'flex:1;min-width:200px' })]
+          : kind === 'link' ? [tin(b, 'url', { placeholder: 'https://…', maxlength: 300, style: 'flex:1;min-width:220px' }), tin(b, 'text', { placeholder: 'Uitleg (optioneel)', maxlength: 600, style: 'flex:1;min-width:200px' })]
+          : kind === 'phone' ? [tin(b, 'phone', { placeholder: '06 12345678', maxlength: 30, style: 'width:170px' }), tin(b, 'text', { placeholder: 'Uitleg (optioneel)', maxlength: 600, style: 'flex:1;min-width:200px' })]
+          : kind === 'wifi' ? [tin(b, 'ssid', { placeholder: 'Naam van het wifi-netwerk', maxlength: 60, style: 'width:200px' }), tin(b, 'wifiPass', { placeholder: 'Wachtwoord', maxlength: 80, style: 'width:170px' }), bsel(b, 'wifiType', [['WPA', 'Met wachtwoord'], ['nopass', 'Zonder wachtwoord']], 'WPA'), tin(b, 'text', { placeholder: 'Uitleg (optioneel)', maxlength: 600, style: 'flex:1;min-width:160px' })]
+          : [tin(b, 'text', { placeholder: 'De tekst die bezoekers zien', maxlength: 600, style: 'flex:1;min-width:260px' })];
+        return [h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px;width:100%' }, ...common), h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px;width:100%' }, ...more)];
+      }, () => ({ id: newId(), label: '', ask: false, askLabel: '', reply: '', kind: 'form', text: '', url: '', phone: '', ssid: '', wifiPass: '', wifiType: 'WPA', color: '', icon: '', when: 'always' }), 'Knop toevoegen'));
+    st.noteSchedule = st.noteSchedule || [];
+    const planned = h('div', { class: 'card' }, h('h2', {}, 'Bericht op de deur per datum'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Een bericht dat op een bepaalde dag of periode op de deur staat, bijvoorbeeld “Vandaag geen spreekuur”. Het vervangt het gewone bericht op die dagen en gaat daarna vanzelf weg.'),
+      listEditor(st.noteSchedule, (n) => [h('input', { type: 'date', value: n.from || '', oninput: (e) => { n.from = e.target.value; } }), h('span', { class: 'muted' }, 't/m'), h('input', { type: 'date', value: n.to || '', oninput: (e) => { n.to = e.target.value; } }), tin(n, 'text', { placeholder: 'Het bericht', maxlength: 140, style: 'flex:1;min-width:220px' })], () => ({ id: newId(), from: '', to: '', text: '' }), 'Bericht toevoegen'));
+    st.quiet = st.quiet || { enabled: false, from: '18:00', to: '08:00' }; st.publicStatus = st.publicStatus || { enabled: false };
+    const quiet = h('div', { class: 'card' }, h('h2', {}, 'Rustige uren en delen'),
+      h('div', { class: 'form' },
+        h('label', {}, 'Rustige uren'), h('div', { class: 'row' }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!st.quiet.enabled, onchange: (e) => { st.quiet.enabled = e.target.checked; } }), 'Geen meldingen naar mijn telefoon of mail van'), timePicker(st.quiet.from, (x) => { st.quiet.from = x; }, 15), h('span', { class: 'muted' }, 'tot'), timePicker(st.quiet.to, (x) => { st.quiet.to = x; }, 15)),
+        h('span', {}), h('span', { class: 'muted' }, 'Bezoekers kunnen gewoon aanbellen en berichten sturen; je ziet ze in het paneel. Alleen de meldingen buiten het paneel blijven weg.'),
+        h('label', {}, 'Status op je website'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!st.publicStatus.enabled, onchange: (e) => { st.publicStatus.enabled = e.target.checked; } }), 'Toon de status openbaar (/status.json, /badge.svg en /widget)'),
+        h('span', {}), h('div', { class: 'muted' }, 'Zet dit alleen aan als de server van buitenaf te bereiken is en je de status wilt laten zien. Dan kun je dit in een pagina zetten: ', h('code', {}, '<iframe src="' + location.origin + '/widget" width="320" height="48" style="border:0"></iframe>')),
+        h('label', {}, 'Poster'), h('div', { class: 'row' }, h('button', { class: 'sm', onclick: () => window.open('/poster', '_blank') }, 'Poster met QR-code printen'), h('span', { class: 'muted' }, 'Voor op de deur of in de gang: bezoekers scannen de code en komen op de bezoekerspagina.'))));
     const hoursExtra = h('div', { class: 'card' }, h('h2', {}, 'Openingstijden: uitzonderingen'),
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Andere tijden op één dag, een pauze (de deur staat dan op Gesloten) en vrije dagen. Dit werkt samen met de openingstijden hierboven; zet die aan.'),
       h('h3', { style: 'margin:10px 0 4px' }, 'Andere tijden per dag'),
@@ -1636,7 +1738,7 @@
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Zie je afspraken en vrije dagen in je eigen agenda-app, en krijg elke week een overzicht per e-mail (e-mail moet staan ingesteld).'),
       calOut,
       h('div', { class: 'form', style: 'margin-top:14px' }, h('label', {}, 'Weekoverzicht'), tchk(st.mail, 'weekly', 'Elke week mailen op'), h('label', {}, 'Dag'), tsel(st.mail, 'weeklyDay', [5, 1, 2, 3, 4, 6, 0].map((d) => [d, DAYS_LONG[d]])), h('span', {}), h('button', { class: 'sm', type: 'button', onclick: async () => { try { await api('/api/mail/weekly-test', {}); toast('Weekoverzicht verstuurd'); } catch {} } }, 'Stuur nu een voorbeeld')));
-    return [buttons, hoursExtra, notify, replies, cal];
+    return [buttons, planned, hoursExtra, notify, replies, quiet, cal];
   }
 
   // people with only the mail right may only send the mail fields
@@ -1918,7 +2020,19 @@
         const big = f.type === 'records' || f.type === 'lines' || f.type === 'multi';
         return [h('label', { 'data-key': f.key, title: f.key }, f.label), h('div', { class: big ? 'ctl big' : 'ctl' }, ctl(f, () => fieldValue(f), (v) => { allDraft[f.key] = v; }))];
       }))));
-    return [h('div', { class: 'card' }, h('p', { class: 'muted', style: 'margin:0' }, 'Alles wat de server kan instellen, op één pagina. Zoek hierboven op een woord (bijvoorbeeld “mail”, “pauze” of “kleur”). Wijzigingen worden bewaard met de knop onderaan.')), ...cards,
+    // a file of settings (for example "aanbevolen instellingen"): only the settings in it change, nothing else (visitors, people and accounts stay)
+    const fileIn = h('input', { type: 'file', accept: '.json,application/json', class: 'hidden', onchange: async (e) => {
+      const file = e.target.files[0]; e.target.value = '';
+      if (!file) return;
+      let data; try { data = JSON.parse(await file.text()); } catch { return toast('Dit bestand kan niet gelezen worden'); }
+      if (!data || data.format !== 'saga-instellingen' || !data.values || typeof data.values !== 'object') return toast('Dit is geen instellingenbestand (het hoort “saga-instellingen” te zijn). Een back-up zet je terug bij Instellingen → Meer.');
+      const keys = Object.keys(data.values);
+      if (!keys.length) return toast('Er staan geen instellingen in dit bestand');
+      if (!confirm(`${keys.length} instellingen worden toegepast${data.naam ? ` (“${data.naam}”)` : ''}. Alleen deze instellingen veranderen; je bezoekers, personen en accounts blijven zoals ze zijn. Doorgaan?`)) return;
+      try { await api('/api/settings-schema/save', { values: data.values }); await afterBigChange(); toast(`${keys.length} instellingen toegepast`); } catch {}
+    } });
+    return [h('div', { class: 'card' }, h('div', { class: 'row', style: 'margin-bottom:10px' }, h('button', { class: 'sm', onclick: () => fileIn.click() }, 'Instellingen uit een bestand toepassen'), h('button', { class: 'sm ghost', onclick: () => { const text = JSON.stringify({ format: 'saga-instellingen', versie: 1, naam: 'Mijn instellingen', values: Object.fromEntries(allSchema.flatMap((g) => g.fields).filter((f) => !['password', 'records'].includes(f.type) && f.perm !== 'mail').map((f) => [f.key, fieldValue(f)])) }, null, 2); const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: `saga-instellingen-${ymd()}.json` }); a.click(); } }, 'Alle instellingen als bestand bewaren'), fileIn),
+      h('p', { class: 'muted', style: 'margin:0' }, 'Alles wat de server kan instellen, op één pagina. Zoek hierboven op een woord (bijvoorbeeld “mail”, “pauze” of “kleur”). Wijzigingen worden bewaard met de knop onderaan.')), ...cards,
       h('div', { class: 'save' }, h('button', { class: 'white', onclick: async () => { try { await api('/api/settings-schema/save', { values: allDraft }); toast('Opgeslagen'); S = await api('/api/admin-state'); await loadAll(); } catch {} } }, 'Instellingen opslaan'))];
   }
 
@@ -1954,7 +2068,7 @@
   const VIEWS = {
     security: securityView,
     all: allSettingsView,
-    now() { return [wizardCard(), checklistCard(true), ...nowMain()].filter(Boolean); },
+    now() { return [wizardCard(), checklistCard(true), ...nowMain(), statsCard()].filter(Boolean); },
     inbox() { return inboxMain(); },
     nowMain() {
       const v = S.view;
@@ -2096,6 +2210,7 @@
         can('api') ? keysCard() : null,
         can('audit') ? auditCard() : null,
         can('users') ? serverCard() : null,
+        can('people') ? privacyCard() : null,
       ].filter(Boolean);
     },
 

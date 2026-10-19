@@ -49,8 +49,20 @@ function hoursState(h, now) {
 
 // ---------- extra buttons on the door screen ----------
 function cleanCustomButtons(list) {
-  return (Array.isArray(list) ? list : []).slice(0, 8).map((b) => ({ id: str(b && b.id, 16) || id(), label: str(b && b.label, 40), ask: !!(b && b.ask), askLabel: str(b && b.askLabel, 60), reply: str(b && b.reply, 140), whenClosed: !!(b && b.whenClosed) })).filter((b) => b.label);
+  const kinds = ['form', 'info', 'link', 'phone', 'wifi'], whens = ['always', 'open', 'closed', 'busy'], hex = /^#[0-9a-f]{6}$/i;
+  return (Array.isArray(list) ? list : []).slice(0, 12).map((b) => ({
+    id: str(b && b.id, 16) || id(), label: str(b && b.label, 40), ask: !!(b && b.ask), askLabel: str(b && b.askLabel, 60), reply: str(b && b.reply, 140), whenClosed: !!(b && b.whenClosed),
+    kind: kinds.includes(b && b.kind) ? b.kind : 'form',   // form = a request to the person behind the door; info = a text; link = a web address as a code; phone = a number; wifi = a wifi code
+    text: str(b && b.text, 600), url: str(b && b.url, 300), phone: str(b && b.phone, 30), ssid: str(b && b.ssid, 60), wifiPass: str(b && b.wifiPass, 80), wifiType: ['WPA', 'nopass'].includes(b && b.wifiType) ? b.wifiType : 'WPA',
+    color: hex.test(b && b.color) ? b.color : '', icon: str(b && b.icon, 4), when: whens.includes(b && b.when) ? b.when : 'always',
+  })).filter((b) => b.label);
 }
+// a note on the door for a period of time (from and to are dates YYYY-MM-DD, both included)
+function cleanNoteSchedule(list) {
+  const D = /^\d{4}-\d{2}-\d{2}$/;
+  return (Array.isArray(list) ? list : []).slice(0, 30).map((n) => ({ id: str(n && n.id, 16) || id(), from: D.test(n && n.from) ? n.from : '', to: D.test(n && n.to) ? n.to : '', text: str(n && n.text, 140) })).filter((n) => n.text && n.from);
+}
+const noteFor = (list, today) => { const hit = (list || []).find((n) => n.from <= today && (n.to || n.from) >= today); return hit ? hit.text : ''; };
 
 // ---------- who is told what ----------
 function cleanNotifyRules(list) {
@@ -116,4 +128,4 @@ function ics({ name, appointments = [], holidays = [], minutes = 20 }) {
   return lines.map(fold).join('\r\n') + '\r\n';
 }
 
-module.exports = { cleanHoursExtra, segmentsFor, hoursState, cleanCustomButtons, cleanNotifyRules, notifyPlan, cleanAutoReplies, pickAutoReply, ics, TYPES };
+module.exports = { cleanNoteSchedule, noteFor, cleanHoursExtra, segmentsFor, hoursState, cleanCustomButtons, cleanNotifyRules, notifyPlan, cleanAutoReplies, pickAutoReply, ics, TYPES };

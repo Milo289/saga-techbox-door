@@ -362,6 +362,27 @@
       const r = await post('/api/mail/weekly-test'); must(r.status === 200, (r.json && r.json.error) || 'status ' + r.status); return 'verstuurd: kijk in je inbox';
     });
 
+    // new in 3.5: look, checklist, statistics, privacy search, public pages
+    await t('ext', G.ext, 'Weergave: instellingen van het deurscherm zijn aanwezig en worden gelezen door het scherm', async () => {
+      const st = (await get('/api/state', '')).json; must(st && st.settings && st.settings.look && st.settings.look.mode, 'het deurscherm krijgt geen weergave-instellingen');
+      return `modus “${st.settings.look.mode}”, lettertype “${st.settings.look.font}”`;
+    });
+    await t('ext', G.ext, 'Eerste keer instellen: de checklist klopt', async () => {
+      if (!can('settings')) skip('geen recht'); const r = (await get('/api/checklist')).json; must(r && r.total >= 8 && r.items.every((i) => i.key && i.tab), 'de checklist is niet compleet');
+      return `${r.done} van ${r.total} klaar`;
+    });
+    await t('ext', G.ext, 'Drukte en export werken', async () => {
+      if (!can('inbox')) skip('geen recht'); const r = (await get('/api/stats?days=30')).json; must(r && Array.isArray(r.byHour) && r.byHour.length === 24, 'geen statistiek');
+      const c = await get('/api/requests/export'); must(c.status === 200 || c.status === 403, 'export geeft status ' + c.status); return `${r.total} verzoeken in 30 dagen`;
+    });
+    await t('ext', G.ext, 'Privacy: zoeken werkt (er wordt niets gewist)', async () => {
+      if (!can('people')) skip('geen recht'); const r = (await post('/api/privacy/search', { q: 'zzzz-bestaat-niet' })).json; must(r && Array.isArray(r.requests) && Array.isArray(r.people), 'zoeken gaf geen lijst'); return 'geen treffers voor een verzonnen naam, zoals bedoeld';
+    });
+    await t('ext', G.ext, 'Poster en widget bestaan; openbare status staat uit of werkt', async () => {
+      for (const p of ['/poster', '/widget']) { const r = await get(p, ''); must(r.status === 200, p + ' geeft ' + r.status); }
+      const j = await get('/status.json', ''); must(j.status === 404 || j.status === 200, '/status.json geeft ' + j.status); return j.status === 200 ? 'de openbare status staat aan' : 'de openbare status staat uit';
+    });
+
     // system
     await t('sys', G.sys, 'Back-up maken en terugvinden', async () => {
       if (!isRoot()) skip('alleen het hoofdaccount (milo)'); const c = await post('/api/system/backups/create'); must(c.status === 200 && c.json.name, 'maken: ' + c.status);

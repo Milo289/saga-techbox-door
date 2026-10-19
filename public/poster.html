@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Poster – Saga Techbox Deur</title>
+<style>
+:root { --bg:#fff; --fg:#111; --mut:#666; }
+body { margin:0; background:#eee; color:var(--fg); font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+.bar { padding:12px 16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:#fff; border-bottom:1px solid #ddd; }
+.bar button, .bar select { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid #bbb; background:#f7f7f7; cursor:pointer; }
+.sheet { width:min(100%,21cm); min-height:29.7cm; margin:16px auto; background:var(--bg); padding:2.2cm 1.6cm; box-sizing:border-box; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.8cm; box-shadow:0 2px 16px rgba(0,0,0,.15); }
+.sheet h1 { font-size:46px; margin:0; letter-spacing:-.02em; } .sheet h2 { font-size:28px; margin:0; font-weight:500; color:var(--mut); }
+#code svg { width:11cm; height:11cm; } #url { font:600 20px ui-monospace,Menlo,Consolas,monospace; word-break:break-all; } .small { color:var(--mut); font-size:15px; }
+@media print { body { background:#fff; } .bar { display:none; } .sheet { box-shadow:none; margin:0; width:100%; min-height:0; height:100vh; } }
+</style></head><body>
+<div class="bar"><b>Poster om te printen</b>
+  <label>Tekst <select id="kind"><option value="0">Bel aan of stel een vraag</option><option value="1">Maak een afspraak</option><option value="2">Niet storen? Laat een bericht achter</option></select></label>
+  <button id="print">Printen</button></div>
+<div class="sheet"><h1 id="name"></h1><h2 id="title"></h2><div id="code"></div><div id="url"></div><div class="small">Scan de code met de camera van je telefoon.</div></div>
+<script src="/qr.js"></script>
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const TITLES = ['Bel aan of stel een vraag', 'Maak een afspraak', 'Niet storen? Laat een bericht achter'];
+  let url = location.origin + '/visit';
+  try { const s = await fetch('/api/state').then((r) => r.json()); $('name').textContent = s.settings.name || ''; if (s.settings.qr && s.settings.qr.url) url = s.settings.qr.url; } catch {}
+  const draw = () => { $('title').textContent = TITLES[Number($('kind').value)]; };
+  $('kind').onchange = draw; draw();
+  $('url').textContent = url.replace(/^https?:\/\//, '');
+  try { $('code').innerHTML = window.QR.svg(url); } catch { $('code').textContent = url; }
+  $('print').onclick = () => window.print();
+})();
+</script></body></html>
