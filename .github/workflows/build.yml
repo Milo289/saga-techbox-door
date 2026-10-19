@@ -234,6 +234,10 @@ jobs:
           (cd install && zip -q ../out/Installeer-Mac-Linux.zip Installeer.command)
           (cd install && zip -q ../out/Installeer-Windows.zip Installeer-Windows.bat Installeer-Windows.ps1)
           (cd out && sha256sum * > ../SHA256SUMS.txt && mv ../SHA256SUMS.txt SHA256SUMS.txt && head -40 SHA256SUMS.txt)
+      - name: Sign the release (the server and the apps only accept signed files)
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: node scripts/sign-release.js out/SHA256SUMS.txt out/Saga-Techbox-Server.tgz.sha256
           ls -la out | head -30
       - uses: softprops/action-gh-release@v2
         with:

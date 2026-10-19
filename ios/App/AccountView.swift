@@ -196,6 +196,8 @@ struct SecurityOverviewView: View {
     @State private var bans = JSON(nil)
     @State private var verify: String?
     @State private var confirmRestart = false
+    @State private var confirmUpdate = false
+    @State private var upd = JSON(nil)
     @State private var message: String?
 
     private var sec: JSON { store.state.security }
@@ -257,6 +259,16 @@ struct SecurityOverviewView: View {
             }
 
             if store.can("system") {
+                Section {
+                    Text(updateLine).font(.callout)
+                    if !upd.isNull && upd.live.bool && !upd.persistent.bool {
+                        Text("Deze server draait van een live-schijf zonder eigen gegevensschijf: na een herstart van de computer zijn de gegevens en de update weg.").font(.caption).foregroundStyle(Palette.busy)
+                    }
+                    Button("Zoek naar updates") { Task { await checkUpdate() } }
+                    if upd.newer.bool && upd.hasBundle.bool && upd.supervised.bool {
+                        Button("Bijwerken naar \(upd.version.str)") { confirmUpdate = true }
+                    }
+                } header: { Text("Server bijwerken") } footer: { Text("De server downloadt de nieuwe versie zelf, controleert de ondertekening, maakt een back-up en herstart. Betas kies je op het web-paneel (Systeem).") }
                 Section("Server") {
                     Button("Server herstarten", role: .destructive) { confirmRestart = true }
                 }
@@ -266,6 +278,10 @@ struct SecurityOverviewView: View {
         .navigationTitle("Beveiliging")
         .task { await load() }
         .refreshable { await load() }
+        .confirmationDialog("De server wordt bijgewerkt en herstart (een halve minuut). Er wordt eerst een back-up gemaakt.", isPresented: $confirmUpdate, titleVisibility: .visible) {
+            Button("Bijwerken") { Task { await store.run("Bijwerken…") { _ = try await store.post("api/update/apply") } } }
+            Button("Annuleren", role: .cancel) {}
+        }
         .confirmationDialog("De server herstart nu. Het duurt een paar seconden.", isPresented: $confirmRestart, titleVisibility: .visible) {
             Button("Herstarten", role: .destructive) { Task { await store.run("Herstarten…") { _ = try await store.post("api/system/restart") } } }
             Button("Annuleren", role: .cancel) {}
@@ -273,7 +289,17 @@ struct SecurityOverviewView: View {
     }
 
     private var color: Color { let s = sec.score.int ?? 0; return s >= 80 ? Palette.open : s >= 50 ? Palette.busy : Palette.closed }
-    private func load() async { if store.can("settings") { bans = (try? await store.call("GET", "api/security/bans")) ?? JSON(nil) } }
+    private var updateLine: String {
+        if upd.isNull { return "Even kijken…" }
+        if !upd.error.str.isEmpty { return upd.error.str }
+        if upd.newer.bool { return "Er is een nieuwere versie: \(upd.version.str) (nu \(upd.current.str))." }
+        return upd.checked.bool ? "De server is bij (versie \(upd.current.str))." : "Versie \(upd.current.str). Zoek naar updates om te kijken of er iets nieuws is."
+    }
+    private func checkUpdate() async { upd = (try? await store.post("api/update/check")) ?? JSON(nil) }
+    private func load() async {
+        if store.can("settings") { bans = (try? await store.call("GET", "api/security/bans")) ?? JSON(nil) }
+        if store.can("system") { upd = (try? await store.call("GET", "api/update")) ?? JSON(nil) }
+    }
     private func unban(_ ip: String) async { _ = try? await store.call("POST", "api/security/unban", body: ["ip": ip]); await load() }
     private func fix(_ id: String) async { await store.run("Opgelost") { _ = try await store.post("api/security/fix", ["id": id]) } }
     private func checkLog() async {

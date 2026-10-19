@@ -9,6 +9,13 @@ const { execFile } = require('child_process');
 
 const REPO = 'Milo289/saga-techbox-door';
 const BUNDLE = 'Saga-Techbox-Server.tgz';
+// Releases are signed by the maker. Only a file whose signature matches this key is installed (a replaced file on GitHub fails the check).
+const RELEASE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA/GPRjK/jHVklC6sjgkeBo2NJugF1qmkfsL9nUrg0mXo=
+-----END PUBLIC KEY-----`;
+function signatureOk(data, sigB64, publicKey = RELEASE_PUBLIC_KEY) {
+  try { return crypto.verify(null, Buffer.isBuffer(data) ? data : Buffer.from(String(data)), crypto.createPublicKey(publicKey), Buffer.from(String(sigB64).trim(), 'base64')); } catch { return false; }
+}
 
 // "3.4.0-beta.16" -> comparable parts. A beta of a version is older than the final version (3.4.0-beta.9 < 3.4.0).
 function parseVersion(v) {
@@ -42,8 +49,8 @@ function pickRelease(releases, channel, current) {
   ok.sort((a, b) => compareVersions(b.tag_name, a.tag_name));
   const best = ok[0];
   if (!best) return { newer: false };
-  const bundle = (best.assets || []).find((a) => a.name === BUNDLE), sum = (best.assets || []).find((a) => a.name === BUNDLE + '.sha256');
-  return { newer: compareVersions(best.tag_name, current) > 0, version: best.tag_name.replace(/^v/, ''), prerelease: !!best.prerelease, notes: String(best.body || '').slice(0, 1500), bundle, sum, hasBundle: !!(bundle && sum) };
+  const bundle = (best.assets || []).find((a) => a.name === BUNDLE), sum = (best.assets || []).find((a) => a.name === BUNDLE + '.sha256'), sig = (best.assets || []).find((a) => a.name === BUNDLE + '.sha256.sig');
+  return { newer: compareVersions(best.tag_name, current) > 0, version: best.tag_name.replace(/^v/, ''), prerelease: !!best.prerelease, notes: String(best.body || '').slice(0, 1500), bundle, sum, sig, hasBundle: !!(bundle && sum && sig) };
 }
 
 function get(url, { token, accept, maxBytes = 200 * 1024 * 1024, redirects = 4, timeoutMs = 60000 } = {}) {
@@ -78,7 +85,7 @@ function safeNames(listing) {
   return names.every((n) => !path.isAbsolute(n) && !/(^|[\\/])\.\.([\\/]|$)/.test(n) && !/^[A-Za-z]:/.test(n));
 }
 
-function create({ dataDir, appDir, currentVersion, getToken, getChannel, log = () => {}, backup = () => {}, fetchJson, fetchFile }) {
+function create({ dataDir, appDir, currentVersion, getToken, getChannel, log = () => {}, backup = () => {}, fetchJson, fetchFile, publicKey = RELEASE_PUBLIC_KEY }) {
   const root = path.join(dataDir, 'app');
   const jsonGet = fetchJson || (async (url) => JSON.parse((await get(url, { token: getToken() })).toString('utf8')));
   const fileGet = fetchFile || ((url) => get(url, { token: getToken(), accept: 'application/octet-stream' }));
@@ -102,8 +109,9 @@ function create({ dataDir, appDir, currentVersion, getToken, getChannel, log = (
       if (!last.ok) throw new Error(last.error);
       const r = last._r;
       if (!r.newer) throw new Error('Je hebt al de nieuwste versie');
-      if (!r.hasBundle) throw new Error('Bij deze uitgave zit geen serverbestand. Haal de nieuwe schijf of app van GitHub.');
-      const [data, sumText] = await Promise.all([fileGet(r.bundle.url), fileGet(r.sum.url)]);
+      if (!r.hasBundle) throw new Error('Bij deze uitgave zit geen ondertekend serverbestand. Haal de nieuwe schijf of app van GitHub.');
+      const [data, sumText, sigText] = await Promise.all([fileGet(r.bundle.url), fileGet(r.sum.url), fileGet(r.sig.url)]);
+      if (!signatureOk(sumText, sigText, publicKey)) throw new Error('De ondertekening van deze uitgave klopt niet. Er is niets veranderd. Is de uitgave op GitHub aangepast? Neem contact op met de maker.');
       const want = String(sumText).trim().split(/\s+/)[0].toLowerCase();
       const got = crypto.createHash('sha256').update(data).digest('hex');
       if (!/^[0-9a-f]{64}$/.test(want) || want !== got) throw new Error('De controlesom klopt niet: het bestand is beschadigd. Er is niets veranderd.');
@@ -153,4 +161,4 @@ function persistence(dataDir, readMounts = () => fs.readFileSync('/proc/mounts',
   } catch { return { live: false, persistent: true }; }
 }
 
-module.exports = { create, parseVersion, compareVersions, pickRelease, safeNames, persistence, readCurrent, BUNDLE, REPO };
+module.exports = { signatureOk, RELEASE_PUBLIC_KEY, create, parseVersion, compareVersions, pickRelease, safeNames, persistence, readCurrent, BUNDLE, REPO };

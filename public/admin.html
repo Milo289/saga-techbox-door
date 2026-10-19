@@ -943,7 +943,7 @@
   const visibleTabs = () => [['now', 'Status'], can('inbox') && ['inbox', 'Bezoekers'], (can('settings') || can('mail') || can('people') || can('export')) && ['settings', 'Instellingen'], can('settings') && ['all', 'Alle instellingen'], can('settings') && ['design', 'Ontwerp'], (can('users') || can('api') || can('audit')) && ['admin', 'Beheer'], S.me.kind !== 'open' && ['security', 'Beveiliging'], can('system') && ['system', 'Systeem']].filter(Boolean);
   let userDraft = null, keyDraft = null, newKey = null;
   const editing = () => tab === 'all' || tab === 'security' || tab === 'settings' || tab === 'design' || tab === 'system' || (tab === 'admin' && (userDraft || keyDraft));
-  function setTab(t) { tab = t; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
+  function setTab(t) { tab = t; clData = null; store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
 
   // never redraw while a finger/mouse button is down, or that click would get lost
   let pressing = false, redrawLater = false;
@@ -1249,6 +1249,24 @@
 
   // ---------- moving everything from another door server to this one ----------
   const transferDraft = { url: '', username: '', password: '', code: '' };
+  // ---------- Eerste keer instellen: what to switch on, where to find it ----------
+  let clData = null, clLoading = false;
+  async function loadChecklist() {
+    if (clLoading) return; clLoading = true;
+    try { clData = await api('/api/checklist'); } catch { clData = clData || { items: [], done: 0, total: 0 }; }
+    clLoading = false; if (tab === 'now' || tab === 'system') renderAll(true);
+  }
+  function checklistCard(compact) {
+    if (!can('settings')) return null;
+    if (!clData) { if (!clLoading) loadChecklist(); return null; }
+    if (compact && clData.done >= clData.total) return null;
+    const open = clData.items.filter((i) => !i.ok);
+    return h('div', { class: 'card' }, h('h2', {}, 'Eerste keer instellen', h('span', { class: 'sp' }), h('span', { class: 'muted', style: 'font-size:14px;font-weight:500' }, `${clData.done} van ${clData.total} klaar`)),
+      ...(compact ? open.slice(0, 3) : clData.items).map((i) => h('div', { class: 'urow' },
+        h('div', { class: 'who' }, h('b', {}, (i.ok ? '✓ ' : '○ ') + i.text), i.ok ? null : h('span', { class: 'muted' }, i.tip)),
+        i.ok ? null : h('button', { class: 'sm', onclick: () => setTab(i.tab) }, 'Regelen'))),
+      compact && open.length > 3 ? h('p', { class: 'muted', style: 'margin:8px 0 0' }, `En nog ${open.length - 3}. Alles staat onder Systeem.`) : null);
+  }
   // ---------- Server bijwerken: look for a newer version, download it, check it, restart ----------
   let updInfo = null, updLoading = false, updToken = '', updMsg = '';
   async function loadUpdate(check) {
@@ -1357,7 +1375,9 @@
         h('div', { class: 'form' },
           h('label', {}, 'Bezoekersverzoeken'), h('div', { class: 'row' }, h('span', { class: 'muted' }, 'automatisch wissen na'), num('retentionDays', 0, 3650), h('span', { class: 'muted' }, 'dagen (0 = nooit)')),
           h('label', {}, 'Automatische back-up'), h('div', { class: 'row' }, chk('autoBackup', 'Elke nacht een back-up'), h('span', { class: 'muted' }, 'bewaar de laatste'), num('backupKeep', 1, 90, '70px'))),
-        h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { onclick: async () => { await api('/api/system/backups/create', {}); toast('Back-up gemaakt'); await loadSystem(); } }, 'Nu een back-up maken')),
+        h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { onclick: async () => { await api('/api/system/backups/create', {}); toast('Back-up gemaakt'); await loadSystem(); } }, 'Nu een back-up maken'),
+          h('button', { onclick: async () => { try { const r = await api('/api/system/backups/verify', {}); toast(r.ok ? 'De back-up werkt' : 'De back-up werkt niet'); } catch {} clData = null; await loadSystem(); } }, 'Test back-up')),
+        sysData.backupCheck ? h('p', { class: 'muted', style: 'margin:8px 0 0' + (sysData.backupCheck.ok ? '' : ';color:#ff8a80') }, sysData.backupCheck.ok ? `✓ ${sysData.backupCheck.name} gecontroleerd (${when(sysData.backupCheck.at)}): ${sysData.backupCheck.requests} verzoeken, ${sysData.backupCheck.people} personen, ${sysData.backupCheck.users} account(s) te herstellen.` : `✗ ${sysData.backupCheck.name}: ${sysData.backupCheck.error}`) : null,
         sysData.backups.length ? h('div', { style: 'margin-top:8px' }, ...sysData.backups.map((b) => h('div', { class: 'urow' },
           h('div', { class: 'who' }, h('b', {}, b.name.replace(/^state-/, '').replace(/\.json$/, '')), h('span', { class: 'muted' }, `${when(b.at)} · ${bytes(b.size)}`)),
           h('button', { class: 'sm', onclick: () => download(b.name) }, 'Downloaden'),
@@ -1869,7 +1889,7 @@
   const VIEWS = {
     security: securityView,
     all: allSettingsView,
-    now() { return [wizardCard(), ...nowMain()].filter(Boolean); },
+    now() { return [wizardCard(), checklistCard(true), ...nowMain()].filter(Boolean); },
     inbox() { return inboxMain(); },
     nowMain() {
       const v = S.view;
@@ -2014,7 +2034,7 @@
       ].filter(Boolean);
     },
 
-    system() { return [...systemView(), sysData ? updateCard() : null, sysData ? transferCard() : null].filter(Boolean); },
+    system() { return [checklistCard(false), ...systemView(), sysData ? updateCard() : null, sysData ? transferCard() : null].filter(Boolean); },
 
     // ---------- Ontwerp: change how the door screen looks and what it says ----------
     design() {

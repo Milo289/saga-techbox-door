@@ -5,6 +5,14 @@ const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 
+// Releases are signed by the maker: the list of checksums (SHA256SUMS.txt) must carry a signature that fits this key.
+const RELEASE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA/GPRjK/jHVklC6sjgkeBo2NJugF1qmkfsL9nUrg0mXo=
+-----END PUBLIC KEY-----`;
+function signatureOk(data, sigB64, publicKey = RELEASE_PUBLIC_KEY) {
+  try { return crypto.verify(null, Buffer.isBuffer(data) ? data : Buffer.from(String(data)), crypto.createPublicKey(publicKey), Buffer.from(String(sigB64).trim(), 'base64')); } catch { return false; }
+}
+
 const DEFAULT_API = 'https://api.github.com/repos/Milo289/saga-techbox-door/releases/latest';
 const API = process.env.DOOR_UPDATE_API || DEFAULT_API; // the override is only for tests
 const OFFICIAL = API === DEFAULT_API;
@@ -51,7 +59,8 @@ const baseHeaders = (token) => ({ 'User-Agent': 'saga-techbox-deur', ...(token ?
 // the release carries a list of checksums (SHA256SUMS.txt); a downloaded installer must match it before anything is opened
 function sumsOf(assets, token) {
   const a = (assets || []).find((x) => x.name === 'SHA256SUMS.txt');
-  return a ? { url: token ? a.url : a.browser_download_url } : null;
+  const sig = (assets || []).find((x) => x.name === 'SHA256SUMS.txt.sig');
+  return a ? { url: token ? a.url : a.browser_download_url, sig: sig ? (token ? sig.url : sig.browser_download_url) : '' } : null;
 }
 function sha256File(file) {
   return new Promise((resolve, reject) => { const h = crypto.createHash('sha256'); fs.createReadStream(file).on('data', (d) => h.update(d)).on('end', () => resolve(h.digest('hex'))).on('error', reject); });
@@ -119,13 +128,20 @@ async function download(asset, token, destDir, onProgress) {
     try {
       if (asset.sums && trusted(asset.sums.url)) {
         const r = await fetch(asset.sums.url, { headers: { Accept: 'application/octet-stream', ...baseHeaders(token) }, redirect: 'follow' });
-        if (r.ok) ok = await verifyFile(part, asset.name, await r.text());
+        if (r.ok) {
+          const sumsText = await r.text();
+          if (OFFICIAL) { // the official address only accepts a list that was signed by the maker
+            const sr = asset.sums.sig && trusted(asset.sums.sig) ? await fetch(asset.sums.sig, { headers: { Accept: 'application/octet-stream', ...baseHeaders(token) }, redirect: 'follow' }) : null;
+            if (!sr || !sr.ok || !signatureOk(sumsText, await sr.text())) throw new Error('unsigned');
+          }
+          ok = await verifyFile(part, asset.name, sumsText);
+        }
       }
     } catch { ok = false; }
-    if (!ok) { try { fs.unlinkSync(part); } catch {} throw new Error('De download klopt niet met de controlesom van de release en is niet gebruikt. Probeer het later opnieuw.'); }
+    if (!ok) { try { fs.unlinkSync(part); } catch {} throw new Error('De download klopt niet met de ondertekende controlesom van de release en is niet gebruikt. Probeer het later opnieuw.'); }
   }
   fs.renameSync(part, file);
   return file;
 }
 
-module.exports = { check, download, pickAsset, isNewer, trusted, verifyFile };
+module.exports = { signatureOk, RELEASE_PUBLIC_KEY, check, download, pickAsset, isNewer, trusted, verifyFile };

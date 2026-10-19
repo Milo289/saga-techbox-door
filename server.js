@@ -83,7 +83,7 @@ const DEFAULT_SETTINGS = {
   mail: { enabled: false, host: '', port: 587, user: '', pass: '', from: '', adminTo: '', confirm: true, reply: true, notifyAdmin: false, digest: false, digestAt: '18:00', weekly: false, weeklyDay: 5 },
 };
 // System settings: only the main account can change these (see the Systeem tab).
-const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, attack: { burst: 240, perSec: 30, strikes: 80, banMinutes: 10, maxSse: 30 }, require2fa: 'off', backupPassword: '', backupCopyDir: '', https: false, httpsPort: 8443, allowedIps: [], retentionDays: 0, autoBackup: true, backupKeep: 14, updateChannel: 'stable', updateToken: '' };
+const DEFAULT_SYSTEM = { maintenance: false, maintenanceMessage: '', sessionDays: 30, rememberDays: 365, maxAttempts: 10, blockMinutes: 10, rateLimit: true, attack: { burst: 240, perSec: 30, strikes: 80, banMinutes: 10, maxSse: 30 }, require2fa: 'off', backupPassword: '', backupCopyDir: '', https: false, httpsPort: 8443, allowedIps: [], retentionDays: 90, autoBackup: true, backupKeep: 14, retentionDays: 90, updateChannel: 'stable', updateToken: '' };
 function normIp(ip) { ip = String(ip || '').replace(/^::ffff:/, ''); return ip === '::1' ? '127.0.0.1' : ip; } // "this computer" is one address, in IPv4 or IPv6
 function ipv4ToInt(ip) { const m = String(ip).match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/); return m && m.slice(1).every((x) => Number(x) <= 255) ? ((Number(m[1]) << 24) | (Number(m[2]) << 16) | (Number(m[3]) << 8) | Number(m[4])) >>> 0 : null; }
 function validIpRule(r) { const [ip, bits] = String(r).split('/'); return (ipv4ToInt(ip) !== null && (bits === undefined || (/^\d{1,2}$/.test(bits) && Number(bits) <= 32))) || (/^[0-9a-f:]+$/i.test(ip) && ip.includes(':') && bits === undefined); }
@@ -1231,7 +1231,7 @@ function tickInner() {
     const d = new Date(), day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     if (state.lastBackupDay !== day && d.getHours() >= 3) {
       state.lastBackupDay = day; dirty = true;
-      try { writeBackup(''); } catch (e) { log('systeem', `Automatische back-up mislukt: ${e.message}`, 'systeem'); }
+      try { const nm = writeBackup(''); resolveAlert('backup', true); verifyBackupFile(nm); } catch (e) { log('systeem', `Automatische back-up mislukt: ${e.message}`, 'systeem'); raise('backup', `De automatische back-up van vannacht is mislukt (${e.code || e.message}). Controleer de schijf en de map voor back-ups.`, { cooldownMin: 360 }); }
     }
   }
   const before = state.busy.length + state.appointments.length;
@@ -1263,7 +1263,17 @@ function pruneMaps(now) {
   for (const [k, t] of mfaTickets) if (t.until < now) mfaTickets.delete(k);
 }
 // quiet self-checks: disk, memory, event-loop delay, and (if wanted) a door screen that has gone away
+const ALIVE_FILE = path.join(DATA_DIR, 'alive.json');
+let startedUncleanAfter = 0; // minutes the server was away after a stop that was not a normal one (power cut, crash, killed VM)
+try {
+  const a = JSON.parse(fs.readFileSync(ALIVE_FILE, 'utf8'));
+  if (a && a.at && !a.clean && Date.now() - a.at > 3 * 60e3) startedUncleanAfter = { from: a.at, to: Date.now() };
+} catch {}
+const writeAlive = (clean) => { try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(ALIVE_FILE, JSON.stringify({ at: Date.now(), clean: !!clean })); } catch {} };
+writeAlive(false);
+process.on('exit', (code) => writeAlive(code === 0));
 function monitors(now) {
+  writeAlive(false);
   try {
     const st = fs.statfsSync(DATA_DIR);
     const free = st.bavail * st.bsize, pct = st.blocks ? st.bavail / st.blocks : 1;
@@ -2124,8 +2134,46 @@ function writeBackup(label) {
   for (const old of listBackups().slice(state.system.backupKeep)) { try { fs.unlinkSync(path.join(BACKUP_DIR, old.name)); } catch {} }
   return name;
 }
+// Opens a back-up the way a restore would (decrypts it, reads it, checks it and counts what is in it) without touching the running server.
+let backupCheck = null;
+try { backupCheck = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'backup-check.json'), 'utf8')); } catch {}
+function verifyBackupFile(name) {
+  const r = { at: Date.now(), name: String(name || ''), ok: false };
+  try {
+    if (!BACKUP_RE.test(r.name)) throw new Error('Onbekende back-up');
+    let text = fs.readFileSync(path.join(BACKUP_DIR, r.name), 'utf8');
+    if (security.isEncryptedBackup(text)) text = security.decryptBackup(text, state.system.backupPassword);
+    const data = JSON.parse(text);
+    if (!data || data.version !== 2 || !data.settings) throw new Error('Dit is geen geldige back-up');
+    const probe = { ...freshState(), ...data, settings: coerce(DEFAULT_SETTINGS, data.settings), system: cleanSystem(data.system || {}) };
+    if (!Array.isArray(probe.requests) || !Array.isArray(probe.users)) throw new Error('De lijsten in de back-up zijn onvolledig');
+    Object.assign(r, { ok: true, requests: probe.requests.length, people: (probe.people || []).length, users: probe.users.length });
+  } catch (e) { r.error = String((e && e.message) || e).slice(0, 200); }
+  backupCheck = r;
+  try { fs.writeFileSync(path.join(DATA_DIR, 'backup-check.json'), JSON.stringify(r)); } catch {}
+  if (r.ok) resolveAlert('backupcheck', true);
+  else raise('backupcheck', `De laatste back-up (${r.name}) kan niet worden teruggezet: ${r.error}. Maak een nieuwe en controleer het back-upwachtwoord.`, { cooldownMin: 360 });
+  return r;
+}
+// the list for a new installation: what to switch on, where to find it
+function setupChecklist(id) {
+  const items = [], add = (key, ok, text, tip, tab) => items.push({ key, ok: !!ok, text, tip: ok ? '' : tip, tab });
+  add('https', httpsOn, 'De verbinding is versleuteld (https)', 'Zet https aan en installeer het certificaat op je apparaten.', 'security');
+  add('twoStep', !!(state.rootTotp && state.rootTotp.enabled), 'Het hoofdaccount heeft tweestapsverificatie', 'Zet tweestapsverificatie aan voor het hoofdaccount.', 'security');
+  add('passkey', passkeysOf(id.userId).length > 0, 'Je hebt een passkey als reserve', 'Voeg een passkey toe op je Mac of iPhone (Beveiliging).', 'security');
+  add('backupPw', !!state.system.backupPassword, 'Back-ups zijn versleuteld met een wachtwoord', 'Kies een back-upwachtwoord (Systeem).', 'system');
+  add('retention', state.system.retentionDays > 0, `Bezoekersverzoeken worden na ${state.system.retentionDays || '…'} dagen gewist`, 'Kies hoelang bezoekersverzoeken bewaard worden (Systeem). Nu blijven ze voor altijd staan.', 'system');
+  const pers = updates.persistence(DATA_DIR);
+  add('disk', !pers.live || pers.persistent, 'Gegevens overleven een herstart (eigen gegevensschijf)', 'Geef de virtuele machine een lege tweede schijf; die wordt zelf in gebruik genomen.', 'system');
+  add('backupTest', backupCheck && backupCheck.ok, 'De laatste back-up is gecontroleerd en werkt', backupCheck ? `De laatste controle mislukte: ${backupCheck.error}` : 'Maak een back-up en druk op “Test back-up” (Systeem).', 'system');
+  add('notify', !!(state.settings.ntfyTopic || state.settings.webhookUrl || mailOn()), 'Je krijgt een melding bij een waarschuwing', 'Stel e-mail of ntfy in, dan hoor je het als de server uitvalt of de schijf vol raakt.', 'settings');
+  add('hours', !!(state.settings.hours && state.settings.hours.enabled), 'Openingstijden staan aan', 'Zet openingstijden aan, dan wisselt de status zelf.', 'settings');
+  return { items, done: items.filter((i) => i.ok).length, total: items.length };
+}
 Object.assign(adminRoutes, {
-  'GET /api/system': (b, id) => ({ system: maskSystem(state.system), backups: listBackups(), yourIp: id.ip || '', serverTime: Date.now() }),
+  'GET /api/checklist': (b, id) => setupChecklist(id),
+  'POST /api/system/backups/verify': () => { const l = listBackups(); if (!l.length) throw bad('Er is nog geen back-up. Maak er eerst een.'); return verifyBackupFile(l[0].name); },
+  'GET /api/system': (b, id) => ({ system: maskSystem(state.system), backups: listBackups(), backupCheck, yourIp: id.ip || '', serverTime: Date.now() }),
   'POST /api/system/settings': (b) => { if (b.backupPassword === PASS_MASK) b.backupPassword = state.system.backupPassword; if (b.updateToken === PASS_MASK || b.updateToken === undefined) b.updateToken = state.system.updateToken; if (b.updateChannel === undefined) b.updateChannel = state.system.updateChannel; state.system = cleanSystem(b); log('systeem', `Systeeminstellingen gewijzigd${state.system.maintenance ? ' (onderhoudsmodus aan)' : ''}`); },
   'POST /api/system/backups/create': () => { const name = writeBackup('handmatig'); log('systeem', `Back-up gemaakt: ${name}`); return { ok: true, name }; },
   'GET /api/system/backups/download': (b, id, url) => {
@@ -2200,7 +2248,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/checklist': 'settings', 'POST /api/system/backups/verify': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -2596,6 +2644,10 @@ if (['open', 'closed', 'busy'].includes(state.settings.startup.status)) { // cho
   log('status', `Na het opstarten: ${state.settings.texts[state.settings.startup.status].label}`, 'systeem');
 }
 lastView = JSON.stringify(computeView());
+if (startedUncleanAfter) {
+  const t = (ms) => new Date(ms).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  setTimeout(() => raise('downtime', `De server was weg van ${t(startedUncleanAfter.from)} tot ${t(startedUncleanAfter.to)} (${Math.round((startedUncleanAfter.to - startedUncleanAfter.from) / 60e3)} minuten) zonder netjes af te sluiten: stroomuitval, een vastgelopen computer of een uitgezette virtuele machine.`, { cooldownMin: 0 }), 5000).unref();
+}
 // `ready` lets the desktop app wait for the server (or show why it couldn't start)
 // slow-connection attacks (a request that is sent a byte at a time to keep connections busy): the whole request has to arrive quickly
 server.headersTimeout = Number(process.env.DOOR_HEADER_TIMEOUT_MS) || 15000;

@@ -21,7 +21,7 @@
 Voor beheerders en beveiliging: gerechtvaardigd belang (een veilig systeem). Voor bezoekers: toestemming of gerechtvaardigd belang van de organisatie. Welke grondslag geldt, bepaalt de organisatie die de software gebruikt.
 
 ## 4. Bewaartermijnen
-De instelling **Bezoekersverzoeken bewaren (dagen)** onder Systeem bepaalt hoelang verzoeken blijven staan. **Leeg of 0 betekent dat ze blijven staan tot iemand ze verwijdert.** Kies bewust een termijn, bijvoorbeeld 90 dagen. Back-ups bevatten dezelfde gegevens en worden zoveel dagen bewaard als je bij Aantal back-ups bewaren instelt. Het logboek is bedoeld om aantoonbaar te zijn en wordt niet automatisch gewist.
+De instelling **Bezoekersverzoeken bewaren (dagen)** onder Systeem bepaalt hoelang verzoeken blijven staan. Bij een nieuwe installatie staat dit op **90 dagen**. **0 betekent dat ze blijven staan tot iemand ze verwijdert**, en een server die uit een oude back-up is teruggezet houdt zijn eigen instelling. Kies bewust een termijn. Back-ups bevatten dezelfde gegevens en worden zoveel dagen bewaard als je bij Aantal back-ups bewaren instelt. Het logboek is bedoeld om aantoonbaar te zijn en wordt niet automatisch gewist. De server schrijft verder een klein bestand met het laatste tijdstip waarop hij draaide, om te kunnen melden dat hij onverwacht is uitgevallen.
 
 ## 5. Delen met anderen
 Standaard deelt de software niets. Dit gebeurt alleen als de beheerder het aanzet:

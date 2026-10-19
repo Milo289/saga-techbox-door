@@ -34,3 +34,12 @@ Opmerkingen:
 - Een uitgave met een tag als `v3.5.0-beta.1` zet die versie nu ook in `package.json` tijdens de build, zodat server en app weten dat ze een beta zijn en de volgende beta als nieuwer zien.
 - De updater van de desktop-app begrijpt nu betaversies (beta.10 is nieuwer dan beta.9, 3.5.0 nieuwer dan 3.5.0-beta.9).
 - Niet getest: een echte update van de desktop-app naar een beta op Windows/Mac/Linux (alleen de vergelijkingen en de GitHub-aanroep in eenheidstests).
+
+## 3.5.0-beta.3
+- Nieuwe installaties bewaren bezoekersverzoeken 90 dagen (bestaande servers houden hun eigen instelling).
+- "Eerste keer instellen": checklist op Status en Systeem (https, 2FA, passkey, back-upwachtwoord, bewaartermijn, gegevensschijf, back-uptest, meldingen, openingstijden) met een knop naar de juiste plek.
+- Waarschuwingen: de server meldt na een onverwachte stop (stroom, vastgelopen VM, geen nette afsluiting) hoe lang hij weg was; mislukte automatische back-up; mislukte back-uptest.
+- Back-up test: na elke nachtelijke back-up en met de knop "Test back-up" wordt de back-up geopend zoals bij een terugzetting (ontsleutelen, lezen, tellen) zonder de server aan te raken.
+- iPhone/iPad/Mac-app: "Server bijwerken" in het beveiligingsscherm (zoeken, bijwerken). De desktop-app (Electron) toont het web-paneel en heeft dit dus al.
+- Ondertekende uitgaven: elke uitgave krijgt een handtekening (Ed25519) op SHA256SUMS.txt en op de controlesom van het serverbestand. Server en desktop-app installeren alleen wat past bij de ingebouwde sleutel. De privésleutel staat alleen in het GitHub-geheim `RELEASE_SIGNING_KEY` en in een kopie op de computer van de maker (`~/.saga-release-key.pem`). Zonder geheim maakt de build geen uitgave.
+- Niet getest: een echte update tussen twee ondertekende uitgaven, de uitvalmelding na een echte stroomuitval, het Apple-scherm op een echt apparaat (de Mac-app bouwt wel).
