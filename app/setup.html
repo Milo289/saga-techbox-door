@@ -236,6 +236,7 @@
   $('updState').textContent = `Je hebt versie ${u0.version}`;
   $('updTokenState').textContent = u0.hasToken ? 'Een sleutel is bewaard.' : '';
   showFound(u0.found && { ...u0.found, upToDate: false });
+  if ($('autoUpdate').checked) setTimeout(() => $('updCheck').click(), 400); // what was found earlier can be hours old: look again when this window opens
   $('updCheck').onclick = async () => {
     $('updCheck').disabled = true; $('updMsg').className = 'hint'; $('updMsg').textContent = 'Controleren…';
     const r = await upd.check();

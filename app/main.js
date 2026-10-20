@@ -500,8 +500,10 @@ ipcMain.handle('setup:save', async (e, next) => {
   };
   if (c.serverMode === 'remote' && !/^https?:\/\/[^\s/]+/.test(c.url)) return { ok: false, error: 'Vul een geldig adres in, bijv. http://192.168.1.50:8080' };
   const restartServer = localServerUrl && (c.serverMode !== 'here' || c.port !== config.port || c.pin !== config.pin);
+  const betaChanged = !!c.betaUpdates !== !!config.betaUpdates;
   config = c;
   saveConfig(c);
+  if (betaChanged) setTimeout(() => { updateInfo = null; backgroundCheck(); }, 500); // the old answer was for the other kind of versions
   if (restartServer) { app.relaunch(); app.exit(0); return { ok: true }; } // the built-in server needs a fresh start
   const s = setupWin;
   await launch();
@@ -582,7 +584,7 @@ async function backgroundCheck() {
   } catch { /* offline or private: stay quiet, the settings window explains */ }
 }
 setTimeout(backgroundCheck, 20e3); // soon after the PC has started the app
-setInterval(backgroundCheck, 12 * 3600e3);
+setInterval(backgroundCheck, 3 * 3600e3); // every three hours (and at once when the choice for betas changes, see setup:save)
 
 // the control panel in the app can start the update of the app itself (a button in Systeem → Server bijwerken)
 ipcMain.handle('app:update', async (e, opts) => {

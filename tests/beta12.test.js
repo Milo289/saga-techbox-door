@@ -288,3 +288,10 @@ test('the desktop app can be updated from its own panel, and the button that can
   assert.ok(pre.includes("ipcRenderer.invoke('app:update'"));
   assert.ok(panel.includes('De app nu bijwerken') && panel.includes('u.supervised !== false'));
 });
+
+test('the desktop app looks again when its settings open, every three hours, and when the choice for betas changes', () => {
+  const root = path.join(__dirname, '..');
+  const main = fs.readFileSync(path.join(root, 'app', 'main.js'), 'utf8'), setup = fs.readFileSync(path.join(root, 'app', 'setup.html'), 'utf8');
+  assert.ok(main.includes('3 * 3600e3') && main.includes('betaChanged'));
+  assert.ok(setup.includes("$('updCheck').click()"));
+});
