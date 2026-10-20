@@ -273,7 +273,7 @@ test('more themes and four kinds of status box; the panel shows its pages in cat
   assert.ok(sch.find((g) => g.id === 'weergave').fields.some((f) => f.key === 'look.box'));
   assert.ok(sch.find((g) => g.id === 'screen').fields.find((f) => f.key === 'theme').options.length === 7);
   const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8'), door = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
-  for (const part of ['const CATS =', 'function drawCatBar', "'Computer en desktop'", 'Wat wil je doen?', 'ALL_CATS']) assert.ok(panel.includes(part), part);
+  for (const part of ['const CATS =', 'function drawCatBar', "'Computer en desktop'", "class: 'muted lbl'", 'ALL_CATS']) assert.ok(panel.includes(part), part);
   for (const part of ['data-boxmode', '[data-theme="paper"]', 'LIGHT_THEMES']) assert.ok(door.includes(part), part);
   // every card title the panel knows is put in exactly one category per page
   const m = /const CATS = (\{[\s\S]*?\n  \});/.exec(panel); assert.ok(m, 'the category list');
