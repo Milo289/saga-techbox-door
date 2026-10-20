@@ -170,3 +170,38 @@ test('the close time of the sent screen is the chosen one, also when an answer a
   assert.ok(door.includes('setTimeout(closeSheet, sentAuto ? sentAuto * 1000 : ms)'), 'every timer uses it');
   assert.ok(door.includes("if (cls !== 'done') sentAuto = 0;"));
 });
+
+test('ready-made buttons: twenty or more, each can be switched on and off, they show on the door in the chosen language and a visitor can use them', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv), r = raw(srv);
+  const adm = async () => (await call(srv, 'GET', '/api/admin-state', undefined, a)).json;
+  const cat = (await adm()).quickCatalog;
+  assert.ok(cat.length >= 20, 'twenty or more ready-made buttons'); assert.equal(new Set(cat.map((c) => c.id)).size, cat.length);
+  assert.equal((await call(srv, 'GET', '/api/state')).json.settings.customButtons.length, 0, 'none are on by default');
+  await call(srv, 'POST', '/api/settings', { quickButtons: ['parcel', 'help', 'hours', 'nonsense'] }, a);
+  let pub = (await call(srv, 'GET', '/api/state')).json.settings.customButtons;
+  assert.deepEqual(pub.map((b) => b.id), ['q_parcel', 'q_help', 'q_hours'], 'only known ids, in the order of the list');
+  assert.equal(pub[0].label, 'Pakketje bezorgd'); assert.equal(pub[1].ask, true); assert.equal(pub[2].kind, 'info'); assert.match(pub[2].text, /\d\d:\d\d/.test(pub[2].text) ? /\d\d:\d\d/ : /status/);
+  assert.equal((await adm()).settings.customButtons.length, 0, 'the panel keeps your own buttons apart');
+  // a visitor taps one
+  const sent = await r('POST', '/api/visit', { type: 'reason', button: 'q_parcel', via: 'door' });
+  assert.equal(sent.status, 200, JSON.stringify(sent.json));
+  assert.equal(sent.json.reply, 'Dank je! Leg het pakketje maar neer.');
+  const req = (await adm()).requests[0]; assert.equal(req.reason, 'Pakketje bezorgd');
+  await sleep(1300);
+  assert.equal((await r('POST', '/api/visit', { type: 'reason', button: 'q_help', message: '', via: 'door' })).status, 400, 'this one wants a few words');
+  await sleep(1300);
+  assert.equal((await r('POST', '/api/visit', { type: 'reason', button: 'q_help', message: 'Mijn laptop doet niets', via: 'door' })).status, 200);
+  // off again: gone, and no longer usable
+  await call(srv, 'POST', '/api/settings', { quickButtons: [] }, a);
+  assert.equal((await call(srv, 'GET', '/api/state')).json.settings.customButtons.length, 0);
+  await sleep(1300);
+  assert.equal((await r('POST', '/api/visit', { type: 'reason', button: 'q_parcel', via: 'door' })).status, 400);
+  // English
+  await call(srv, 'POST', '/api/settings', { language: 'en', quickButtons: ['parcel', 'directions'] }, a);
+  pub = (await call(srv, 'GET', '/api/state')).json.settings.customButtons;
+  assert.equal(pub[0].label, 'Parcel delivery'); assert.equal(pub[1].askLabel, 'Who or what are you looking for?');
+  const sch = (await call(srv, 'GET', '/api/settings-schema', undefined, a)).json.groups.find((g) => g.id === 'visitors').fields.find((f) => f.key === 'quickButtons');
+  assert.ok(sch && sch.options.length === cat.length, 'the apps get the list too');
+});

@@ -42,6 +42,7 @@ const DEFAULT_SETTINGS = {
   },
   hours: { enabled: false, days: [1, 2, 3, 4, 5], from: '09:00', to: '17:00', perDay: {}, breaks: [], holidays: [] },
   customButtons: [], notifyRules: [], autoReplies: [],
+  quickButtons: [], // ids of the ready-made buttons that are switched on (see QUICK_BUTTONS)
   visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false, accounts: true, pinLength: 6 }, // accounts: the button “Account maken”; pinLength: digits of the code a new account gets
   moderation: { filter: true, defaultList: true, words: '', action: 'mask', maxPerHour: 20, profileApproval: false }, // action: flag | mask | block
   themeSchedule: { enabled: false, lightFrom: '07:00', darkFrom: '19:00' }, // the door screen is light by day and dark by night
@@ -172,7 +173,7 @@ function cleanSystem(b = {}) {
   };
 }
 
-const schemaCtx = (id) => ({ settings: state.settings, system: state.system, can: (p) => can(id, p), UI_TEXTS, BELL_TONES, REPLY_TONES, PASS_MASK });
+const schemaCtx = (id) => ({ settings: state.settings, system: state.system, can: (p) => can(id, p), UI_TEXTS, BELL_TONES, REPLY_TONES, PASS_MASK, QUICK_BUTTONS: QUICK_BUTTONS.map((q) => [q.id, `${q.icon} ${q.nl}`]) });
 
 // ---------- the visitor form: what is asked, what is required ----------
 const FORM_TYPES = [['bell', 'Aanbellen'], ['reason', 'Een reden kiezen'], ['message', 'Een vraagje'], ['appointment', 'Een tijd boeken'], ['callback', 'Terugbellen']];
@@ -690,6 +691,7 @@ function publicState() {
   for (const k of Object.keys(s)) if (!PRIVATE_SETTINGS.includes(k)) settings[k] = s[k];
   settings.ui = resolveUi(s.ui, s.language); // the door screen gets the words ready to use
   settings.texts = { open: textOf('open'), closed: textOf('closed'), busy: textOf('busy') };
+  settings.customButtons = [...(s.customButtons || []), ...presetButtons()]; // the door shows the own buttons and the ready-made ones that are on
   { const d = new Date(), today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, planned = schedule.noteFor(s.noteSchedule, today); if (planned) settings.note = planned; delete settings.noteSchedule; }
   const now = Date.now();
   return {
@@ -989,6 +991,7 @@ function adminState(id) {
     appointments: [...state.appointments].sort((a, b) => a.at - b.at),
     requests: full('inbox') ? requestsForPanel() : [],
     lookFlags: settingsSchema.LOOK_FLAGS, // the panel draws the fifty switches from this list
+    quickCatalog: QUICK_BUTTONS.map(({ id, icon, nl, en, ask, info }) => ({ id, icon, nl, en, ask: !!ask, info: !!info })), // the ready-made buttons the admin can switch on
     history: full('audit') ? (full('system') ? state.history : state.history.filter((h) => !h.r && h.type !== 'systeem')) : [],
     me: { name: id.name, role: id.role, perms: id.perms, mustSetup2fa: !!id.mustSetup2fa, twoStep: !!((totpOf(id) || {}).enabled), kind: id.kind, noPw: !!id.root, canLock: !!id.sessionId, hasLock: !!lockHashOf(id) },
     permLabels: PUBLIC_PERM_LABELS, rolePresets: ASSIGNABLE,
@@ -1722,6 +1725,7 @@ const adminRoutes = {
     const merged = { ...state.settings };
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
     merged.language = merged.language === 'en' ? 'en' : 'nl';
+    merged.quickButtons = [...new Set((Array.isArray(merged.quickButtons) ? merged.quickButtons : []).filter((id) => QUICK_IDS.has(id)))];
     merged.visitors.accounts = merged.visitors.accounts !== false; merged.visitors.pinLength = [4, 6, 8].includes(Number(merged.visitors.pinLength)) ? Number(merged.visitors.pinLength) : 6;
     merged.look = cleanLook(merged.look);
     merged.noteSchedule = schedule.cleanNoteSchedule('noteSchedule' in b ? b.noteSchedule : state.settings.noteSchedule);
@@ -2475,6 +2479,57 @@ const lastVisit = new Map();
 const lookups = new Map();
 const profileHits = new Map();
 let lastBellAt = 0;
+// ready-made buttons for the door screen: the admin switches each one on or off (Instellingen → Kant-en-klare knoppen). They behave like an own button:
+// id, symbol, label and reply in Dutch (nl) and English (en); ask = the visitor can type a few words (askNl / askEn is the question); info = shows a text
+const QUICK_BUTTONS = [
+  { id: 'parcel', icon: '📦', nl: 'Pakketje bezorgd', en: 'Parcel delivery', replyNl: 'Dank je! Leg het pakketje maar neer.', replyEn: 'Thank you! Please leave the parcel here.' },
+  { id: 'checkin', icon: '👋', nl: 'Ik heb een afspraak', en: 'I have an appointment', replyNl: 'Welkom! Ik kom zo naar je toe.', replyEn: 'Welcome! I will be right with you.' },
+  { id: 'later', icon: '🕒', nl: 'Ik kom later terug', en: 'I will come back later', ask: true, askNl: 'Wanneer kom je terug?', askEn: 'When will you be back?', replyNl: 'Prima, tot straks!', replyEn: 'Fine, see you later!' },
+  { id: 'help', icon: '🆘', nl: 'Ik heb hulp nodig', en: 'I need help', ask: true, askNl: 'Waar heb je hulp bij nodig?', askEn: 'What do you need help with?', replyNl: 'Ik kom eraan.', replyEn: 'I am on my way.' },
+  { id: 'urgent', icon: '⚡', nl: 'Spoed', en: 'Urgent', ask: true, askNl: 'Wat is er aan de hand?', askEn: 'What is going on?', replyNl: 'Ik kom meteen.', replyEn: 'I am coming right away.' },
+  { id: 'repair', icon: '🛠', nl: 'Storing melden', en: 'Report a problem', ask: true, askNl: 'Wat is er kapot?', askEn: 'What is broken?' },
+  { id: 'laptop', icon: '💻', nl: 'Laptop inleveren of ophalen', en: 'Hand in or collect a laptop', ask: true, askNl: 'Inleveren of ophalen? Welke laptop?', askEn: 'Hand in or collect? Which laptop?' },
+  { id: 'password', icon: '🔐', nl: 'Wachtwoord vergeten', en: 'Forgot my password', replyNl: 'Geen zorgen, ik help je zo.', replyEn: 'No worries, I will help you shortly.' },
+  { id: 'print', icon: '🖨', nl: 'Printer werkt niet', en: 'Printer problem', ask: true, askNl: 'Welke printer en wat gebeurt er?', askEn: 'Which printer and what happens?' },
+  { id: 'wifi', icon: '📶', nl: 'Wifi-hulp', en: 'Wi-Fi help', ask: true, askNl: 'Wat lukt er niet met de wifi?', askEn: 'What is not working with the Wi-Fi?' },
+  { id: 'signature', icon: '✍️', nl: 'Handtekening nodig', en: 'Signature needed', replyNl: 'Ik kom zo.', replyEn: 'I will be right there.' },
+  { id: 'borrow', icon: '🔑', nl: 'Iets lenen', en: 'Borrow something', ask: true, askNl: 'Wat wil je lenen?', askEn: 'What would you like to borrow?' },
+  { id: 'return', icon: '↩️', nl: 'Iets terugbrengen', en: 'Return something', ask: true, askNl: 'Wat breng je terug?', askEn: 'What are you returning?', replyNl: 'Dank je wel!', replyEn: 'Thank you!' },
+  { id: 'lost', icon: '🔎', nl: 'Iets kwijt of gevonden', en: 'Lost or found', ask: true, askNl: 'Wat ben je kwijt of heb je gevonden?', askEn: 'What did you lose or find?' },
+  { id: 'directions', icon: '🧭', nl: 'Waar moet ik zijn?', en: 'Where do I need to go?', ask: true, askNl: 'Wie of wat zoek je?', askEn: 'Who or what are you looking for?' },
+  { id: 'meeting', icon: '🗓', nl: 'Ik kom voor een vergadering', en: 'I am here for a meeting', ask: true, askNl: 'Met wie?', askEn: 'With whom?', replyNl: 'Welkom, ik meld je aan.', replyEn: 'Welcome, I will let them know.' },
+  { id: 'guest', icon: '🪪', nl: 'Gast aanmelden', en: 'Register a guest', ask: true, askNl: 'Naam van je gast?', askEn: 'Name of your guest?' },
+  { id: 'cancel', icon: '❌', nl: 'Afspraak annuleren', en: 'Cancel an appointment', ask: true, askNl: 'Wanneer was de afspraak?', askEn: 'When was the appointment?' },
+  { id: 'feedback', icon: '💬', nl: 'Tip of klacht', en: 'Tip or complaint', ask: true, askNl: 'Wat wil je ons laten weten?', askEn: 'What would you like to tell us?', replyNl: 'Bedankt, we lezen het.', replyEn: 'Thanks, we will read it.' },
+  { id: 'hours', icon: '🕘', nl: 'Openingstijden', en: 'Opening hours', info: 'hours' },
+  { id: 'callme', icon: '📞', nl: 'Bel mij terug als ik er niet ben', en: 'Call me back when you are free', ask: true, askNl: 'Je naam en nummer?', askEn: 'Your name and number?' },
+];
+const QUICK_IDS = new Set(QUICK_BUTTONS.map((q) => q.id));
+// "ma–vr 09:00–17:00" from the opening hours (for the info button)
+function hoursText() {
+  const h = state.settings.hours, en = state.settings.language === 'en';
+  if (!h || !h.enabled) return en ? 'See the screen for the current status.' : 'Kijk op het scherm voor de status.';
+  const names = en ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
+  const rows = [];
+  for (const d of [1, 2, 3, 4, 5, 6, 0]) {
+    if (!(h.days || []).includes(d)) continue;
+    const pd = (h.perDay || {})[d], t = pd && pd.off ? '' : pd && pd.from && pd.to ? `${pd.from}–${pd.to}` : `${h.from}–${h.to}`;
+    if (!t) continue;
+    const last = rows[rows.length - 1];
+    if (last && last.t === t && last.to === (d === 0 ? 7 : d) - 1) last.to = d === 0 ? 7 : d; else rows.push({ from: d === 0 ? 7 : d, to: d === 0 ? 7 : d, t });
+  }
+  const nm = (n) => names[n % 7];
+  return rows.map((r) => `${r.from === r.to ? nm(r.from) : `${nm(r.from)}–${nm(r.to)}`} ${r.t}`).join('\n') || (en ? 'Closed' : 'Gesloten');
+}
+// the ready-made buttons that are switched on, in the form of an own button
+function presetButtons() {
+  const en = state.settings.language === 'en', on = new Set(state.settings.quickButtons || []);
+  return QUICK_BUTTONS.filter((q) => on.has(q.id)).map((q) => ({
+    id: 'q_' + q.id, preset: true, label: en ? q.en : q.nl, ask: !!q.ask, askLabel: (en ? q.askEn : q.askNl) || '', reply: (en ? q.replyEn : q.replyNl) || '', whenClosed: false,
+    kind: q.info ? 'info' : 'form', text: q.info === 'hours' ? hoursText() : '', url: '', phone: '', ssid: '', wifiPass: '', wifiType: 'WPA', color: '', icon: q.icon, when: 'always',
+  }));
+}
+const allButtons = () => [...(state.settings.customButtons || []), ...presetButtons()];
 // quiet hours: nothing to the phone or the mail
 function quietNow() {
   const q = state.settings.quiet, d = new Date(), hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -2500,7 +2555,7 @@ function handleVisit(req, b) {
   const v = state.settings.visitors;
   const view = computeView(now);
   const allowed = { bell: v.doorbell, reason: v.reasons, appointment: v.appointments, message: v.messages, callback: v.callback };
-  const custom = b.button ? (state.settings.customButtons || []).find((x) => x.id === b.button) : null;
+  const custom = b.button ? allButtons().find((x) => x.id === b.button) : null;
   if (b.button && !custom) throw bad('Die knop bestaat niet meer');
   if (custom) { b.type = 'reason'; b.reason = custom.label; if (custom.ask && !str(b.message)) throw bad(`Typ eerst ${custom.askLabel ? custom.askLabel.toLowerCase() : 'een bericht'}`); if (!custom.ask) b.message = ''; }
   else if (!allowed[b.type]) throw bad('Die optie staat uit');

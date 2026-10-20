@@ -1761,6 +1761,19 @@
         return [h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px;width:100%' }, ...common), h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px;width:100%' }, ...more)];
       }, () => ({ id: newId(), label: '', ask: false, askLabel: '', reply: '', kind: 'form', text: '', url: '', phone: '', ssid: '', wifiPass: '', wifiType: 'WPA', color: '', icon: '', when: 'always' }), 'Knop toevoegen'));
     st.noteSchedule = st.noteSchedule || [];
+    st.quickButtons = Array.isArray(st.quickButtons) ? st.quickButtons : [];
+    const boxes = [], countEl = h('span', { class: 'muted' });
+    const paintCount = () => { countEl.textContent = `${st.quickButtons.length} van ${(S.quickCatalog || []).length} aan`; };
+    const setAll = (on) => { st.quickButtons = on ? (S.quickCatalog || []).map((q) => q.id) : []; boxes.forEach(([id, el]) => { el.checked = on; }); paintCount(); dirtyAll(); };
+    const quick = h('div', { class: 'card' }, h('h2', {}, 'Kant-en-klare knoppen'),
+      h('p', { class: 'muted', style: 'margin-top:0' }, 'Meer knoppen op het deurscherm en de bezoekerspagina, zonder dat je ze zelf hoeft te maken. Zet aan wat je wilt hebben; wat uit staat, is niet te zien. Een bezoeker die erop tikt, komt als verzoek in je lijst (met de naam of pincode als hij die invult). Waar ze staan en hoe groot ze zijn, kies je bij Weergave.'),
+      h('div', { class: 'row', style: 'margin-bottom:8px' }, h('button', { class: 'sm', onclick: () => setAll(true) }, 'Alles aan'), h('button', { class: 'sm ghost', onclick: () => setAll(false) }, 'Alles uit'), countEl),
+      h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 18px' }, ...(S.quickCatalog || []).map((q) => {
+        const box = h('input', { type: 'checkbox', checked: st.quickButtons.includes(q.id), onchange: (e) => { st.quickButtons = e.target.checked ? [...new Set([...st.quickButtons, q.id])] : st.quickButtons.filter((x) => x !== q.id); paintCount(); } });
+        boxes.push([q.id, box]);
+        return h('label', { class: 'check', title: q.info ? 'Toont een tekst' : q.ask ? 'De bezoeker kan een paar woorden typen' : 'Eén tik' }, box, `${q.icon} ${q.nl}`);
+      })));
+    paintCount();
     const planned = h('div', { class: 'card' }, h('h2', {}, 'Bericht op de deur per datum'),
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Een bericht dat op een bepaalde dag of periode op de deur staat, bijvoorbeeld “Vandaag geen spreekuur”. Het vervangt het gewone bericht op die dagen en gaat daarna vanzelf weg.'),
       listEditor(st.noteSchedule, (n) => [h('input', { type: 'date', value: n.from || '', oninput: (e) => { n.from = e.target.value; } }), h('span', { class: 'muted' }, 't/m'), h('input', { type: 'date', value: n.to || '', oninput: (e) => { n.to = e.target.value; } }), tin(n, 'text', { placeholder: 'Het bericht', maxlength: 140, style: 'flex:1;min-width:220px' })], () => ({ id: newId(), from: '', to: '', text: '' }), 'Bericht toevoegen'));
@@ -1796,7 +1809,7 @@
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Zie je afspraken en vrije dagen in je eigen agenda-app, en krijg elke week een overzicht per e-mail (e-mail moet staan ingesteld).'),
       calOut,
       h('div', { class: 'form', style: 'margin-top:14px' }, h('label', {}, 'Weekoverzicht'), tchk(st.mail, 'weekly', 'Elke week mailen op'), h('label', {}, 'Dag'), tsel(st.mail, 'weeklyDay', [5, 1, 2, 3, 4, 6, 0].map((d) => [d, DAYS_LONG[d]])), h('span', {}), h('button', { class: 'sm', type: 'button', onclick: async () => { try { await api('/api/mail/weekly-test', {}); toast('Weekoverzicht verstuurd'); } catch {} } }, 'Stuur nu een voorbeeld')));
-    return [buttons, planned, hoursExtra, notify, replies, quiet, cal];
+    return [buttons, quick, planned, hoursExtra, notify, replies, quiet, cal];
   }
 
   // people with only the mail right may only send the mail fields

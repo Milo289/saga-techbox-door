@@ -818,7 +818,8 @@
     $('xbtns').replaceChildren(...(place === 'below' || place === 'hidden' ? [] : custom));
     document.body.dataset.xplace = place === 'below' || place === 'hidden' || !custom.length ? '' : place;
     $('xbtns').style.setProperty('--xcols', String(cols || Math.min(4, Math.max(1, custom.length))));
-    $('actions').style.gridTemplateColumns = `repeat(${cols || Math.max(1, acts.length)}, 1fr)`;
+    const perRow = cols || (acts.length <= 4 ? Math.max(1, acts.length) : acts.length <= 6 ? 3 : 4); // many buttons: rows of 3 or 4, not one long row
+    $('actions').style.gridTemplateColumns = `repeat(${perRow}, 1fr)`;
     $('actions').replaceChildren(...acts);
     $('ask').classList.toggle('hidden', !acts.length && !reasons.length);
   }

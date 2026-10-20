@@ -61,6 +61,7 @@ function build(ctx) {
   ]);
   add('visitors', 'Bezoekers', 'settings', 'Wat bezoekers op het deurscherm kunnen doen.', [
     B('visitors.doorbell', 'Deurbel'), B('visitors.bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'), B('visitors.reasons', 'Redenen'), B('visitors.appointments', 'Tijd booken'), B('visitors.messages', 'Vraagje'), B('visitors.callback', 'Terugbellen'), B('visitors.accounts', 'Account maken (met een pincode die vanzelf wordt gemaakt)'), C('visitors.pinLength', 'Lengte van de pincode', [[4, '4 cijfers'], [6, '6 cijfers'], [8, '8 cijfers']], { numeric: true }),
+    F('quickButtons', 'Kant-en-klare knoppen op het deurscherm', 'multi', { options: o(ctx.QUICK_BUTTONS || []), value: s.quickButtons || [] }),
     F('reasons', 'Redenen (één per regel)', 'lines', { max: 80 }), F('topics', 'Vraag-onderwerpen (één per regel)', 'lines', { max: 60 }), F('quickReplies', 'Snelle antwoorden (één per regel)', 'lines', { max: 200 }),
     N('slotMinutes', 'Lengte van een afspraak (minuten)', 10, 240),
   ]);

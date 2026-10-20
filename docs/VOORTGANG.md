@@ -64,3 +64,6 @@ Niet getest: echte schermen en tv's (marge, spiegelen), spraak (browser blokkeer
 
 ## 3.5.0-beta.12 — zie docs/PLAN-beta12.md
 Gemak, functies en schermen in het paneel, het deurscherm en de apps (iPhone/iPad/Mac, Windows/Linux, desktop-app). Niet getest: Engels op een echt scherm (alleen de zichtbaarste teksten zijn vertaald), de pagina's in de apps op een echt apparaat, de Windows/Linux-app (alleen door de bouw op GitHub).
+
+## 3.5.0-beta.16 — kant-en-klare knoppen
+Instellingen → Kant-en-klare knoppen: 21 knoppen (pakketje, ik heb een afspraak, ik kom later terug, hulp, spoed, storing, laptop, wachtwoord, printer, wifi-hulp, handtekening, lenen, terugbrengen, kwijt/gevonden, waar moet ik zijn, vergadering, gast aanmelden, annuleren, tip of klacht, openingstijden, terugbellen) die je los aan en uit zet; Nederlands en Engels; ze verschijnen op het deurscherm en de bezoekerspagina, in rijen van 3 of 4. Bij veel knoppen: rijen in plaats van één lange rij. Ook in "Alle instellingen" en de apps (veld quickButtons).
