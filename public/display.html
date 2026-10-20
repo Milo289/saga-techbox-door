@@ -296,6 +296,12 @@
   body.lk-bigDot .ring { width: calc(var(--u)*6.4); height: calc(var(--u)*6.4); } body.lk-staticDot .ring:not(.ding) { animation: none; }
   body.lk-bigHeader header { font-size: calc(var(--u)*4); } body.lk-flip #ask { order: -1; } body.lk-dimClosed[data-now="closed"] #app { filter: brightness(.55); }
   body.lk-statusIcon[data-now="open"] #label::before { content: "🚪 "; } body.lk-statusIcon[data-now="closed"] #label::before { content: "🔒 "; } body.lk-statusIcon[data-now="busy"] #label::before { content: "⏳ "; }
+  /* a button that waits for an input: grey until the input is good, then it lights up in the colour of the status */
+.btn.bad { background: #ff453a; color: #fff; } .btn.bad:disabled { opacity: .5; }
+  .arm:disabled { background: var(--s2) !important; color: var(--mute) !important; opacity: 1 !important; box-shadow: none !important; }
+  .arm:not(:disabled) { background: var(--c) !important; color: var(--on) !important; box-shadow: 0 0 calc(var(--u)*2.6) color-mix(in srgb, var(--c) 60%, transparent); animation: armed .45s cubic-bezier(.2,.9,.3,1.4); }
+  @keyframes armed { from { transform: scale(.93); } }
+  .armhint { text-align: center; color: var(--dim); font-size: calc(var(--u)*2.1); min-height: 1.4em; transition: color .2s; } .armhint.ok { color: var(--c); font-weight: 600; }
   /* fifty more switches (all off by default) */
   body.lk-italicLabel #label { font-style: italic; }
   body.lk-wideLetters #label { letter-spacing: .04em; }
@@ -432,6 +438,7 @@
     bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
     cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    trash: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/>',
     x: '<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
@@ -823,6 +830,7 @@
     if (v.callback) acts.push(h('button', { class: 'tile', onclick: openCallback }, icon('phone'), tx('callback')));
     if (v.cancel !== false) acts.push(h('button', { class: 'tile', onclick: () => cancelFlow() }, icon('x'), tx('cancelTile')));
     if (v.accounts !== false) acts.push(h('button', { class: 'tile', onclick: () => profileForm({ standalone: true, back: closeSheet }) }, icon('user'), tx('account')));
+    if (v.deleteAccount !== false) acts.push(h('button', { class: 'tile', onclick: () => deleteFlow() }, icon('trash'), tx('deleteTile')));
     const place = VISIT ? 'below' : ((st.look && st.look.buttons && st.look.buttons.place) || 'below');
     const showNow = (cb) => !cb.when || cb.when === 'always' || cb.when === S.view.mode;
     const custom = place === 'hidden' ? [] : (st.customButtons || []).filter(showNow).map((cb) => {
@@ -966,11 +974,45 @@
     } finally { sending = false; if (btn) btn.disabled = false; }
   }
 
+  // delete your own account: type the code, see whose it is, confirm; everything we have about you is erased
+  function deleteFlow() {
+    const err = h('div', { class: 'err' }), hint = h('div', { class: 'armhint' });
+    const code = field('input', { placeholder: tx('yourNumber'), maxlength: 20, inputmode: 'numeric', autocomplete: 'off' });
+    const go = h('button', { class: 'btn go' }, tx('next'));
+    armWhen(go, code, (v) => v.replace(/\D/g, '').length >= 4, { wait: lt('De pincode heeft minstens vier cijfers', 'The code has at least four digits'), ok: lt('Tik op Volgende', 'Tap Next') }, hint);
+    go.onclick = async () => {
+      go.disabled = true; err.textContent = '';
+      try {
+        const res = await fetch('/api/profile/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nr: code.value.trim() }) });
+        const out = await res.json().catch(() => ({}));
+        if (res.status === 429) throw new Error(out.error || tx('tryLater'));
+        if (!out.found || out.deletable === false) { err.textContent = out.error || lt('Dit nummer kennen we niet.', 'We do not know this number.'); go.disabled = false; return; }
+        confirmDelete(code.value.trim(), out.name);
+      } catch (e) { err.textContent = e instanceof TypeError ? lt('Geen verbinding — probeer opnieuw', 'No connection — try again') : e.message; go.disabled = false; }
+    };
+    openSheet('', h('h3', {}, tx('deleteTile')), h('p', { class: 'muted' }, tx('deleteHint')), code, hint, keyboard(), err, h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), go));
+  }
+  function confirmDelete(nr, name) {
+    const err = h('div', { class: 'err' });
+    const go = h('button', { class: 'btn bad' }, tx('deleteDo'));
+    go.onclick = async () => {
+      go.disabled = true;
+      try {
+        const res = await fetch('/api/profile/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nr, confirm: true }) });
+        const out = await res.json().catch(() => ({}));
+        if (!out.ok) throw new Error(out.error || tx('tryLater'));
+        forgetProfile();
+        openSheet('done', h('div', { class: 'badge pop' }, icon('check')), h('h3', {}, tx('deleteDone')), h('div', { class: 'btns', style: 'width:100%' }, h('button', { class: 'btn', onclick: closeSheet }, tx('close'))));
+      } catch (e) { err.textContent = e instanceof TypeError ? lt('Geen verbinding — probeer opnieuw', 'No connection — try again') : e.message; go.disabled = false; }
+    };
+    openSheet('', h('h3', {}, tx('deleteTile')), h('div', { class: 'picked' }, h('span', {}, tx('deleteAsk', { name }))), err, h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: deleteFlow }, tx('back')), go));
+  }
   // cancel an appointment or a question with the number that was shown when it was made (no account needed); a reason is welcome, not required
   function cancelFlow() {
     const err = h('div', { class: 'err' });
     const code = field('input', { placeholder: tx('cancelNumber'), maxlength: 8, inputmode: 'numeric', autocomplete: 'off' });
-    const go = h('button', { class: 'btn go' }, tx('next'));
+    const go = h('button', { class: 'btn go' }, tx('next')), hintC = h('div', { class: 'armhint' });
+    armWhen(go, code, (v) => v.replace(/\D/g, '').length >= 6, { wait: lt('Het nummer heeft zes cijfers', 'The number has six digits'), ok: lt('Tik op Volgende', 'Tap Next') }, hintC);
     go.onclick = async () => {
       const c = code.value.replace(/\D/g, '');
       if (c.length < 6) { err.textContent = tx('cancelHint'); return; }
@@ -984,7 +1026,7 @@
       } catch (e) { err.textContent = e instanceof TypeError ? lt('Geen verbinding — probeer opnieuw', 'No connection — try again') : e.message; }
       go.disabled = false;
     };
-    openSheet('', h('h3', {}, tx('cancelTile')), h('p', { class: 'muted' }, tx('cancelHint')), code, keyboard(), err, h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), go));
+    openSheet('', h('h3', {}, tx('cancelTile')), h('p', { class: 'muted' }, tx('cancelHint')), code, hintC, keyboard(), err, h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: closeSheet }, tx('cancel')), go));
   }
   function confirmCancel(c, info) {
     const err = h('div', { class: 'err' });
@@ -1064,6 +1106,12 @@
   }
 
   // an extra button made by the admin: one tap, or one tap and a short text
+  // a button that is grey until the input is good (then it lights up and says so); `ok` gets the text, `hint` is shown under the input
+  function armWhen(btn, input, ok, hint, hintEl) {
+    btn.classList.add('arm');
+    const upd = () => { const good = !!ok(input.value); btn.disabled = !good; if (hintEl) { hintEl.textContent = good ? (hint && hint.ok) || '' : (hint && hint.wait) || ''; hintEl.classList.toggle('ok', good); } };
+    input.addEventListener('input', upd); upd(); return upd;
+  }
   // an information button: a text, a web address / phone number / wifi as a code
   function openInfo(cb) {
     const box = h('div', { class: 'qrbox' });
@@ -1160,7 +1208,8 @@
   function userForm(opt) {
     const nr = field('input', { placeholder: 'Je gebruikersnaam of nummer', maxlength: 20, autocapitalize: 'none' });
     const err = h('div', { class: 'err' });
-    const go = h('button', { class: 'btn go' }, 'Verder');
+    const go = h('button', { class: 'btn go' }, lt('Verder', 'Continue'));
+    armWhen(go, nr, (v) => v.trim().length >= 3);
     go.onclick = async () => {
       const v = nr.value.trim().toLowerCase();
       if (!v) { err.textContent = 'Vul je gebruikersnaam in'; return; }
@@ -1175,6 +1224,7 @@
     const email = field('input', { type: 'email', placeholder: S.mailOn ? 'E-mail — dan krijg je antwoorden ook per mail' : 'E-mail (optioneel)', maxlength: 120 });
     const err = h('div', { class: 'err' });
     const go = h('button', { class: 'btn go' }, tx('account'));
+    armWhen(go, name, (v) => v.trim().length >= 2);
     go.onclick = async () => {
       const em = email.value.trim();
       if (!name.value.trim()) { err.textContent = 'Vul je naam in'; return; }
@@ -1206,8 +1256,10 @@
     let nr = '';
     const shown = h('div', { class: 'nrdisp' }, h('span', { class: 'ph' }, tx('yourNumber')));
     const err = h('div', { class: 'err' });
-    const okBtn = h('button', { class: 'key ok', disabled: true }, icon('check'));
-    const draw = () => { shown.replaceChildren(nr ? h('span', {}, nr) : h('span', { class: 'ph' }, tx('yourNumber'))); okBtn.disabled = !nr; };
+    const okBtn = h('button', { class: 'key ok arm', disabled: true }, icon('check'));
+    const MIN = 4; // a code is at least four digits: the check mark lights up from there
+    const hintEl = h('div', { class: 'armhint' });
+    const draw = () => { shown.replaceChildren(nr ? h('span', {}, nr) : h('span', { class: 'ph' }, tx('yourNumber'))); okBtn.disabled = nr.length < MIN; hintEl.textContent = nr.length >= MIN ? lt('Tik op het vinkje', 'Tap the check mark') : (nr ? lt(`Nog ${MIN - nr.length} cijfer(s)`, `${MIN - nr.length} more digit(s)`) : ''); hintEl.classList.toggle('ok', nr.length >= MIN); };
     const key = (label, fn, cls = '') => h('button', { class: 'key ' + cls, onpointerdown: (e) => { e.preventDefault(); fn(); bumpIdle(); } }, label);
     const pad = h('div', { class: 'keypad' },
       ...'123456789'.split('').map((d) => key(d, () => { if (nr.length < 12) { nr += d; err.textContent = ''; draw(); } })),
@@ -1216,7 +1268,7 @@
       okBtn.disabled = true;
       if (!(await greet(opt, nr, err, shown))) { nr = ''; draw(); }
     };
-    openSheet('pad', h('h3', {}, tx('who')), h('p', { class: 'muted' }, tx('whoHint')), shown, pad, err,
+    openSheet('pad', h('h3', {}, tx('who')), h('p', { class: 'muted' }, tx('whoHint')), shown, hintEl, pad, err,
       h('div', { class: 'row-links' }, h('button', { class: 'link', onclick: () => userForm(opt) }, tx('typeUsername')), h('button', { class: 'link', onclick: () => profileForm(opt) }, tx('makeProfile'))),
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => opt.back() }, tx('back')), h('button', { class: 'btn', onclick: () => nameForm(opt) }, tx('noNumber'))));
   }

@@ -43,7 +43,7 @@ const DEFAULT_SETTINGS = {
   hours: { enabled: false, days: [1, 2, 3, 4, 5], from: '09:00', to: '17:00', perDay: {}, breaks: [], holidays: [] },
   customButtons: [], notifyRules: [], autoReplies: [],
   quickButtons: [], // ids of the ready-made buttons that are switched on (see QUICK_BUTTONS)
-  visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false, accounts: true, pinLength: 6, cancel: true }, // accounts: the button “Account maken”; pinLength: digits of the code a new account gets
+  visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false, accounts: true, pinLength: 6, cancel: true, deleteAccount: true }, // accounts: the button “Account maken”; pinLength: digits of the code a new account gets
   moderation: { filter: true, defaultList: true, words: '', action: 'mask', maxPerHour: 20, profileApproval: false }, // action: flag | mask | block
   themeSchedule: { enabled: false, lightFrom: '07:00', darkFrom: '19:00' }, // the door screen is light by day and dark by night
   sound: { bell: 'classic', reply: 'soft', custom: false }, // custom = an own bell sound has been uploaded (the file itself is not in the settings)
@@ -292,6 +292,11 @@ const maskEmail = (e) => { const [u, d] = String(e).split('@'); return d ? `${u.
 const UI_TEXTS = {
   askTitle: ['Hoofdscherm', 'Titel boven de knoppen', 'Niet kloppen'],
   account: ['Hoofdscherm', 'Knop om een account te maken', 'Account maken'],
+  deleteTile: ['Account verwijderen', 'Knop om je account te verwijderen', 'Account verwijderen'],
+  deleteHint: ['Account verwijderen', 'Uitleg', 'Tik de pincode van je account in. Daarna wordt alles wat we van je hebben gewist.'],
+  deleteAsk: ['Account verwijderen', 'Vraag om te bevestigen', 'Alles van {name} wissen? Dit kan niet ongedaan worden gemaakt.'],
+  deleteDo: ['Account verwijderen', 'Knop om te bevestigen', 'Ja, verwijder alles'],
+  deleteDone: ['Account verwijderen', 'Titel als het gelukt is', 'Je account is verwijderd'],
   cancelTile: ['Annuleren', 'Knop om te annuleren', 'Annuleren'],
   cancelHint: ['Annuleren', 'Uitleg', 'Tik het nummer in dat je kreeg toen je de afspraak of vraag maakte.'],
   cancelNumber: ['Annuleren', 'Veld met het nummer', 'Je nummer'],
@@ -371,7 +376,7 @@ const PALETTES = [
 ];
 // English standard texts of the door screen (used when the language is English and nobody wrote an own text)
 const UI_EN = {
-  askTitle: 'Please do not knock', account: 'Create account', cancelTile: 'Cancel', cancelHint: 'Type the number you got when you made the appointment or question.', cancelNumber: 'Your number', cancelReason: 'Why? (optional)', cancelDo: 'Yes, cancel', cancelDone: 'Cancelled', yourCode: 'Your number to cancel:', codeHint: 'Keep this number. You can still cancel with it.', accountDone: 'Your account is ready', accountPin: 'This is your code. With it you are yourself at every question. Keep it safe.',
+  askTitle: 'Please do not knock', account: 'Create account', deleteTile: 'Delete account', deleteHint: 'Type the code of your account. Everything we have about you will then be erased.', deleteAsk: 'Erase everything about {name}? This cannot be undone.', deleteDo: 'Yes, delete everything', deleteDone: 'Your account was deleted', cancelTile: 'Cancel', cancelHint: 'Type the number you got when you made the appointment or question.', cancelNumber: 'Your number', cancelReason: 'Why? (optional)', cancelDo: 'Yes, cancel', cancelDone: 'Cancelled', yourCode: 'Your number to cancel:', codeHint: 'Keep this number. You can still cancel with it.', accountDone: 'Your account is ready', accountPin: 'This is your code. With it you are yourself at every question. Keep it safe.',
   bell: 'Doorbell', bellOff: 'Doorbell off', bellWait: 'Doorbell · {s}s', book: 'Book a time', question: 'Question', callback: 'Call me back',
   todayOpen: 'Open today {from}–{to}', todayClosed: 'Closed today', over: 'In {time}', closeSoon: '{over} we close', closeLater: 'We close', openSoon: '{over} we are open again', openLater: 'Open again', busySoon: '{over} we are busy', busyLater: 'Busy from',
   cancel: 'Cancel', back: 'Back', next: 'Next', send: 'Send', request: 'Request', close: 'Close', wifiPass: 'Password:',
@@ -1735,7 +1740,7 @@ const adminRoutes = {
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
     merged.language = merged.language === 'en' ? 'en' : 'nl';
     merged.quickButtons = [...new Set((Array.isArray(merged.quickButtons) ? merged.quickButtons : []).filter((id) => QUICK_IDS.has(id)))];
-    merged.visitors.accounts = merged.visitors.accounts !== false; merged.visitors.cancel = merged.visitors.cancel !== false; merged.visitors.pinLength = [4, 6, 8].includes(Number(merged.visitors.pinLength)) ? Number(merged.visitors.pinLength) : 6;
+    merged.visitors.accounts = merged.visitors.accounts !== false; merged.visitors.cancel = merged.visitors.cancel !== false; merged.visitors.deleteAccount = merged.visitors.deleteAccount !== false; merged.visitors.pinLength = [4, 6, 8].includes(Number(merged.visitors.pinLength)) ? Number(merged.visitors.pinLength) : 6;
     merged.look = cleanLook(merged.look);
     merged.noteSchedule = schedule.cleanNoteSchedule('noteSchedule' in b ? b.noteSchedule : state.settings.noteSchedule);
     merged.quiet = { enabled: !!merged.quiet.enabled, from: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.from) ? merged.quiet.from : '18:00', to: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.to) ? merged.quiet.to : '08:00' };
@@ -2839,6 +2844,31 @@ const handle = async (req, res) => {
       }
       changed();
       return send(res, 200, { ok: true, what });
+    }
+    if (req.method === 'POST' && p === '/api/profile/delete') { // a visitor deletes his own account (and everything with it)
+      const ip = clientIp(req);
+      if (isBlocked(ip, '')) return send(res, 429, { error: 'Dit kan nu even niet — probeer het later nog eens.' });
+      const hits = (lookups.get(ip) || []).filter((t) => Date.now() - t < 60e3);
+      if (hits.length >= 12) return send(res, 429, { error: 'Even wachten en opnieuw proberen' });
+      lookups.set(ip, [...hits, Date.now()]);
+      if (state.settings.visitors.deleteAccount === false) return send(res, 403, { error: 'Accounts verwijderen staat uit.' });
+      const b = await readBody(req), nr = str(b.nr, 20).toLowerCase();
+      const x = nr ? state.people.find((y) => y.nr.toLowerCase() === nr) : null;
+      if (!x) return send(res, 200, { found: false, error: 'Dit nummer kennen we niet.' });
+      if (!x.self) return send(res, 200, { found: true, deletable: false, name: x.name, error: 'Dit account is door de beheerder gemaakt. Vraag de beheerder om het te verwijderen.' });
+      if (b.confirm !== true) return send(res, 200, { found: true, deletable: true, name: x.name });
+      let wiped = 0;
+      for (const r of state.requests) if (r.nr && r.nr.toLowerCase() === nr) { Object.assign(r, { name: '', nr: '', email: '', phone: '' }); delete r.vid; wiped++; } // what the visitor said stays as a nameless request
+      state.people = state.people.filter((y) => y !== x);
+      state.peopleRev = (state.peopleRev || 0) + 1;
+      log('visit', `Account verwijderd door de bezoeker: ${x.name} (${wiped} verzoek(en) anoniem gemaakt)`);
+      if (!quietNow()) {
+        const msg = `${state.settings.name}: ${x.name} heeft het eigen account verwijderd`;
+        notifyExternal(null, msg).catch(() => {});
+        try { if (mailOn() && isEmail(state.settings.mail.adminTo)) sendMail(state.settings.mail.adminTo, `Account verwijderd — ${state.settings.name}`, msg + sign()).catch(() => {}); } catch {}
+      }
+      changed();
+      return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && p === '/api/profile') {
       // visitors make their own account: name (+ e-mail) and they get a random code (PIN) that works at once and always

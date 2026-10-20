@@ -72,3 +72,9 @@ Instellingen → Kant-en-klare knoppen: 21 knoppen (pakketje, ik heb een afspraa
 - **Paneel in categorieën:** elke lange pagina (Status, Instellingen, Ontwerp, Beheer, Beveiliging, Systeem en Alle instellingen) toont één soort dingen tegelijk, met bovenaan "Wat wil je doen?" en knoppen (bij Instellingen: Dag, Bezoekers, Scherm, Meldingen, Computer en desktop). "Alles" laat alles op één pagina zien; zoeken zoekt altijd overal.
 - **Annuleren met een nummer:** elke vraag, afspraak en terugbelverzoek krijgt een nummer van zes cijfers (op het scherm, in de bevestigingsmail en bij het verzoek in het paneel). Met de knop "Annuleren" tik je het nummer in, je ziet wat het is, en je annuleert (een reden mag, hoeft niet). De afspraak komt weer vrij en jij krijgt een melding. Een afgehandelde vraag kan niet meer geannuleerd worden, een afspraak wel. Aan/uit bij Bezoekers. De knop "Afspraak annuleren" bij de kant-en-klare knoppen is hiermee vervangen.
 - **Thema's:** Donker, Licht, Middernacht, Bos, Grafiet, Papier en Lucht; plus "Vak om de status": vanzelf, geen, gekleurd, zacht, rand of donker (dus ook een licht thema met een donker vak, of een donker thema met een gekleurd vak).
+
+## beta.21 (opruimen en uitleg, geen nieuwe functies)
+- Nummerpad en nummervelden worden groen zodra er genoeg cijfers zijn (met een regel eronder die zegt wat er nog nodig is).
+- Extra tegel "Account verwijderen" op het deurscherm (zes even tegels); alleen zelf gemaakte accounts, met bevestiging; aanvragen blijven anoniem bewaard; uit te zetten in het paneel.
+- Paneel: de categoriebalk staat nu in de pagina zelf (plakt bovenaan) met één regel uitleg per categorie; elke kaart zonder eigen uitleg krijgt er één.
+- Telefoonbreedte: energietabel schuift zijwaarts in plaats van de pagina te verbreden, serverkaart breekt lange woorden af.

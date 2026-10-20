@@ -43,7 +43,7 @@
   textarea { width: 100%; min-height: 120px; resize: vertical; }
   #powerBar { position: sticky; top: 0; z-index: 40; display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; padding: calc(8px + env(safe-area-inset-top)) 16px 8px; background: var(--busy); color: #000; font-weight: 650; }
   #powerBar button { background: #000; color: #fff; border: 0; border-radius: 10px; padding: 6px 14px; font: inherit; font-weight: 650; cursor: pointer; }
-  table.week { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.week { min-width: 560px; width: 100%; border-collapse: collapse; font-size: 14px; }
   table.week th { text-align: left; font-size: 12px; color: var(--dim); font-weight: 600; padding: 4px 4px 6px; }
   table.week td { padding: 3px 4px; } table.week td:first-child { font-weight: 600; white-space: nowrap; }
   table.week input[type=time] { width: 100%; min-width: 92px; padding: 6px 6px; }
@@ -158,6 +158,7 @@
   @media (max-width: 560px) { .presets { grid-template-columns: repeat(2, 1fr); } }
   .row.appt .label { min-width: 0; }
   .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .card > h2 { flex-wrap: wrap; }
   .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; padding: 3px 9px; border-radius: 999px; background: var(--s2); color: var(--dim); font-weight: 550; }
   .tag svg.i { width: 13px; height: 13px; }
   .tag.ok { color: var(--open); } .tag.bad { color: var(--closed); }
@@ -200,9 +201,9 @@
   pre.code { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; overflow-x: auto; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 8px 0; user-select: all; }
   .keybox { background: color-mix(in srgb, var(--open) 12%, var(--bg)); border: 1px solid color-mix(in srgb, var(--open) 40%, transparent); border-radius: 14px; padding: 14px; display: grid; gap: 8px; margin-bottom: 12px; }
   .keybox code { font: 14px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; user-select: all; }
-  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 6px 14px; font-size: 14px; }
+  .kv { display: grid; grid-template-columns: 170px minmax(0, 1fr); overflow-wrap: anywhere; gap: 6px 14px; font-size: 14px; }
   .kv b { color: var(--dim); font-weight: 600; }
-  @media (max-width: 640px) { .kv { grid-template-columns: 1fr; } .kv b { margin-top: 6px; } }
+  @media (max-width: 640px) { .kv { grid-template-columns: minmax(0, 1fr); } .kv b { margin-top: 6px; } }
   input.bigin { font-size: 18px; padding: 14px 16px; border-radius: 12px; }
   svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   #soundBtn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -272,6 +273,7 @@
     #saveBar { left: calc(50% + 126px); }
   }
   @media print { #tabs, .side, #saveBar, #conn, #toast, button, .caret, .qm, #tools { display: none !important; } body { background: #fff !important; color: #000 !important; } .card { border: 1px solid #999 !important; box-shadow: none !important; break-inside: avoid; } }
+.catbar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 4px 0 10px; margin: 0 0 8px; border-bottom: 1px solid var(--line); } @media (max-width: 999px) { .catbar { top: 0; } }
   html.dense body { font-size: 14px; } html.dense .card { padding: 12px 14px; } html.dense .urow { padding: 6px 0; } html.roomy .card { padding: 26px 24px; } html.roomy .urow { padding: 14px 0; }
   html { zoom: var(--ui-scale, 1); } html.nomotion *, html.nomotion *::before, html.nomotion *::after { animation: none !important; transition: none !important; }
   html.hicontrast { --dim: #e2e2e8; --mute: #c2c2ca; --line: #5a5a62; } html.light.hicontrast { --dim: #22252b; --mute: #33373f; --line: #777c86; }
@@ -750,7 +752,7 @@
           h('button', { class: 'sm danger', onclick: () => api('/api/power/settings', d).then(() => powerConfirm('computer', 'Computer nu uitzetten', d.warnMinutes)).catch(() => {}) }, 'Computer uit…'),
           h('button', { class: 'sm', onclick: () => api('/api/power/settings', d).then(() => powerConfirm('hibernate', 'Slaapstand nu', d.warnMinutes)).catch(() => {}) }, 'Slaapstand…'),
           h('button', { class: 'sm', onclick: () => api('/api/power/settings', d).then(() => powerConfirm('restart', 'Computer herstarten', d.warnMinutes)).catch(() => {}) }, 'Herstart…')),
-        h('label', {}, 'Schema'), h('div', {}, week, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm ghost', onclick: copyWork }, 'Maandag kopiëren naar dinsdag t/m vrijdag'), h('span', { class: 'muted' }, 'Leeg laten = niets op dat moment.'))),
+        h('label', {}, 'Schema'), h('div', {}, h('div', { style: 'overflow-x:auto' }, week), h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'sm ghost', onclick: copyWork }, 'Maandag kopiëren naar dinsdag t/m vrijdag'), h('span', { class: 'muted' }, 'Leeg laten = niets op dat moment.'))),
         h('label', {}, 'Computer uit via'), how,
         h('label', {}, 'Waarschuwing'), h('div', { class: 'row' }, h('input', { type: 'number', min: 0, max: 30, value: d.warnMinutes, style: 'width:80px', oninput: (e) => { d.warnMinutes = Number(e.target.value); } }), h('span', { class: 'muted' }, 'minuten aftellen op het deurscherm voor de computer uitgaat')),
         h('label', {}, 'Wachtende bezoekers'), h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: d.skipIfBusy, onchange: (e) => { d.skipIfBusy = e.target.checked; } }), 'Niet uitzetten als er nog open verzoeken zijn'),
@@ -1001,13 +1003,79 @@
   }
   const catsOfTab = () => (tab === 'all' ? ALL_CATS.map(([n]) => n) : (CATS[tab] || []).map(([n]) => n));
   const curCat = () => { const names = catsOfTab(); const s = store.get('doorCat-' + tab, ''); return s === '*' ? '*' : names.includes(s) ? s : names[0]; };
+  // one line of explanation for every kind of thing on a page (what is in it, when do you need it)
+  const CAT_HELP = {
+    now: { Nu: 'Wat de deur nu zegt en wat je er snel aan kunt veranderen.', Overzicht: 'Hoe druk het is geweest en wat er nog ingesteld moet worden.' },
+    settings: {
+      Dag: 'De naam van de deur, de openingstijden en berichten voor bepaalde dagen.',
+      Bezoekers: 'Wat bezoekers op het deurscherm kunnen doen (bellen, een vraag stellen, afspraken) en hoe je daarop antwoordt.',
+      Scherm: 'Hoe het deurscherm er voor bezoekers uitziet, en hoe dit paneel er voor jou uitziet.',
+      Meldingen: 'Hoe en wanneer je een bericht krijgt: per mail, op je telefoon, of alleen in dit paneel.',
+      'Computer en desktop': 'De computer waar de server op draait: aan en uit zetten, slot en apparaten koppelen, en de desktop-app.',
+    },
+    design: { Uiterlijk: 'Kleuren, indeling en extra’s op het deurscherm.', 'Teksten en geluid': 'De woorden die op het deurscherm staan, en de beltonen.', 'Eigen onderdelen': 'Een eigen tekst of logo op het deurscherm.' },
+    admin: { Mensen: 'Wie dit paneel mag gebruiken, met welke rechten, en welke programma’s ermee mogen praten.', 'Server en logboek': 'Wat de server gedaan heeft en hoe hij draait.', Privacy: 'Alles van één persoon opzoeken of wissen (AVG).' },
+    security: { Overzicht: 'Hoe goed alles beveiligd is, met een lijstje wat beter kan. En welke apparaten zijn ingelogd.', Inloggen: 'Extra veilig inloggen met een code uit een app of met je vingerafdruk of gezicht.', Verbinding: 'Versleutelde verbinding (https) en bescherming tegen mensen die de server overspoelen.', 'Logboek en back-ups': 'Wat er gebeurd is, en kopieën van je gegevens voor als er iets misgaat.' },
+    system: { Start: 'De dingen die je als eerste moet regelen, met een knop naar de juiste plek.', Toegang: 'Wie mag inloggen, hoelang, en wat er gebeurt bij te veel foute pogingen.', Gegevens: 'Back-ups, hoelang verzoeken bewaard blijven en gegevens naar een andere server zetten.', Bijwerken: 'De nieuwste versie van de server ophalen.', Noodknoppen: 'Alleen voor als het misgaat: de deur sluiten en iedereen uitloggen.' },
+    all: { Dag: 'De naam, openingstijden en afwezigheid.', Bezoekers: 'Knoppen, antwoorden en regels voor bezoekers.', Scherm: 'Weergave, kleuren en geluid van het deurscherm.', Meldingen: 'Mail, telefoon en waarschuwingen.', Teksten: 'Alle woorden op het deurscherm.', Systeem: 'Inloggen, aanvalsbeveiliging en back-ups.' },
+  };
+  // a short explanation under the title of a card that has none of its own
+  const CARD_HELP = {
+    'Bericht op de deur': 'Een bericht dat bezoekers op het deurscherm zien, bijvoorbeeld “Ik ben zo terug”. Wissen haalt het weer weg.',
+    Vandaag: 'Hoeveel bezoekers er vandaag waren en wat er gepland staat.',
+    'Bezet tijdens': 'Plan een tijd waarop de deur vanzelf op Bezet gaat (bijvoorbeeld voor een vergadering) en daarna weer terugspringt.',
+    'Meldingen op dit apparaat': 'Of deze browser een geluid of melding geeft zodra er iemand aanbelt. Geldt alleen voor dit apparaat.',
+    'Inloggen op een ander apparaat': 'Laat een telefoon of tablet inloggen door een code te scannen, zonder dat je je wachtwoord hoeft te typen.',
+    Deur: 'De naam van de deur en de teksten die bij Open, Gesloten en Bezet op het scherm staan.',
+    Bezoekers: 'Welke knoppen bezoekers op het deurscherm zien. Zet aan wat je wilt hebben.',
+    'Automatisch antwoorden': 'Een antwoord dat bezoekers vanzelf krijgen als jij niet snel reageert, of als de deur gesloten is.',
+    Personen: 'Een lijst met mensen die bezoekers kunnen kiezen met hun nummer of pincode; hun naam en e-mail worden dan vanzelf ingevuld.',
+    Moderatie: 'Houdt lelijke woorden en spam tegen. Je bepaalt wat er gebeurt: verbergen, maskeren of tegenhouden.',
+    Opstarten: 'Wat de deur laat zien nadat de server opnieuw is opgestart.',
+    Waarschuwingen: 'Krijg een seintje als er een deurscherm wegvalt of als er iets mis is met de server.',
+    Koppelingen: 'Voor wie een slot, kaartlezer, camera of ander apparaat wil koppelen. Alles staat uit tot je het aanzet.',
+    Energie: 'Zet het scherm of de hele computer op vaste tijden uit en weer aan. Alles staat uit tot je het zelf aanzet.',
+    Scherm: 'Het thema (donker of licht), de richting van het scherm en het dimmen in de nacht.',
+    Weergave: 'Alles over hoe het deurscherm eruitziet: de indeling, het lettertype, de knoppen en de achtergrond. Je kunt ook een kant-en-klaar ontwerp kiezen.',
+    'Dit paneel op dit apparaat': 'Hoe dit bedieningspaneel er voor jou uitziet. Het wordt alleen in deze browser onthouden.',
+    'Meldingen op je telefoon': 'Krijg een melding op je telefoon via de gratis app ntfy, ook als dit paneel dicht is.',
+    Meer: 'Een back-up van je instellingen maken of terugzetten, en andere zeldzame dingen.',
+    Indeling: 'Verschuif onderdelen van het deurscherm, maak ze groter of kleiner, of verberg ze.',
+    Teksten: 'Pas elk woord op het deurscherm aan, bijvoorbeeld de naam van de knoppen.',
+    Kleuren: 'De kleuren van Open, Gesloten en Bezet, en de kleur van dit paneel.',
+    Beltonen: 'Kies welk geluid er klinkt als er wordt aangebeld of als je antwoordt.',
+    Gebruikers: 'Maak accounts voor collega’s en bepaal wat ze mogen. Het hoofdaccount `milo` staat hier niet en kan alles.',
+    Ingelogd: 'Wie er nu ingelogd is. Je kunt anderen uitloggen als dat nodig is.',
+    'API-sleutels': 'Sleutels voor programma’s die met de deur moeten praten (voor wie dat wil). Een gewone gebruiker hoeft hier niets mee.',
+    Activiteitenlog: 'Een lijst van alles wat er gedaan is: wie wat wanneer deed.',
+    Server: 'Hoe de server draait: versie, hoelang al aan en hoeveel schermen er verbonden zijn.',
+    Beveiligingsscore: 'Een cijfer voor hoe goed alles beveiligd is, met per regel wat je kunt verbeteren.',
+    'Mijn apparaten': 'De apparaten waarop jij bent ingelogd. Haal er een weg als je hem niet meer vertrouwt.',
+    Toegang: 'Wie mag inloggen, hoelang je ingelogd blijft, en wat er gebeurt bij te veel foute pogingen.',
+    Gegevens: 'Hoelang bezoekersverzoeken bewaard blijven, en de back-ups van je gegevens.',
+    Gevarenzone: 'Alleen als het echt nodig is. Noodstop sluit de deur en zet iedereen buiten het paneel.',
+    'Gegevens overzetten': 'Neem alles over van een andere deurserver, bijvoorbeeld bij een nieuwe computer.',
+  };
   function drawCatBar() {
     let bar = $('catbar');
     const names = catsOfTab();
     if (!names.length) { if (bar) bar.remove(); return; }
-    if (!bar) { bar = h('div', { id: 'catbar', class: 'filters', style: 'margin:0 0 12px;flex-wrap:wrap' }); $('view').before(bar); }
+    if (!bar) bar = h('div', { id: 'catbar', class: 'catbar' });
     const cur = curCat();
-    bar.replaceChildren(h('span', { class: 'muted', style: 'align-self:center;margin-right:4px' }, 'Wat wil je doen?'), ...names.map((n) => h('button', { class: 'sm' + (cur === n ? ' on' : ''), onclick: () => { store.set('doorCat-' + tab, n); applyFilter(); drawCatBar(); window.scrollTo(0, 0); } }, n)), h('button', { class: 'sm ghost' + (cur === '*' ? ' on' : ''), title: 'Alles op één pagina', onclick: () => { store.set('doorCat-' + tab, '*'); applyFilter(); drawCatBar(); } }, 'Alles'));
+    const help = (CAT_HELP[tab] || {})[cur];
+    bar.replaceChildren(
+      h('div', { class: 'filters', style: 'flex-wrap:wrap' }, h('span', { class: 'muted', style: 'align-self:center;margin-right:4px' }, 'Wat wil je doen?'),
+        ...names.map((n) => h('button', { class: 'sm' + (cur === n ? ' on' : ''), onclick: () => { store.set('doorCat-' + tab, n); applyFilter(); drawCatBar(); window.scrollTo(0, 0); } }, n)),
+        h('button', { class: 'sm ghost' + (cur === '*' ? ' on' : ''), title: 'Alles op één pagina', onclick: () => { store.set('doorCat-' + tab, '*'); applyFilter(); drawCatBar(); } }, 'Alles')),
+      help && cur !== '*' ? h('div', { class: 'muted', style: 'margin:8px 2px 0' }, help) : null);
+    if ($('view').firstElementChild !== bar) $('view').prepend(bar); // inside the page, above the cards
+  }
+  function addCardHelp(card) {
+    const h2 = card.querySelector(':scope > h2'), t = cardTitle(card), text = CARD_HELP[t];
+    if (!h2 || !text || card.querySelector(':scope > .cardhelp')) return;
+    const next = h2.nextElementSibling;
+    if (next && (next.matches('p.muted, div.muted') && next.textContent.length > 40)) return; // the card explains itself already
+    h2.after(h('p', { class: 'muted cardhelp', style: 'margin:0 0 10px' }, text));
   }
   function applyFilter() {
     const q = ($('q').value || '').trim().toLowerCase(), simple = isSimple(), cat = curCat(), useCats = catsOfTab().length > 0 && !q && cat !== '*';
@@ -1028,6 +1096,7 @@
       const caret = h('button', { class: 'caret', type: 'button', 'aria-label': 'Open of dicht', title: 'Open of dicht', onclick: (e) => { e.stopPropagation(); const s2 = shutMap(); card.classList.toggle('shut'); s2[t] = card.classList.contains('shut') ? 1 : 0; store.set('doorShut', JSON.stringify(s2)); caret.textContent = card.classList.contains('shut') ? '▸' : '▾'; } }, shut[t] ? '▸' : '▾');
       if (shut[t]) card.classList.add('shut');
       h2.insertBefore(caret, h2.firstChild);
+      addCardHelp(card);
       const qm = h('a', { class: 'qm', href: '/help#' + (HELP_ANCHOR[t] || 'start'), target: '_blank', rel: 'noopener', title: 'Uitleg bij “' + t + '”' }, '?');
       h2.childNodes[1].after(qm);
     }
@@ -2089,7 +2158,7 @@
   // ---------- Alle instellingen: every setting of the server in one searchable page, drawn from the server's own description ----------
   let allSchema = null, allDraft = {};
   const fieldValue = (f) => (f.key in allDraft ? allDraft[f.key] : f.value);
-  function dirtyAll() { markDirty({ target: $('view').firstElementChild || $('view') }); }
+  function dirtyAll() { markDirty({ target: $('view').querySelector('.card') || $('view') }); }
   // one control for one kind of value; get() and set() read and write it
   function ctl(spec, get, set) {
     const t = spec.type;
@@ -2535,7 +2604,7 @@
         ...(can('settings') ? smartCards(st) : []),
         h('div', { class: 'card' }, h('h2', {}, 'Bezoekers'),
           h('div', { class: 'form' },
-            h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje'), chk(st.visitors, 'callback', 'Terugbellen'), chk(st.visitors, 'accounts', 'Account maken'), chk(st.visitors, 'cancel', 'Annuleren met een nummer')),
+            h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje'), chk(st.visitors, 'callback', 'Terugbellen'), chk(st.visitors, 'accounts', 'Account maken'), chk(st.visitors, 'cancel', 'Annuleren met een nummer'), chk(st.visitors, 'deleteAccount', 'Account verwijderen')),
             h('label', {}, 'Pincode van een nieuw account'), h('div', { class: 'row' }, sel(st.visitors, 'pinLength', [[4, '4 cijfers'], [6, '6 cijfers'], [8, '8 cijfers']], true), h('span', { class: 'muted' }, 'Wie een account maakt, krijgt vanzelf een willekeurige pincode. Je krijgt daarbij altijd een melding met de naam. Wie de pincode intikt, wordt bij elke vraag meteen herkend.')),
             h('label', {}, 'Bel'), chk(st.visitors, 'bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'),
             h('label', {}, 'Redenen'), h('div', {}, lines('reasons'), h('div', { class: 'muted' }, 'Eén per regel. Houd het kort: 3 tot 4 werkt het rustigst.')),
