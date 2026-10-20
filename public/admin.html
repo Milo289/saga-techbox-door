@@ -973,15 +973,48 @@
   // ---------- comforts: collapsible cards, search, help links, simple/advanced, one save bar ----------
   const HELP_ANCHOR = { 'Bericht op de deur': 'dag', Openingstijden: 'dag', Afwezig: 'dag', Vandaag: 'dag', Deur: 'dag', Bezoekers: 'bezoekers', Bezoekersformulier: 'bezoekers', Afspraken: 'bezoekers', Moderatie: 'bezoekers', 'Automatisch antwoorden': 'bezoekers', Waarschuwingen: 'kapot', Controle: 'kapot', Gegevens: 'kapot', Gevarenzone: 'kapot', 'Back-ups, aanvalsbeveiliging en herstart': 'kapot', Gebruikers: 'veilig', Toegang: 'veilig', 'API-sleutels': 'veilig', Beveiligingsscore: 'veilig', Tweestapsverificatie: 'veilig', Passkeys: 'veilig', 'Beveiligde verbinding (https)': 'veilig', 'Aanvallen en blokkades': 'veilig', Logboek: 'veilig' };
   const ADVANCED_CARDS = new Set(['Koppelingen', 'API-sleutels', 'Energie', 'Eigen onderdelen', 'Extra’s op het scherm', 'Indeling', 'Gegevens', 'Gevarenzone', 'Server', 'Meer', 'Meer met de desktop-app', 'Opstarten', 'Aanvallen en blokkades', 'Back-ups, aanvalsbeveiliging en herstart', 'Beveiligde verbinding (https)', 'Activiteitenlog', 'Moderatie', 'Beltonen', 'Teksten', 'Scherm', 'Controle']);
-  const cardTitle = (card) => { const h2 = card.querySelector(':scope > h2'); return h2 && h2.childNodes[0] ? h2.childNodes[0].textContent.trim() : ''; };
+  const cardTitle = (card) => { const h2 = card.querySelector(':scope > h2'); return h2 ? [...h2.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim() : ''; }; // the words of the title (not the fold button or the ? link)
   const shutMap = () => { try { return JSON.parse(store.get('doorShut', '{}')) || {}; } catch { return {}; } };
   const isSimple = () => store.get('doorSimple', '0') === '1';
+  // ---------- categories: every long page shows one kind of thing at a time ("what do you want to do?") ----------
+  const CATS = {
+    now: [['Nu', ['Welkom! Stap 1 van 3', 'Bericht op de deur', 'Vandaag', 'Bezet tijdens']], ['Overzicht', ['Eerste keer instellen', 'Drukte']]],
+    settings: [
+      ['Dag', ['Deur', 'Openingstijden', 'Openingstijden: uitzonderingen', 'Afwezig', 'Bericht op de deur per datum', 'Opstarten']],
+      ['Bezoekers', ['Bezoekers', 'Bezoekersformulier', 'Kant-en-klare knoppen', 'Eigen knoppen', 'Personen', 'Moderatie', 'Automatisch antwoorden', 'Slimme antwoorden']],
+      ['Scherm', ['Scherm', 'Weergave', 'Dit paneel op dit apparaat']],
+      ['Meldingen', ['E-mail', 'Meldingen op je telefoon', 'Meldingen per soort en persoon', 'Rustige uren en delen', 'Agenda en weekoverzicht', 'Waarschuwingen', 'Meldingen op dit apparaat']],
+      ['Computer en desktop', ['Energie', 'Koppelingen', 'Meer met de desktop-app', 'Inloggen op een ander apparaat', 'Controle', 'Meer']],
+    ],
+    design: [['Uiterlijk', ['Indeling', 'Kleuren', 'Extra’s op het scherm']], ['Teksten en geluid', ['Teksten', 'Beltonen']], ['Eigen onderdelen', ['Eigen onderdelen']]],
+    admin: [['Mensen', ['Gebruikers', 'Ingelogd', 'API-sleutels']], ['Server en logboek', ['Activiteitenlog', 'Server']], ['Privacy', ['Privacy: gegevens van één persoon']]],
+    security: [['Overzicht', ['Beveiligingsscore', 'Mijn apparaten']], ['Inloggen', ['Tweestapsverificatie', 'Passkeys']], ['Verbinding', ['Beveiligde verbinding (https)', 'Aanvallen en blokkades']], ['Logboek en back-ups', ['Logboek', 'Back-ups, aanvalsbeveiliging en herstart']]],
+    system: [['Start', ['Eerste keer instellen']], ['Toegang', ['Toegang']], ['Gegevens', ['Gegevens', 'Gegevens overzetten']], ['Bijwerken', ['Server bijwerken']], ['Noodknoppen', ['Gevarenzone']]],
+  };
+  // the groups of “Alle instellingen” belong to the same kinds
+  const ALL_CATS = [['Dag', ['deur', 'hours', 'away', 'startup']], ['Bezoekers', ['visitors', 'buttons', 'replies', 'moderation']], ['Scherm', ['weergave', 'screen', 'sound', 'colors']], ['Meldingen', ['notify', 'share', 'notifyRules', 'mail', 'watch']], ['Teksten', []], ['Systeem', ['system']]];
+  function catOf(card) {
+    if (tab === 'all') { const g = card.dataset.group || ''; const hit = ALL_CATS.find(([, ids]) => ids.includes(g)); return hit ? hit[0] : (/^ui-/.test(g) ? 'Teksten' : ALL_CATS[0][0]); }
+    const list = CATS[tab]; if (!list) return '';
+    const t = cardTitle(card), hit = list.find(([, titles]) => titles.includes(t));
+    return hit ? hit[0] : list[0][0]; // a card nobody listed stays in the first kind: nothing disappears
+  }
+  const catsOfTab = () => (tab === 'all' ? ALL_CATS.map(([n]) => n) : (CATS[tab] || []).map(([n]) => n));
+  const curCat = () => { const names = catsOfTab(); const s = store.get('doorCat-' + tab, ''); return s === '*' ? '*' : names.includes(s) ? s : names[0]; };
+  function drawCatBar() {
+    let bar = $('catbar');
+    const names = catsOfTab();
+    if (!names.length) { if (bar) bar.remove(); return; }
+    if (!bar) { bar = h('div', { id: 'catbar', class: 'filters', style: 'margin:0 0 12px;flex-wrap:wrap' }); $('view').before(bar); }
+    const cur = curCat();
+    bar.replaceChildren(h('span', { class: 'muted', style: 'align-self:center;margin-right:4px' }, 'Wat wil je doen?'), ...names.map((n) => h('button', { class: 'sm' + (cur === n ? ' on' : ''), onclick: () => { store.set('doorCat-' + tab, n); applyFilter(); drawCatBar(); window.scrollTo(0, 0); } }, n)), h('button', { class: 'sm ghost' + (cur === '*' ? ' on' : ''), title: 'Alles op één pagina', onclick: () => { store.set('doorCat-' + tab, '*'); applyFilter(); drawCatBar(); } }, 'Alles'));
+  }
   function applyFilter() {
-    const q = ($('q').value || '').trim().toLowerCase(), simple = isSimple();
+    const q = ($('q').value || '').trim().toLowerCase(), simple = isSimple(), cat = curCat(), useCats = catsOfTab().length > 0 && !q && cat !== '*';
     for (const card of $('view').children) {
       if (!card.classList.contains('card')) continue;
       const t = cardTitle(card);
-      const hide = (simple && ADVANCED_CARDS.has(t) && !q) || (q && !card.textContent.toLowerCase().includes(q));
+      const hide = (simple && ADVANCED_CARDS.has(t) && !q) || (q && !card.textContent.toLowerCase().includes(q)) || (useCats && catOf(card) !== cat);
       card.classList.toggle('hidden', hide);
       if (q && !hide) card.classList.remove('shut');
     }
@@ -998,6 +1031,7 @@
       const qm = h('a', { class: 'qm', href: '/help#' + (HELP_ANCHOR[t] || 'start'), target: '_blank', rel: 'noopener', title: 'Uitleg bij “' + t + '”' }, '?');
       h2.childNodes[1].after(qm);
     }
+    drawCatBar();
     applyFilter();
     paintDirty();
   }
@@ -1286,7 +1320,7 @@
   // ---------- moving everything from another door server to this one ----------
   const transferDraft = { url: '', username: '', password: '', code: '' };
   // ---------- Weergave: how the door screen looks (modes, fonts, clock, background …) with ready-made designs ----------
-  const LOOK_DEFAULT = { mode: 'standard', font: 'system', textScale: 100, weight: 'normal', clock: 'digital', seconds: false, date: 'none', transition: 'slide', shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0, ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true, buttons: { place: 'below', size: 'normal', columns: 0 }, slides: { enabled: false, seconds: 8, items: [] }, event: { enabled: false, label: '', date: '' }, greeting: false, updated: false, waiting: false, sentClose: 'button', sentSeconds: 10, hideName: false, hideMessage: false, hideUntil: false, hideExtra: false, hideAsk: false, uppercase: false, shadow: false, bigDot: false, staticDot: false, bigHeader: false, statusIcon: false, flip: false, dimClosed: false, muteDoor: false, fullscreen: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false };
+  const LOOK_DEFAULT = { mode: 'standard', font: 'system', textScale: 100, weight: 'normal', clock: 'digital', seconds: false, date: 'none', transition: 'slide', shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0, ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true, buttons: { place: 'below', size: 'normal', columns: 0 }, slides: { enabled: false, seconds: 8, items: [] }, event: { enabled: false, label: '', date: '' }, greeting: false, updated: false, waiting: false, box: 'auto', sentClose: 'button', sentSeconds: 10, hideName: false, hideMessage: false, hideUntil: false, hideExtra: false, hideAsk: false, uppercase: false, shadow: false, bigDot: false, staticDot: false, bigHeader: false, statusIcon: false, flip: false, dimClosed: false, muteDoor: false, fullscreen: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false };
   const LOOK_PRESETS = [
     ['Standaard', 'Zoals het was', {}],
     ['Rustig', 'Zacht, afgerond, langzaam', { font: 'rounded', background: 'gradient', transition: 'fade', cards: 'soft' }],
@@ -1309,6 +1343,7 @@
       h('p', { class: 'muted', style: 'margin-top:0' }, 'Kies een kant-en-klaar ontwerp, of stel hieronder alles zelf in. Een ontwerp is meteen zichtbaar op het deurscherm.'),
       h('div', { class: 'row', style: 'flex-wrap:wrap;margin-bottom:12px' }, ...LOOK_PRESETS.map((p) => h('button', { class: 'sm', title: p[1], onclick: () => apply(p) }, p[0]))),
       h('div', { class: 'form' },
+        ...row('Vak om de status', sel(L, 'box', [['auto', 'Vanzelf (gekleurd bij een licht thema)'], ['none', 'Geen vak'], ['color', 'Gekleurd vak'], ['soft', 'Zacht gekleurd vak'], ['outline', 'Alleen een rand'], ['dark', 'Donker vak']]), h('span', { class: 'muted' }, 'Combineer vrij: een licht thema met een donker vak, of een donker thema met een gekleurd vak')),
         ...row('Taal', sel(st, 'language', [['nl', 'Nederlands'], ['en', 'English']])),
         ...row('Weergavemodus', sel(L, 'mode', [['standard', 'Standaard'], ['status', 'Alleen de status (groot)'], ['clock', 'Grote klok met status'], ['agenda', 'Status met planning'], ['strip', 'Smalle balk (breed, laag scherm)'], ['minimal', 'Alleen kleur en woord']])),
         ...row('Lettertype', sel(L, 'font', [['system', 'Systeem'], ['rounded', 'Afgerond'], ['serif', 'Met schreef'], ['mono', 'Vaste breedte'], ['readable', 'Goed leesbaar']])),
@@ -2247,6 +2282,7 @@
         open: ['Open', (r) => r.state === 'new' || r.state === 'seen'],
         bell: ['Aangebeld', (r) => r.type === 'bell'],
         star: ['Met ster', (r) => !!r.starred],
+        cancelled: ['Geannuleerd', (r) => r.state === 'cancelled'],
         message: ['Vraagjes', (r) => r.type === 'message'],
         appointment: ['Afspraken', (r) => r.type === 'appointment'],
         all: ['Alles', () => true],
@@ -2275,8 +2311,10 @@
             what(r) ? h('div', { class: 'what' }, what(r)) : null,
             reqTags(r),
             noteBox(r),
+            r.code ? h('div', { class: 'muted', style: 'margin-top:4px' }, `Annuleringsnummer ${r.code}`) : null,
+            r.state === 'cancelled' ? h('div', { class: 'reply', style: 'color:#ff9f0a' }, `Geannuleerd door de bezoeker${r.cancelReason ? ': ' + r.cancelReason : ''}`) : null,
             r.reply ? h('div', { class: 'reply' }, `${r.autoReplied ? 'Automatisch antwoord' : 'Jouw antwoord'}: ${r.reply}`) : null,
-            r.state !== 'done' ? replyControls(r) : null)))
+            r.state !== 'done' && r.state !== 'cancelled' ? replyControls(r) : null)))
             : h('p', { class: 'muted', style: 'margin:0' }, inboxFilter === 'open' ? 'Alles is afgehandeld.' : 'Hier staat nog niets. Als iemand op de deur een knop aantikt, zie je het hier meteen.')),
         appts.length ? h('div', { class: 'card' }, h('h2', {}, 'Afspraken'),
           ...appts.map((a) => h('div', { class: 'block' }, h('div', {}, h('div', { class: 't' }, fmtWhen(a.at)), h('div', { class: 'muted' }, `${a.name}${a.reason ? ' — ' + a.reason : ''}`)),
@@ -2302,7 +2340,7 @@
       const st = structuredClone(S.settings);
       const chk = (obj, key, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: obj[key], onchange: (e) => { obj[key] = e.target.checked; } }), label);
       const blocks = structuredClone(S.blocks || []);
-      const DEFAULT_COLORS = S.settings.theme === 'light' ? COLORS_LIGHT : COLORS_DARK;
+      const DEFAULT_COLORS = ['light', 'paper', 'sky'].includes(S.settings.theme) ? COLORS_LIGHT : COLORS_DARK;
       const groups = {};
       for (const [k, [g, label, def]] of Object.entries(S.uiTexts || {})) (groups[g] = groups[g] || []).push([k, label, def]);
       const fileIn = h('input', { type: 'file', accept: 'image/*', class: 'hidden' });
@@ -2497,7 +2535,7 @@
         ...(can('settings') ? smartCards(st) : []),
         h('div', { class: 'card' }, h('h2', {}, 'Bezoekers'),
           h('div', { class: 'form' },
-            h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje'), chk(st.visitors, 'callback', 'Terugbellen'), chk(st.visitors, 'accounts', 'Account maken')),
+            h('label', {}, 'Op de deur'), h('div', { class: 'row' }, chk(st.visitors, 'reasons', 'Redenen'), chk(st.visitors, 'doorbell', 'Deurbel'), chk(st.visitors, 'appointments', 'Tijd booken'), chk(st.visitors, 'messages', 'Vraagje'), chk(st.visitors, 'callback', 'Terugbellen'), chk(st.visitors, 'accounts', 'Account maken'), chk(st.visitors, 'cancel', 'Annuleren met een nummer')),
             h('label', {}, 'Pincode van een nieuw account'), h('div', { class: 'row' }, sel(st.visitors, 'pinLength', [[4, '4 cijfers'], [6, '6 cijfers'], [8, '8 cijfers']], true), h('span', { class: 'muted' }, 'Wie een account maakt, krijgt vanzelf een willekeurige pincode. Je krijgt daarbij altijd een melding met de naam. Wie de pincode intikt, wordt bij elke vraag meteen herkend.')),
             h('label', {}, 'Bel'), chk(st.visitors, 'bellWhenBlocked', 'Ook laten bellen bij Gesloten of Bezet'),
             h('label', {}, 'Redenen'), h('div', {}, lines('reasons'), h('div', { class: 'muted' }, 'Eén per regel. Houd het kort: 3 tot 4 werkt het rustigst.')),
@@ -2555,7 +2593,7 @@
 
         h('div', { class: 'card' }, h('h2', {}, 'Scherm'),
           h('div', { class: 'form' },
-            h('label', {}, 'Thema'), sel(st, 'theme', [['dark', 'Donker (zwart)'], ['light', 'Licht (met kleur)']]),
+            h('label', {}, 'Thema'), sel(st, 'theme', [['dark', 'Donker (zwart)'], ['light', 'Licht'], ['midnight', 'Middernacht (donkerblauw)'], ['forest', 'Bos (donkergroen)'], ['graphite', 'Grafiet (donkergrijs)'], ['paper', 'Papier (warm licht)'], ['sky', 'Lucht (licht blauw)']]),
             h('label', {}, 'Indeling'), sel(st.layout, 'orientation', [['auto', 'Automatisch'], ['portrait', 'Verticaal'], ['landscape', 'Horizontaal']]),
             h('label', {}, 'Draaien'), sel(st.layout, 'rotate', [[0, 'Niet'], [90, '90° met de klok mee'], [180, '180°'], [270, '90° tegen de klok in']], true),
             h('span', {}), h('span', { class: 'muted' }, 'Gebruik Draaien als de monitor op zijn kant staat maar de computer nog een liggend beeld stuurt.'),

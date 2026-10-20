@@ -43,7 +43,7 @@ const DEFAULT_SETTINGS = {
   hours: { enabled: false, days: [1, 2, 3, 4, 5], from: '09:00', to: '17:00', perDay: {}, breaks: [], holidays: [] },
   customButtons: [], notifyRules: [], autoReplies: [],
   quickButtons: [], // ids of the ready-made buttons that are switched on (see QUICK_BUTTONS)
-  visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false, accounts: true, pinLength: 6 }, // accounts: the button “Account maken”; pinLength: digits of the code a new account gets
+  visitors: { reasons: false, doorbell: true, bellWhenBlocked: false, appointments: true, messages: true, callback: false, accounts: true, pinLength: 6, cancel: true }, // accounts: the button “Account maken”; pinLength: digits of the code a new account gets
   moderation: { filter: true, defaultList: true, words: '', action: 'mask', maxPerHour: 20, profileApproval: false }, // action: flag | mask | block
   themeSchedule: { enabled: false, lightFrom: '07:00', darkFrom: '19:00' }, // the door screen is light by day and dark by night
   sound: { bell: 'classic', reply: 'soft', custom: false }, // custom = an own bell sound has been uploaded (the file itself is not in the settings)
@@ -83,7 +83,7 @@ const DEFAULT_SETTINGS = {
     shift: false, cards: 'soft', corners: 'round', background: 'glow', border: 'off', countdown: false, icons: 'symbols', agenda: 0,
     ticker: { enabled: false, text: '' }, idle: { enabled: false, minutes: 10 }, footer: '', contrast: false, motion: true,
     buttons: { place: 'below', size: 'normal', columns: 0 }, slides: { enabled: false, seconds: 8, items: [] }, event: { enabled: false, label: '', date: '' },
-    greeting: false, updated: false, waiting: false, sentClose: 'button', sentSeconds: 10, ...Object.fromEntries(settingsSchema.LOOK_FLAGS.map(([k]) => [k, false])), hideName: false, hideMessage: false, hideUntil: false, hideExtra: false, hideAsk: false, uppercase: false, shadow: false, bigDot: false, staticDot: false, bigHeader: false, statusIcon: false, flip: false, dimClosed: false, muteDoor: false, fullscreen: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false,
+    greeting: false, updated: false, waiting: false, box: 'auto', sentClose: 'button', sentSeconds: 10, ...Object.fromEntries(settingsSchema.LOOK_FLAGS.map(([k]) => [k, false])), hideName: false, hideMessage: false, hideUntil: false, hideExtra: false, hideAsk: false, uppercase: false, shadow: false, bigDot: false, staticDot: false, bigHeader: false, statusIcon: false, flip: false, dimClosed: false, muteDoor: false, fullscreen: false, bellFlash: 'none', awake: false, speak: false, reloadAt: '', dot: 'dot', align: 'center', glow: true, margin: 0, mirror: false,
   },
   language: 'nl', // the door screen and the visitor page: nl | en
   noteSchedule: [], // a note on the door for a period (shown instead of the note above, by date)
@@ -148,6 +148,7 @@ function cleanLook(l = {}) {
   out.bellFlash = ['none', 'flash', 'pulse'].includes(l.bellFlash) ? l.bellFlash : 'none';
   for (const k of ['hideName', 'hideMessage', 'hideUntil', 'hideExtra', 'hideAsk', 'uppercase', 'shadow', 'bigDot', 'staticDot', 'bigHeader', 'statusIcon', 'flip', 'dimClosed', 'muteDoor', 'fullscreen']) out[k] = !!l[k]; // fifteen switches, all off by default
   for (const [k] of settingsSchema.LOOK_FLAGS) out[k] = !!l[k]; // fifty more switches, all off by default
+  out.box = ['auto', 'none', 'color', 'soft', 'outline', 'dark'].includes(l.box) ? l.box : 'auto'; // the box round the status: automatic (coloured in a light theme), none, coloured, soft, outline or dark
   out.sentClose = l.sentClose === 'auto' ? 'auto' : 'button'; // after ringing or sending: a close button, or no button and the screen closes by itself
   out.sentSeconds = n(l.sentSeconds, 3, 120, 10);
   out.dot = ['dot', 'bar', 'none'].includes(l.dot) ? l.dot : 'dot';
@@ -291,6 +292,14 @@ const maskEmail = (e) => { const [u, d] = String(e).split('@'); return d ? `${u.
 const UI_TEXTS = {
   askTitle: ['Hoofdscherm', 'Titel boven de knoppen', 'Niet kloppen'],
   account: ['Hoofdscherm', 'Knop om een account te maken', 'Account maken'],
+  cancelTile: ['Annuleren', 'Knop om te annuleren', 'Annuleren'],
+  cancelHint: ['Annuleren', 'Uitleg', 'Tik het nummer in dat je kreeg toen je de afspraak of vraag maakte.'],
+  cancelNumber: ['Annuleren', 'Veld met het nummer', 'Je nummer'],
+  cancelReason: ['Annuleren', 'Veld voor de reden', 'Waarom? (mag leeg)'],
+  cancelDo: ['Annuleren', 'Knop om te annuleren', 'Ja, annuleren'],
+  cancelDone: ['Annuleren', 'Titel na het annuleren', 'Geannuleerd'],
+  yourCode: ['Annuleren', 'Tekst bij het nummer na het versturen', 'Jouw nummer om te annuleren:'],
+  codeHint: ['Annuleren', 'Uitleg bij het nummer', 'Bewaar dit nummer. Hiermee kun je dit nog annuleren.'],
   accountDone: ['Account maken', 'Titel als het account klaar is', 'Je account is klaar'],
   accountPin: ['Account maken', 'Tekst bij de pincode', 'Dit is jouw pincode. Hiermee ben je bij elke vraag meteen jezelf. Bewaar hem goed.'],
   bell: ['Hoofdscherm', 'Knop deurbel', 'Deurbel'],
@@ -362,7 +371,7 @@ const PALETTES = [
 ];
 // English standard texts of the door screen (used when the language is English and nobody wrote an own text)
 const UI_EN = {
-  askTitle: 'Please do not knock', account: 'Create account', accountDone: 'Your account is ready', accountPin: 'This is your code. With it you are yourself at every question. Keep it safe.',
+  askTitle: 'Please do not knock', account: 'Create account', cancelTile: 'Cancel', cancelHint: 'Type the number you got when you made the appointment or question.', cancelNumber: 'Your number', cancelReason: 'Why? (optional)', cancelDo: 'Yes, cancel', cancelDone: 'Cancelled', yourCode: 'Your number to cancel:', codeHint: 'Keep this number. You can still cancel with it.', accountDone: 'Your account is ready', accountPin: 'This is your code. With it you are yourself at every question. Keep it safe.',
   bell: 'Doorbell', bellOff: 'Doorbell off', bellWait: 'Doorbell · {s}s', book: 'Book a time', question: 'Question', callback: 'Call me back',
   todayOpen: 'Open today {from}–{to}', todayClosed: 'Closed today', over: 'In {time}', closeSoon: '{over} we close', closeLater: 'We close', openSoon: '{over} we are open again', openLater: 'Open again', busySoon: '{over} we are busy', busyLater: 'Busy from',
   cancel: 'Cancel', back: 'Back', next: 'Next', send: 'Send', request: 'Request', close: 'Close', wifiPass: 'Password:',
@@ -1141,7 +1150,7 @@ async function mailVisitor(r, kind) {
   const what = r.type === 'appointment' ? 'je afspraakverzoek' : 'je vraag';
   const subject = kind === 'confirm' ? `We hebben ${what} ontvangen` : `Antwoord op ${what}`;
   const text = kind === 'confirm'
-    ? `${hi}\n\nWe hebben ${what} ontvangen:\n\n${quoteOf(r)}\n\n${r.reply ? r.reply + '\n\n' : ''}Je krijgt een mail zodra we antwoorden.${sign()}`
+    ? `${hi}\n\nWe hebben ${what} ontvangen:\n\n${quoteOf(r)}\n\n${r.reply ? r.reply + '\n\n' : ''}Je krijgt een mail zodra we antwoorden.${r.code ? `\n\nWil je dit annuleren? Gebruik op het deurscherm of de bezoekerspagina de knop “Annuleren” met het nummer ${r.code}.` : ''}${sign()}`
     : `${hi}\n\nEr is geantwoord op ${what}:\n\n    ${r.reply}\n\n${quoteOf(r) ? 'Je vroeg:\n' + quoteOf(r) : ''}${sign()}`;
   r.mail = r.mail || {};
   try { await sendMail(r.email, subject, text); r.mail[kind] = 'sent'; }
@@ -1726,14 +1735,14 @@ const adminRoutes = {
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) merged[k] = coerce(DEFAULT_SETTINGS[k], b[k]);
     merged.language = merged.language === 'en' ? 'en' : 'nl';
     merged.quickButtons = [...new Set((Array.isArray(merged.quickButtons) ? merged.quickButtons : []).filter((id) => QUICK_IDS.has(id)))];
-    merged.visitors.accounts = merged.visitors.accounts !== false; merged.visitors.pinLength = [4, 6, 8].includes(Number(merged.visitors.pinLength)) ? Number(merged.visitors.pinLength) : 6;
+    merged.visitors.accounts = merged.visitors.accounts !== false; merged.visitors.cancel = merged.visitors.cancel !== false; merged.visitors.pinLength = [4, 6, 8].includes(Number(merged.visitors.pinLength)) ? Number(merged.visitors.pinLength) : 6;
     merged.look = cleanLook(merged.look);
     merged.noteSchedule = schedule.cleanNoteSchedule('noteSchedule' in b ? b.noteSchedule : state.settings.noteSchedule);
     merged.quiet = { enabled: !!merged.quiet.enabled, from: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.from) ? merged.quiet.from : '18:00', to: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.to) ? merged.quiet.to : '08:00' };
     merged.publicStatus = { enabled: !!merged.publicStatus.enabled };
     if (![0, 90, 180, 270].includes(merged.layout.rotate)) merged.layout.rotate = 0;
     if (!['auto', 'portrait', 'landscape'].includes(merged.layout.orientation)) merged.layout.orientation = 'auto';
-    if (!['dark', 'light'].includes(merged.theme)) merged.theme = 'dark';
+    if (!['dark', 'light', 'midnight', 'forest', 'graphite', 'paper', 'sky'].includes(merged.theme)) merged.theme = 'dark';
     for (const m of MODES) if (!merged.texts[m].label) merged.texts[m].label = DEFAULT_SETTINGS.texts[m].label;
     for (const k of Object.keys(UI_TEXTS)) merged.ui[k] = str(merged.ui[k], 120).trim();
     for (const m of MODES) if (!/^#[0-9a-f]{6}$/i.test(String(merged.colors[m]))) merged.colors[m] = '';
@@ -1783,7 +1792,7 @@ const adminRoutes = {
     const r = findReq(b.id);
     const at = ts(b.at) || r.at;
     if (!at) throw bad('Kies een datum en tijd');
-    state.appointments.push({ id: newId(), at, name: r.name || 'Bezoeker', reason: r.reason || '' });
+    state.appointments.push({ id: newId(), at, name: r.name || 'Bezoeker', reason: r.reason || '', rid: r.id });
     const when = new Date(at).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
     Object.assign(r, { reply: `Bevestigd: ${when}`, repliedAt: Date.now(), autoReplied: false, state: 'replied' });
     log('appointment', `Afspraak met ${r.name || 'bezoeker'} — ${when}`);
@@ -2499,7 +2508,6 @@ const QUICK_BUTTONS = [
   { id: 'directions', icon: '🧭', nl: 'Waar moet ik zijn?', en: 'Where do I need to go?', ask: true, askNl: 'Wie of wat zoek je?', askEn: 'Who or what are you looking for?' },
   { id: 'meeting', icon: '🗓', nl: 'Ik kom voor een vergadering', en: 'I am here for a meeting', ask: true, askNl: 'Met wie?', askEn: 'With whom?', replyNl: 'Welkom, ik meld je aan.', replyEn: 'Welcome, I will let them know.' },
   { id: 'guest', icon: '🪪', nl: 'Gast aanmelden', en: 'Register a guest', ask: true, askNl: 'Naam van je gast?', askEn: 'Name of your guest?' },
-  { id: 'cancel', icon: '❌', nl: 'Afspraak annuleren', en: 'Cancel an appointment', ask: true, askNl: 'Wanneer was de afspraak?', askEn: 'When was the appointment?' },
   { id: 'feedback', icon: '💬', nl: 'Tip of klacht', en: 'Tip or complaint', ask: true, askNl: 'Wat wil je ons laten weten?', askEn: 'What would you like to tell us?', replyNl: 'Bedankt, we lezen het.', replyEn: 'Thanks, we will read it.' },
   { id: 'hours', icon: '🕘', nl: 'Openingstijden', en: 'Opening hours', info: 'hours' },
   { id: 'callme', icon: '📞', nl: 'Bel mij terug als ik er niet ben', en: 'Call me back when you are free', ask: true, askNl: 'Je naam en nummer?', askEn: 'Your name and number?' },
@@ -2530,6 +2538,13 @@ function presetButtons() {
   }));
 }
 const allButtons = () => [...(state.settings.customButtons || []), ...presetButtons()];
+// a number with which a visitor cancels an appointment or question (six digits, never the same as an open one)
+function newCancelCode() {
+  const used = new Set(state.requests.filter((r) => r.code && r.state !== 'cancelled').map((r) => r.code));
+  for (let i = 0; i < 200; i++) { const c = String(crypto.randomInt(100000, 1000000)); if (!used.has(c)) return c; }
+  return String(Date.now()).slice(-6);
+}
+const cancellable = (r) => r && r.code && r.state !== 'cancelled' && (r.type === 'appointment' || r.state !== 'done');
 // quiet hours: nothing to the phone or the mail
 function quietNow() {
   const q = state.settings.quiet, d = new Date(), hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -2588,6 +2603,7 @@ function handleVisit(req, b) {
     ip, via, ...(via === 'phone' && b.vid ? { vid: b.vid } : {}),
     statusAtTime: view.label, createdAt: now, state: 'new', reply: '', repliedAt: 0,
   };
+  if (r.type !== 'bell') r.code = newCancelCode(); // the number with which the visitor can cancel this again
   if (mod.filter) { // the bad-word filter looks at everything a visitor typed
     const flags = [];
     for (const k of ['name', 'message', 'reason', 'when']) {
@@ -2618,7 +2634,7 @@ function handleVisit(req, b) {
   // the doorbell rings on every screen at once: door screens, phones and the control panel
   if (r.type === 'bell') for (const c of clients) write(c, 'ring', { id: r.id, at: now });
   changed();
-  return { id: r.id, reply: r.reply, mailTo: r.email && mailOn() ? maskEmail(r.email) : '' };
+  return { id: r.id, reply: r.reply, mailTo: r.email && mailOn() ? maskEmail(r.email) : '', cancelCode: r.code || '' };
 }
 
 const handle = async (req, res) => {
@@ -2798,6 +2814,31 @@ const handle = async (req, res) => {
       if (x && x.pending) return send(res, 200, { found: false, pending: true });
       if (x && !x.pending) { const vid = visitorId(req); if (vid && b0.phone === true) { x.vids = [...new Set([...(x.vids || []), vid])].slice(-5); } }
       return send(res, 200, x ? { found: true, name: x.name, email: mailOn() && x.email ? maskEmail(x.email) : '' } : { found: false });
+    }
+    if (req.method === 'POST' && (p === '/api/cancel/lookup' || p === '/api/cancel')) { // a visitor cancels with the number he got (no account needed)
+      const ip = clientIp(req);
+      if (isBlocked(ip, '')) return send(res, 429, { error: 'Dit kan nu even niet — probeer het later nog eens.' });
+      const hits = (lookups.get(ip) || []).filter((t) => Date.now() - t < 60e3);
+      if (hits.length >= 12) return send(res, 429, { error: 'Even wachten en opnieuw proberen' });
+      lookups.set(ip, [...hits, Date.now()]);
+      const b = await readBody(req), code = str(b.code, 12).replace(/\D/g, '');
+      const r = code.length >= 6 ? state.requests.find((x) => x.code === code && x.state !== 'cancelled') : null;
+      if (!r) return send(res, 200, { found: false, error: 'Dit nummer kennen we niet (meer).' });
+      if (!cancellable(r)) return send(res, 200, { found: true, cancellable: false, error: 'Dit is al afgehandeld en kan niet meer geannuleerd worden.' });
+      const what = { appointment: 'Afspraak', message: 'Vraagje', callback: 'Terugbelverzoek', reason: 'Verzoek' }[r.type] || 'Verzoek';
+      if (p === '/api/cancel/lookup') return send(res, 200, { found: true, cancellable: true, type: r.type, what, at: r.at || null, name: String(r.name || '').split(' ')[0], topic: r.topic || r.reason || '' });
+      const reason = str(b.reason, 140); let cleanReason = reason;
+      if (cleanReason && state.settings.moderation.filter) cleanReason = moderate(cleanReason).masked;
+      Object.assign(r, { state: 'cancelled', cancelledAt: Date.now(), cancelReason: cleanReason });
+      state.appointments = state.appointments.filter((a) => a.rid !== r.id); // the time is free again
+      log('visit', `Geannuleerd door de bezoeker: ${what}${r.name ? ' van ' + r.name : ''}`);
+      if (!quietNow()) {
+        const msg = `${state.settings.name}: ${what} geannuleerd${r.name ? ' door ' + r.name : ''}${r.at ? ' (' + new Date(r.at).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : ''}${cleanReason ? ' — ' + cleanReason : ''}`;
+        notifyExternal(null, msg).catch(() => {});
+        try { if (mailOn() && isEmail(state.settings.mail.adminTo)) sendMail(state.settings.mail.adminTo, `Geannuleerd — ${state.settings.name}`, msg + sign()).catch(() => {}); } catch {}
+      }
+      changed();
+      return send(res, 200, { ok: true, what });
     }
     if (req.method === 'POST' && p === '/api/profile') {
       // visitors make their own account: name (+ e-mail) and they get a random code (PIN) that works at once and always

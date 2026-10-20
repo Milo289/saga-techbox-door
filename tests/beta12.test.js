@@ -215,3 +215,68 @@ test('the update card says why it cannot update and what to do (desktop app or a
   const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
   for (const part of ['Deze server draait in de desktop-app', 'met de hand gestart', 'Downloadpagina']) assert.ok(panel.includes(part), part);
 });
+
+test('cancel with a number: every question or appointment gets one, the visitor cancels with it (reason optional), the time is free again, you are told', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv), r = raw(srv);
+  const adm = async () => (await call(srv, 'GET', '/api/admin-state', undefined, a)).json;
+  const bell = (await r('POST', '/api/visit', { type: 'bell', via: 'door' })).json;
+  assert.equal(bell.cancelCode, '', 'no number for ringing the bell');
+  await sleep(1300);
+  const q = (await r('POST', '/api/visit', { type: 'message', message: 'Een vraag', name: 'Jantje Jansen', via: 'door' })).json;
+  assert.match(q.cancelCode, /^\d{6}$/);
+  await sleep(1300);
+  const at = Date.now() + 2 * 864e5;
+  const ap = (await r('POST', '/api/visit', { type: 'appointment', name: 'Anna Bos', at, via: 'door' })).json;
+  assert.match(ap.cancelCode, /^\d{6}$/); assert.notEqual(ap.cancelCode, q.cancelCode);
+  const reqAp = (await adm()).requests.find((x) => x.code === ap.cancelCode);
+  assert.equal(reqAp.code, ap.cancelCode, 'you see the number too');
+  await call(srv, 'POST', '/api/requests/accept', { id: reqAp.id, at }, a);
+  assert.equal((await adm()).appointments.length, 1);
+  // look up and cancel
+  assert.equal((await r('POST', '/api/cancel/lookup', { code: '000000' })).json.found, false);
+  const look = (await r('POST', '/api/cancel/lookup', { code: ap.cancelCode })).json;
+  assert.equal(look.found, true); assert.equal(look.cancellable, true); assert.equal(look.what, 'Afspraak'); assert.equal(look.name, 'Anna');
+  assert.equal(JSON.stringify(look).includes('Bos'), false, 'only the first name');
+  const done = await r('POST', '/api/cancel', { code: ap.cancelCode, reason: 'Ik ben ziek' });
+  assert.equal(done.json.ok, true);
+  const after = await adm();
+  assert.equal(after.appointments.length, 0, 'the time is free again');
+  const cancelled = after.requests.find((x) => x.id === reqAp.id);
+  assert.equal(cancelled.state, 'cancelled'); assert.equal(cancelled.cancelReason, 'Ik ben ziek');
+  assert.ok(after.history.some((h) => /Geannuleerd door de bezoeker: Afspraak van Anna Bos/.test(h.text)), 'you are told');
+  assert.equal((await r('POST', '/api/cancel', { code: ap.cancelCode })).json.ok, undefined, 'cancelling twice does not work');
+  // without a reason; and a handled question cannot be cancelled any more
+  assert.equal((await r('POST', '/api/cancel', { code: q.cancelCode })).json.ok, true);
+  assert.equal((await adm()).requests.find((x) => x.code === q.cancelCode).state, 'cancelled');
+  await sleep(1300);
+  const q2 = (await r('POST', '/api/visit', { type: 'message', message: 'Nog een vraag', via: 'door' })).json;
+  await call(srv, 'POST', '/api/requests/done', { id: (await adm()).requests.find((x) => x.code === q2.cancelCode).id }, a);
+  const late = (await r('POST', '/api/cancel', { code: q2.cancelCode })).json;
+  assert.equal(late.cancellable, false); assert.match(late.error, /afgehandeld/);
+  // switched off: the tile is gone from the settings of the door
+  await call(srv, 'POST', '/api/settings', { visitors: { ...(await call(srv, 'GET', '/api/state')).json.settings.visitors, cancel: false } }, a);
+  assert.equal((await call(srv, 'GET', '/api/state')).json.settings.visitors.cancel, false);
+});
+
+test('more themes and four kinds of status box; the panel shows its pages in categories', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const pub = async () => (await call(srv, 'GET', '/api/state')).json.settings;
+  for (const th of ['dark', 'light', 'midnight', 'forest', 'graphite', 'paper', 'sky']) { await call(srv, 'POST', '/api/settings', { theme: th }, a); assert.equal((await pub()).theme, th); }
+  await call(srv, 'POST', '/api/settings', { theme: 'neon' }, a); assert.equal((await pub()).theme, 'dark', 'an unknown theme becomes dark');
+  for (const bx of ['auto', 'none', 'color', 'soft', 'outline', 'dark']) { await call(srv, 'POST', '/api/settings', { look: { ...(await pub()).look, box: bx } }, a); assert.equal((await pub()).look.box, bx); }
+  await call(srv, 'POST', '/api/settings', { look: { box: 'zap' } }, a); assert.equal((await pub()).look.box, 'auto');
+  const sch = (await call(srv, 'GET', '/api/settings-schema', undefined, a)).json.groups;
+  assert.ok(sch.find((g) => g.id === 'weergave').fields.some((f) => f.key === 'look.box'));
+  assert.ok(sch.find((g) => g.id === 'screen').fields.find((f) => f.key === 'theme').options.length === 7);
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8'), door = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  for (const part of ['const CATS =', 'function drawCatBar', "'Computer en desktop'", 'Wat wil je doen?', 'ALL_CATS']) assert.ok(panel.includes(part), part);
+  for (const part of ['data-boxmode', '[data-theme="paper"]', 'LIGHT_THEMES']) assert.ok(door.includes(part), part);
+  // every card title the panel knows is put in exactly one category per page
+  const m = /const CATS = (\{[\s\S]*?\n  \});/.exec(panel); assert.ok(m, 'the category list');
+  const cats = eval('(' + m[1] + ')');
+  for (const [tabName, list] of Object.entries(cats)) { const all = list.flatMap(([, titles]) => titles); assert.equal(new Set(all).size, all.length, 'no title twice on ' + tabName); }
+});
