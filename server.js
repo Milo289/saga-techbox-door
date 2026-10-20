@@ -59,7 +59,7 @@ const DEFAULT_SETTINGS = {
   },
   watch: { screenMinutes: 0 }, // warn me when no door screen has been connected for this many minutes (0 = off)
   startup: { status: 'hours', message: '' }, // what the door shows after the server (re)starts: follow the opening hours, or open / closed / busy
-  downloads: { enabled: false }, // a public page /get where people can download the apps you put in the data/downloads folder
+  downloads: { enabled: true }, // a public page /get where people can download the apps you put in the data/downloads folder (the folder is made for you)
   qr: { enabled: false, url: '' }, // a QR code on the door screen that opens the visitor page on the visitor's own phone
   reasons: ['Korte vraag', 'Bezorging', 'Ophalen', 'Handtekening nodig'],
   topics: ['Laptop', 'Wachtwoord / inloggen', 'Printer', 'Wifi / internet', 'Iets anders'],
@@ -2968,6 +2968,7 @@ const handle = async (req, res) => {
 const server = http.createServer({ connectionsCheckingInterval: 2000 }, handle);
 
 // Opt-in public download page: lists the files in data/downloads (put installers there yourself). Off unless switched on in Ontwerp.
+try { fs.mkdirSync(path.join(DATA_DIR, 'downloads'), { recursive: true }); } catch {} // the folder is always there, so you only have to drop files in it
 function serveDownloads(req, res, p) {
   if (!state.settings.downloads.enabled) return send(res, 404, { error: 'not found' });
   const dir = path.join(DATA_DIR, 'downloads');
@@ -2975,9 +2976,10 @@ function serveDownloads(req, res, p) {
   try { files = fs.readdirSync(dir).filter((f) => /^[\w.\-]+$/.test(f) && fs.statSync(path.join(dir, f)).isFile()); } catch {}
   if (p === '/get') {
     const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const items = files.map((f) => `<a href="/get/${encodeURIComponent(f)}">${esc(f)} <small>${(fs.statSync(path.join(dir, f)).size / 1048576).toFixed(1)} MB</small></a>`).join('') || '<p>Er staat nog niets klaar om te downloaden.</p>';
+    const items = files.map((f) => `<a href="/get/${encodeURIComponent(f)}">${esc(f)} <small>${(fs.statSync(path.join(dir, f)).size / 1048576).toFixed(1)} MB</small></a>`).join('') || '<p>Er staat hier nog niets klaar. De beheerder kan bestanden in de map <b>downloads</b> naast de back-ups zetten.</p>';
+    const official = '<h2>Officiële versies</h2><a href="https://github.com/Milo289/saga-techbox-door/releases" rel="noopener">Alle apps (Windows, Mac, Linux, iPhone/iPad) op GitHub</a>';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Download de app</title><style>body{font:17px system-ui;background:#0e1417;color:#fff;max-width:560px;margin:0 auto;padding:24px 16px}a{display:block;background:#1c9d47;color:#fff;text-decoration:none;padding:16px;border-radius:14px;margin:10px 0}small{opacity:.8;float:right}</style><h1>Download de app</h1>${items}`);
+    return res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Download de app</title><style>body{font:17px system-ui;background:#0e1417;color:#fff;max-width:560px;margin:0 auto;padding:24px 16px}h2{font-size:15px;opacity:.7;margin:28px 0 0}a{display:block;background:#1c9d47;color:#fff;text-decoration:none;padding:16px;border-radius:14px;margin:10px 0}small{opacity:.8;float:right}</style><h1>Download de app</h1>${items}${official}`);
   }
   const name = decodeURIComponent(p.slice(5));
   if (!files.includes(name)) return send(res, 404, { error: 'not found' });
