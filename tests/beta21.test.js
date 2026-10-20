@@ -50,3 +50,8 @@ test('door screen: the keypad lights up green at enough digits; six even tiles; 
   const help = /const CAT_HELP = \{([\s\S]*?)\n  \};/.exec(adm)[1];
   for (const name of [...m[1].matchAll(/\['([^']+)', \[/g)].map((x) => x[1])) assert.ok(help.includes(name), 'explanation for ' + name);
 });
+
+test('panel: a button that cannot be used looks switched off', () => {
+  const adm = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+  assert.match(adm, /button:disabled \{ opacity/);
+});

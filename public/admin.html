@@ -31,6 +31,7 @@
   button:hover { border-color: #3a3a40; }
   button:active { transform: scale(.98); }
   button.ghost { background: transparent; }
+  button:disabled { opacity: .4; cursor: not-allowed; filter: grayscale(.6); }
   button.white { background: var(--accent, var(--fg)); color: var(--on-accent, var(--on)); border-color: transparent; }
   html.compact .card { padding: 12px 14px; } html.compact .block { padding: 7px 0; } html.compact .form { row-gap: 6px; }
   html.sharp .card, html.sharp button, html.sharp input, html.sharp select { border-radius: 7px; }
