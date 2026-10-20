@@ -268,6 +268,7 @@ const freshState = () => ({
   wakeApplied: 0, // when the wake-up schedule was last put on this computer
   rootLock: '', // 6-digit screen-lock code hash of the main account (never exported)
   seededAdmin: false,
+  setupDone: false, // the first person made their own account on the start page
   users: [], // { id, username, name, role, perms[], hash, disabled, createdAt, lastLogin }
   apiKeys: [], // { id, name, prefix, hash, perms[], createdAt, lastUsed, by }
   sessions: [], // { id, hash, userId, createdAt, lastSeen, ip, ua }
@@ -804,6 +805,7 @@ if (!state.seededAdmin) {
     console.log(`Het bekende startwachtwoord is vervangen. Startaccount: admin / ${pw}   (staat ook in ${STARTER_FILE})`);
   }
 }
+const setupOpen = (ip) => !state.setupDone && inSetup() && isPrivateIp(ip); // only on your own network, only while nobody but the start account exists
 const DUMMY_HASH = hashPassword(crypto.randomBytes(8).toString('hex')); // so an unknown user takes as long as a wrong password
 function isPrivateIp(ip) {
   ip = normIp(ip).toLowerCase();
@@ -2708,7 +2710,26 @@ const handle = async (req, res) => {
       return;
     }
     if (req.method === 'GET' && p === '/api/state') return send(res, 200, publicState());
-    if (req.method === 'GET' && p === '/api/auth-info') return send(res, 200, { mode: authMode(), pin: !!ADMIN_PIN, version: APP_VERSION });
+    if (req.method === 'GET' && p === '/api/auth-info') return send(res, 200, { mode: authMode(), pin: !!ADMIN_PIN, version: APP_VERSION, setup: setupOpen(clientIp(req)) });
+    if (req.method === 'POST' && p === '/api/setup') { // first start: you make your own account instead of using the made-up start password
+      const ip = clientIp(req);
+      if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });
+      if (!setupOpen(ip)) return send(res, 403, { error: 'De eerste installatie is al gedaan of kan alleen vanaf je eigen netwerk. Log in met je account.' });
+      const b = await readBody(req);
+      const name = str(b.name, 60).trim(), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
+      const username = str(b.username || name, 32).toLowerCase().replace(/[^a-z0-9._-]/g, '');
+      if (!name) return send(res, 400, { error: 'Vul je naam in' });
+      if (username.length < 3) return send(res, 400, { error: 'De naam is te kort om een gebruikersnaam van te maken: gebruik minstens 3 letters of cijfers' });
+      if (username === ROOT_USER || state.users.some((u) => u.username === username)) return send(res, 400, { error: 'Die gebruikersnaam is al in gebruik' });
+      if (password.length < 8) return send(res, 400, { error: 'Kies een wachtwoord van minstens 8 tekens' });
+      if (COMMON_PW.has(password.toLowerCase()) || password.toLowerCase() === username || /^(.)\1+$/.test(password)) return send(res, 400, { error: 'Dat wachtwoord is veel te makkelijk te raden. Kies iets anders.' });
+      const u = { id: newId(), createdAt: Date.now(), username, name, role: 'beheerder', perms: permsOf([...ROLE_PRESETS.beheerder, 'users']), hash: hashPassword(password), disabled: false };
+      state.users.push(u); state.setupDone = true;
+      log('system', `Eerste installatie: account “${username}” gemaakt`, name);
+      const identity = identityOfId(u.id), token = newSession(u.id, req, !!b.remember);
+      noteDevice(identity, req); save();
+      return send(res, 200, { token, user: { name: identity.name, role: identity.role, perms: identity.perms } });
+    }
     if (req.method === 'POST' && p === '/api/login') {
       const ip = clientIp(req);
       if (authBlocked(ip)) return send(res, 429, { error: 'Te veel pogingen — probeer het over een paar minuten opnieuw' });

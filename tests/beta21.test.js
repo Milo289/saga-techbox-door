@@ -62,3 +62,26 @@ test('panel: the easy version is the default and only shows the daily tabs', () 
   assert.match(adm, /EASY_TABS = \['now', 'inbox', 'settings', 'design'\]/);
   assert.match(adm, /Makkelijk/);
 });
+
+test('first start: you make your own account with your own password, once, and are logged in', async (t) => {
+  const srv = await startServer({ dir: tmp() });
+  t.after(() => srv.stop());
+  const r = raw(srv);
+  assert.equal((await r('GET', '/api/auth-info')).json.setup, true);
+  assert.equal((await r('POST', '/api/setup', { name: 'Anna', password: 'kort' })).status, 400, 'too short');
+  assert.equal((await r('POST', '/api/setup', { name: 'Anna', password: 'password' })).status, 400, 'too easy');
+  assert.equal((await r('POST', '/api/setup', { name: '', password: 'een-goed-wachtwoord-1' })).status, 400, 'a name is needed');
+  const ok = await r('POST', '/api/setup', { name: 'Anna', password: 'een-goed-wachtwoord-1' });
+  assert.equal(ok.status, 200, JSON.stringify(ok.json));
+  assert.ok(ok.json.token);
+  const me = await call(srv, 'GET', '/api/admin-state', undefined, ok.json.token);
+  assert.equal(me.status, 200);
+  assert.equal((await r('POST', '/api/setup', { name: 'Bert', password: 'nog-een-wachtwoord-2' })).status, 403, 'only once');
+  assert.equal((await r('GET', '/api/auth-info')).json.setup, false);
+  assert.equal((await r('POST', '/api/login', { username: 'anna', password: 'een-goed-wachtwoord-1' })).status, 200, 'and she can log in again');
+});
+
+test('panel: the installer has five steps and the login page offers the first-time account', () => {
+  const adm = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+  assert.match(adm, /const N = 5/); assert.match(adm, /id="setupForm"/); assert.match(adm, /\/api\/setup/);
+});

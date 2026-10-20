@@ -83,3 +83,8 @@ Instellingen → Kant-en-klare knoppen: 21 knoppen (pakketje, ik heb een afspraa
 - Het paneel start nu in de **makkelijke versie**: alleen Status, Bezoekers, Instellingen en Ontwerp, en per pagina alleen de dagelijkse kaarten. De knop "Makkelijk/Alles" in de zijbalk schakelt om; bestaande keuzes blijven.
 - Categorieknoppen bovenin, alle pictogrammen in één groen, emoji op het deurscherm in het groen van het scherm.
 - Opknapbeurt: zachte overgangen, groene focusrand, hover op kaarten en menu, uitgeschakelde knoppen zien er uitgeschakeld uit.
+
+## beta.27 (eerste keer: eigen account en installatie in vijf stappen)
+- Eerste start: op de inlogpagina staat "Eerste keer? Maak je eigen account". Je kiest zelf je wachtwoord (geen willekeurig startwachtwoord nodig), alleen vanaf je eigen netwerk en maar één keer (`POST /api/setup`).
+- Daarna de installatie: naam van de deur, openingstijden, stijl, melding op je telefoon, klaar.
+- Knoppen onder Overzicht die naar pagina's van de volledige versie wijzen zetten die versie nu zelf aan.

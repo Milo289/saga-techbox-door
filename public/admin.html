@@ -313,6 +313,15 @@
     <button class="white" id="pinBtn" type="submit">Ontgrendelen</button>
   </form>
   <button class="link-btn hidden" id="swapLogin" type="button"></button>
+  <button class="link-btn hidden" id="firstBtn" type="button">Eerste keer? Maak je eigen account</button>
+  <form id="setupForm" class="lf hidden">
+    <p class="muted" style="margin:0">Welkom! Maak hier je eigen account. Je kiest zelf je wachtwoord; er is geen apart startwachtwoord nodig.</p>
+    <input id="sn" autocomplete="name" placeholder="Je naam (bijvoorbeeld Anna)">
+    <input id="sp" type="password" autocomplete="new-password" placeholder="Kies een wachtwoord (minstens 8 tekens)">
+    <input id="sp2" type="password" autocomplete="new-password" placeholder="Typ het wachtwoord nog een keer">
+    <button class="white" id="setupBtn" type="submit" disabled>Account maken en beginnen</button>
+    <button class="link-btn" id="setupBack" type="button">Terug naar inloggen</button>
+  </form>
   <button class="link-btn hidden" id="appSettings" type="button">Server, IP of account wijzigen</button>
   <p class="muted" id="pinErr"></p>
 </div>
@@ -524,6 +533,7 @@
     $('appSettings').onclick = () => window.doorApp.openSettings();
     const pinOnly = authInfo.mode === 'pin';
     setLoginForm(pinOnly ? 'pin' : 'user');
+    $('firstBtn').classList.toggle('hidden', !authInfo.setup);
     $('swapLogin').classList.toggle('hidden', pinOnly || !authInfo.pin);
     setTimeout(() => $(pinOnly ? 'pin' : 'lu').focus(), 50);
   }
@@ -551,6 +561,20 @@
       start();
     } catch { $('pinErr').textContent = 'Geen verbinding met de deurserver'; }
     finally { btn.disabled = false; }
+  };
+  $('firstBtn').onclick = () => { $('userForm').classList.add('hidden'); $('firstBtn').classList.add('hidden'); $('passkeyBtn').classList.add('hidden'); $('swapLogin').classList.add('hidden'); $('setupForm').classList.remove('hidden'); $('pinErr').textContent = ''; $('sn').focus(); };
+  $('setupBack').onclick = () => { $('setupForm').classList.add('hidden'); setLoginForm('user'); $('firstBtn').classList.remove('hidden'); };
+  const setupReady = () => { const ok = $('sn').value.trim().length >= 1 && $('sp').value.length >= 8 && $('sp').value === $('sp2').value; $('setupBtn').disabled = !ok; $('pinErr').textContent = $('sp2').value && $('sp').value !== $('sp2').value ? 'De twee wachtwoorden zijn niet hetzelfde.' : ($('sp').value && $('sp').value.length < 8 ? 'Nog ' + (8 - $('sp').value.length) + ' teken(s) nodig.' : ''); };
+  for (const id of ['sn', 'sp', 'sp2']) $(id).addEventListener('input', setupReady);
+  $('setupForm').onsubmit = async (e) => {
+    e.preventDefault(); const btn = $('setupBtn'); btn.disabled = true; $('pinErr').textContent = '';
+    try {
+      const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('sn').value, password: $('sp').value, remember: true }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { $('pinErr').textContent = out.error || 'Account maken lukte niet'; btn.disabled = false; return; }
+      TOKEN = out.token; PIN = ''; store.set('doorToken', TOKEN); store.set('doorPin', ''); store.set('doorWizard', 'start'); store.set('doorWizardStep', '0');
+      $('sp').value = $('sp2').value = ''; start();
+    } catch { $('pinErr').textContent = 'Geen verbinding met de deurserver'; btn.disabled = false; }
   };
   let mfaTicket = '', mfaTyped = null, mfaRemember = false;
   $('codeBack').onclick = () => { mfaTicket = ''; $('lc').value = ''; $('pinErr').textContent = ''; setLoginForm('user'); };
@@ -974,7 +998,7 @@
   let userDraft = null, keyDraft = null, newKey = null;
   const editing = () => tab === 'all' || tab === 'security' || tab === 'settings' || tab === 'design' || tab === 'system' || (tab === 'admin' && (userDraft || keyDraft));
   window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (S && t !== tab && visibleTabs().some((x) => x[0] === t)) setTab(t); });
-  function setTab(t) { tab = t; clData = null; if (location.hash.slice(1) !== t) { try { location.hash = t; } catch {} } store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
+  function setTab(t) { if (isSimple() && !EASY_TABS.includes(t) && ['all', 'admin', 'security', 'system', 'inbox'].includes(t)) { store.set('doorSimple', '0'); if (typeof paintSimple === 'function') paintSimple(); toast('Dit staat in de versie met alles — die is nu aangezet'); } tab = t; clData = null; if (location.hash.slice(1) !== t) { try { location.hash = t; } catch {} } store.set('doorTab', t); renderAll(true); window.scrollTo(0, 0); const v = $('view'); v.classList.remove('swap'); void v.offsetWidth; v.classList.add('swap'); }
 
   // never redraw while a finger/mouse button is down, or that click would get lost
   let pressing = false, redrawLater = false;
@@ -2153,18 +2177,29 @@
 
 
   // ---------- first start: three short steps ----------
+  // the installer: after you made your own account it asks the five things that matter, one at a time; everything can be changed later
   function wizardCard() {
     const started = store.get('doorWizardStep', '') !== '';
     if (!can('settings') || store.get('doorWizard', '') === 'done' || (S.settings.name !== 'Saga Techbox' && !started)) return null;
-    const step = Number(store.get('doorWizardStep', '0')) || 0, go = (n) => { store.set('doorWizardStep', String(n)); renderAll(true); }, done = () => { store.set('doorWizard', 'done'); renderAll(true); };
+    const N = 5, step = Math.min(Number(store.get('doorWizardStep', '0')) || 0, N - 1);
+    const go = (n) => { store.set('doorWizardStep', String(n)); renderAll(true); window.scrollTo(0, 0); }, done = () => { store.set('doorWizard', 'done'); renderAll(true); };
+    const next = (label, fn) => h('button', { class: 'white', onclick: async () => { try { if (fn) await fn(); } catch { return; } go(step + 1); } }, label || 'Verder');
+    const skip = h('button', { class: 'ghost', onclick: () => go(step + 1) }, 'Overslaan');
+    const back = step ? h('button', { class: 'ghost', onclick: () => go(step - 1) }, 'Terug') : null;
+    const hrs = S.settings.hours, draft = { on: !!hrs.enabled, from: hrs.from || '09:00', to: hrs.to || '17:00' };
     const steps = [
       () => { const name = h('input', { value: S.settings.name === 'Saga Techbox' ? '' : S.settings.name, placeholder: 'Bijvoorbeeld: Lokaal 2.14 — Meneer De Vries', 'data-keep': 'wiz-name', maxlength: 60 });
-        return [h('p', {}, 'Hoe heet deze deur? Dit staat op het deurscherm.'), name, h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'white', onclick: async () => { if (name.value.trim()) await api('/api/settings', { name: name.value.trim() }); go(1); } }, 'Verder'))]; },
-      () => { const topic = h('input', { placeholder: 'Een geheime naam, bijvoorbeeld deur-' + Math.random().toString(36).slice(2, 8), 'data-keep': 'wiz-topic', maxlength: 80 });
-        return [h('p', {}, 'Wil je een melding op je telefoon als iemand aanbelt? Installeer de app “ntfy”, en abonneer je op een geheime naam. Typ die naam hier.'), topic, h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'white', onclick: async () => { if (topic.value.trim()) await api('/api/settings', { ntfyTopic: topic.value.trim() }); go(2); } }, topic.value ? 'Opslaan en verder' : 'Verder'), h('button', { class: 'ghost', onclick: () => go(2) }, 'Overslaan'))]; },
-      () => [h('p', {}, 'Laatste stap: beveiliging. Zet tweestapsverificatie aan voor je eigen account en kies een back-upwachtwoord.'), h('div', { class: 'row' }, h('button', { class: 'white', onclick: () => { done(); setTab('security'); } }, 'Naar Beveiliging'), h('button', { class: 'ghost', onclick: done }, 'Klaar'))],
+        return [h('p', {}, 'Hoe heet deze deur? Dit staat bovenaan op het deurscherm.'), name, h('div', { class: 'row', style: 'margin-top:10px' }, next('Verder', async () => { if (name.value.trim()) await api('/api/settings', { name: name.value.trim() }); }))]; },
+      () => { const on = h('input', { type: 'checkbox', checked: draft.on, onchange: (e) => { draft.on = e.target.checked; } }), from = h('input', { type: 'time', value: draft.from, onchange: (e) => { draft.from = e.target.value; } }), to = h('input', { type: 'time', value: draft.to, onchange: (e) => { draft.to = e.target.value; } });
+        return [h('p', {}, 'Wanneer ben je er? Buiten die tijden zegt de deur vanzelf “Gesloten”. Laat je dit uit, dan zet je de status zelf.'), h('label', { class: 'check' }, on, 'Gebruik vaste openingstijden (maandag t/m vrijdag)'), h('div', { class: 'row', style: 'margin:10px 0' }, 'Van', from, 'tot', to), h('div', { class: 'row' }, next('Opslaan en verder', async () => { await api('/api/settings', { hours: { ...hrs, enabled: draft.on, days: [1, 2, 3, 4, 5], from: draft.from, to: draft.to } }); }), skip)]; },
+      () => [h('p', {}, 'Hoe moet het deurscherm eruitzien? Kies een stijl; je kunt later alles nog aanpassen onder Ontwerp.'), h('div', { class: 'row', style: 'flex-wrap:wrap' }, ...[['dark', 'Donker'], ['light', 'Licht'], ['midnight', 'Middernacht'], ['forest', 'Bos'], ['paper', 'Papier'], ['sky', 'Lucht']].map(([v, l]) => h('button', { class: 'sm' + (S.settings.theme === v ? ' on' : ''), onclick: async () => { await api('/api/settings', { theme: v }); renderAll(true); } }, l))), h('div', { class: 'row', style: 'margin-top:10px' }, next('Verder'))],
+      () => { const topic = h('input', { value: S.settings.ntfyTopic || '', placeholder: 'Een geheime naam, bijvoorbeeld deur-' + Math.random().toString(36).slice(2, 8), 'data-keep': 'wiz-topic', maxlength: 80 });
+        return [h('p', {}, 'Wil je een melding op je telefoon als iemand aanbelt? Installeer de gratis app “ntfy”, en abonneer je op een geheime naam. Typ die naam hier. Geen zin? Sla het over; je ziet het aanbellen ook in dit paneel.'), topic, h('div', { class: 'row', style: 'margin-top:10px' }, next(topic.value ? 'Opslaan en verder' : 'Verder', async () => { if (topic.value.trim()) await api('/api/settings', { ntfyTopic: topic.value.trim() }); }), skip)]; },
+      () => [h('p', {}, 'Klaar! De deur werkt nu. Je ziet de makkelijke versie van het paneel; met de knop “Makkelijk/Alles” in de zijbalk kun je altijd meer instellingen tonen. Tip: zet tweestapsverificatie aan voor je account (onder Beveiliging).'), h('div', { class: 'row' }, h('button', { class: 'white', onclick: () => { window.open('/', '_blank'); done(); } }, 'Het deurscherm bekijken'), h('button', { class: 'ghost', onclick: () => { done(); setTab('security'); } }, 'Naar Beveiliging'), h('button', { class: 'ghost', onclick: done }, 'Klaar'))],
     ];
-    return h('div', { class: 'card wiz' }, h('h2', {}, `Welkom! Stap ${step + 1} van 3`, h('span', { class: 'sp' }), h('button', { class: 'sm ghost', onclick: done }, 'Sluiten')), ...steps[Math.min(step, 2)]());
+    return h('div', { class: 'card wiz' }, h('h2', {}, `Installatie: stap ${step + 1} van ${N}`, h('span', { class: 'sp' }), h('button', { class: 'sm ghost', onclick: done }, 'Sluiten')),
+      h('div', { class: 'bar', style: 'height:6px;border-radius:99px;background:var(--s2);margin:0 0 14px;padding:0;overflow:hidden' }, h('div', { style: `height:100%;width:${Math.round((step + 1) / N * 100)}%;background:var(--accent, var(--open));transition:width .3s` })),
+      ...steps[step](), back ? h('div', { class: 'row', style: 'margin-top:8px' }, back) : null);
   }
 
   // ---------- Alle instellingen: every setting of the server in one searchable page, drawn from the server's own description ----------
