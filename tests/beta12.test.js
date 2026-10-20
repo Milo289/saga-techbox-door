@@ -205,3 +205,13 @@ test('ready-made buttons: twenty or more, each can be switched on and off, they 
   const sch = (await call(srv, 'GET', '/api/settings-schema', undefined, a)).json.groups.find((g) => g.id === 'visitors').fields.find((f) => f.key === 'quickButtons');
   assert.ok(sch && sch.options.length === cat.length, 'the apps get the list too');
 });
+
+test('the update card says why it cannot update and what to do (desktop app or a server started by hand)', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const st = (await call(srv, 'GET', '/api/update', undefined, a)).json;
+  assert.equal(st.supervised, false); assert.equal(st.inApp, false); assert.equal(typeof st.platform, 'string');
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+  for (const part of ['Deze server draait in de desktop-app', 'met de hand gestart', 'Downloadpagina']) assert.ok(panel.includes(part), part);
+});

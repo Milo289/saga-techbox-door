@@ -1981,7 +1981,7 @@ const adminRoutes = {
     const q = (t) => '"' + String(t).replace(/"/g, '""') + '"';
     return { __file: { name: 'logboek.csv', text: 'Tijd,Soort,Wat,Wie,Vingerafdruk\n' + rows.map((h) => [new Date(h.at).toISOString(), h.type, h.text, h.by || '', h.h || ''].map(q).join(',')).join('\n') + '\n' } };
   },
-  'GET /api/update': () => ({ ...serverUpdater.status(), channel: state.system.updateChannel, hasToken: !!state.system.updateToken, ...updates.persistence(DATA_DIR), canRollback: serverUpdater.canRollback(), supervised: process.env.SAGA_SUPERVISED === '1', via: process.env.SAGA_SUPERVISED === '1' ? 'boot' : 'other' }),
+  'GET /api/update': () => ({ ...serverUpdater.status(), channel: state.system.updateChannel, hasToken: !!state.system.updateToken, ...updates.persistence(DATA_DIR), canRollback: serverUpdater.canRollback(), inApp: !!process.env.DOOR_APP_EXE, platform: process.platform, supervised: process.env.SAGA_SUPERVISED === '1', via: process.env.SAGA_SUPERVISED === '1' ? 'boot' : 'other' }),
   'POST /api/update/settings': (b, id) => {
     const next = { ...state.system };
     if (b.channel !== undefined) next.updateChannel = b.channel === 'beta' ? 'beta' : 'stable';
@@ -1990,7 +1990,7 @@ const adminRoutes = {
     log('systeem', `${id.name} wijzigde de update-instellingen`);
     return { ok: true };
   },
-  'POST /api/update/check': async () => ({ ...(await serverUpdater.check()), channel: state.system.updateChannel, hasToken: !!state.system.updateToken, ...updates.persistence(DATA_DIR), supervised: process.env.SAGA_SUPERVISED === '1' }),
+  'POST /api/update/check': async () => ({ ...(await serverUpdater.check()), channel: state.system.updateChannel, hasToken: !!state.system.updateToken, ...updates.persistence(DATA_DIR), canRollback: serverUpdater.canRollback(), inApp: !!process.env.DOOR_APP_EXE, platform: process.platform, supervised: process.env.SAGA_SUPERVISED === '1' }),
   'POST /api/update/apply': async (b, id) => {
     if (process.env.SAGA_SUPERVISED !== '1') throw bad('Deze server wordt niet door een starter bewaakt (zoals op de Linux-schijf), dus hij kan zichzelf niet bijwerken. Installeer de nieuwe versie op de gewone manier.');
     const r = await serverUpdater.apply();
