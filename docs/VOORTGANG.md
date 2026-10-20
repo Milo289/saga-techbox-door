@@ -78,3 +78,8 @@ Instellingen → Kant-en-klare knoppen: 21 knoppen (pakketje, ik heb een afspraa
 - Extra tegel "Account verwijderen" op het deurscherm (zes even tegels); alleen zelf gemaakte accounts, met bevestiging; aanvragen blijven anoniem bewaard; uit te zetten in het paneel.
 - Paneel: de categoriebalk staat nu in de pagina zelf (plakt bovenaan) met één regel uitleg per categorie; elke kaart zonder eigen uitleg krijgt er één.
 - Telefoonbreedte: energietabel schuift zijwaarts in plaats van de pagina te verbreden, serverkaart breekt lange woorden af.
+
+## beta.25 (makkelijke versie en opknapbeurt)
+- Het paneel start nu in de **makkelijke versie**: alleen Status, Bezoekers, Instellingen en Ontwerp, en per pagina alleen de dagelijkse kaarten. De knop "Makkelijk/Alles" in de zijbalk schakelt om; bestaande keuzes blijven.
+- Categorieknoppen bovenin, alle pictogrammen in één groen, emoji op het deurscherm in het groen van het scherm.
+- Opknapbeurt: zachte overgangen, groene focusrand, hover op kaarten en menu, uitgeschakelde knoppen zien er uitgeschakeld uit.

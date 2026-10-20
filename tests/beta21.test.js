@@ -55,3 +55,10 @@ test('panel: a button that cannot be used looks switched off', () => {
   const adm = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
   assert.match(adm, /button:disabled \{ opacity/);
 });
+
+test('panel: the easy version is the default and only shows the daily tabs', () => {
+  const adm = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+  assert.match(adm, /store\.get\('doorSimple', '1'\)/);
+  assert.match(adm, /EASY_TABS = \['now', 'inbox', 'settings', 'design'\]/);
+  assert.match(adm, /Makkelijk/);
+});
