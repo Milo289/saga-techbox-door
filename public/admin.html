@@ -1517,7 +1517,7 @@
       if (updToken) { await api('/api/update/settings', { token: updToken }); updToken = ''; }
       updMsg = 'Bezig met zoeken…'; renderAll(true); updMsg = ''; await loadUpdate(true);
     } }, 'Zoek naar updates');
-    const apply = h('button', { class: 'white', disabled: !(u.newer && u.hasBundle), onclick: async () => {
+    const apply = h('button', { class: 'white', disabled: !(u.newer && u.hasBundle && u.supervised !== false), title: u.supervised === false ? 'Deze server kan zichzelf niet bijwerken (zie hieronder)' : '', onclick: async () => {
       if (!confirm(`De server wordt bijgewerkt naar ${u.version}. Er wordt eerst een back-up gemaakt en de server herstart (dat duurt een halve minuut). Doorgaan?`)) return;
       updMsg = 'Downloaden en controleren…'; renderAll(true);
       try { await api('/api/update/apply', {}); } catch { updMsg = ''; await loadUpdate(true); return; }
@@ -1537,7 +1537,7 @@
       u.supervised === false ? h('div', { class: 'muted', style: 'margin:10px 0' },
         u.inApp ? h('p', { style: 'margin:0 0 8px' }, 'Deze server draait in de desktop-app, dus de knop Bijwerken hier is niet bedoeld. Werk de app zelf bij: kies in het menu Bestand → Instellingen → Updates, zet “Ook public betas aanbieden” aan en druk op “Nu controleren”. Staat die keuze er niet, dan is de app nog oud: haal de nieuwste Windows-installatie hieronder op en installeer hem over de oude heen (je gegevens blijven staan).')
           : h('p', { style: 'margin:0 0 8px' }, 'Deze server is met de hand gestart (zonder de starter van de Linux-schijf), dus hij kan zichzelf niet herstarten en de knop Bijwerken werkt hier niet. Stop de server, haal de nieuwste bestanden op en start hem opnieuw: je gegevens blijven in hun map staan.'),
-        h('div', { class: 'row' }, h('button', { class: 'sm', onclick: () => window.open('https://github.com/Milo289/saga-techbox-door/releases' + (u.version ? '/tag/v' + u.version : ''), '_blank') }, u.inApp ? 'Downloadpagina van de nieuwste versie openen' : 'Downloadpagina openen'))) : null,
+        h('div', { class: 'row' }, u.inApp && window.doorApp && window.doorApp.update ? h('button', { class: 'white', onclick: async () => { const r = await window.doorApp.update(u.channel === 'beta'); toast(r.error ? 'Updaten lukte niet: ' + r.error : r.upToDate ? `De app is al bij (${r.version})` : `Versie ${r.version} wordt gedownload; je krijgt zo een vraag om te installeren`); } }, 'De app nu bijwerken') : null, h('button', { class: 'sm', onclick: () => window.open('https://github.com/Milo289/saga-techbox-door/releases' + (u.version ? '/tag/v' + u.version : ''), '_blank') }, u.inApp ? 'Downloadpagina van de nieuwste versie openen' : 'Downloadpagina openen'))) : null,
       u.notes && u.newer ? h('details', { style: 'margin:8px 0' }, h('summary', {}, 'Wat is er nieuw in ' + u.version + '?'), h('pre', { style: 'white-space:pre-wrap;font:13px/1.45 inherit;margin:8px 0 0' }, u.notes.replace(/\r/g, ''))) : null,
       h('div', { class: 'form' }, h('label', {}, 'Welke versies'), channel, h('label', {}, 'Toegangscode voor GitHub'), token, h('span', {}, ''), h('div', { class: 'row' }, check, apply, u.canRollback && u.supervised ? h('button', { class: 'sm danger', onclick: async () => {
         if (!confirm('De server gaat terug naar de vorige versie (of de versie van de schijf) en herstart. Je gegevens blijven. Doorgaan?')) return;

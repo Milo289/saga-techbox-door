@@ -280,3 +280,11 @@ test('more themes and four kinds of status box; the panel shows its pages in cat
   const cats = eval('(' + m[1] + ')');
   for (const [tabName, list] of Object.entries(cats)) { const all = list.flatMap(([, titles]) => titles); assert.equal(new Set(all).size, all.length, 'no title twice on ' + tabName); }
 });
+
+test('the desktop app can be updated from its own panel, and the button that cannot work is switched off', () => {
+  const root = path.join(__dirname, '..');
+  const main = fs.readFileSync(path.join(root, 'app', 'main.js'), 'utf8'), pre = fs.readFileSync(path.join(root, 'app', 'preload.js'), 'utf8'), panel = fs.readFileSync(path.join(root, 'public', 'admin.html'), 'utf8');
+  assert.ok(main.includes("ipcMain.handle('app:update'") && main.includes('if (!fromWin(e))'), 'only the main window may ask');
+  assert.ok(pre.includes("ipcRenderer.invoke('app:update'"));
+  assert.ok(panel.includes('De app nu bijwerken') && panel.includes('u.supervised !== false'));
+});

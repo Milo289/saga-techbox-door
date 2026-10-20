@@ -584,6 +584,17 @@ async function backgroundCheck() {
 setTimeout(backgroundCheck, 20e3); // soon after the PC has started the app
 setInterval(backgroundCheck, 12 * 3600e3);
 
+// the control panel in the app can start the update of the app itself (a button in Systeem → Server bijwerken)
+ipcMain.handle('app:update', async (e, opts) => {
+  if (!fromWin(e)) return { error: 'Niet toegestaan' };
+  try {
+    const found = await updater.check(app.getVersion(), updateToken(), { platform: process.platform, arch: process.arch, appImage: !!process.env.APPIMAGE }, { beta: !!(opts && opts.beta) || !!config.betaUpdates });
+    updateInfo = found.upToDate ? null : found; updateTray();
+    if (found.upToDate) return { upToDate: true, version: found.version };
+    doUpdate(); // downloads, then asks (in a window of the app) whether to install
+    return { upToDate: false, version: found.version, started: true };
+  } catch (err) { return { error: err.message }; }
+});
 const fromSetupWin = (e) => setupWin && !setupWin.isDestroyed() && e.sender === setupWin.webContents;
 ipcMain.handle('update:get', (e) => (fromSetupWin(e) ? { version: app.getVersion(), found: updateInfo && { version: updateInfo.version, notes: updateInfo.notes }, hasToken: !!updateToken(), canStore: secureStorageOk() } : null));
 ipcMain.handle('update:check', async (e) => {

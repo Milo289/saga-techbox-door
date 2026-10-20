@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('doorApp', {
   isApp: true,
+  update: (beta) => ipcRenderer.invoke('app:update', { beta: !!beta }), // update this app (the panel button in the app)
   notify: (title, body) => ipcRenderer.send('notify', { title: String(title), body: String(body || '') }),
   report: (info) => ipcRenderer.send('app:report', { open: Number(info?.open) || 0, mode: String(info?.mode || ''), label: String(info?.label || '') }),
   info: () => ipcRenderer.invoke('app:info'),
