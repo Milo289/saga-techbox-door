@@ -239,7 +239,7 @@
   @keyframes shake { 25% { transform: rotate(-16deg); } 75% { transform: rotate(16deg); } }
   /* ----- a calmer, fuller look: a sidebar on a big screen, icons, switches, a finder ----- */
   nav button { display: flex; align-items: center; gap: 9px; }
-  nav button::before { content: ''; width: 18px; height: 18px; flex: none; background: currentColor; -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat; opacity: .9; }
+  nav button::before { content: ''; width: 18px; height: 18px; flex: none; background: var(--accent, var(--open)); -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat; opacity: .9; }
   .switch { position: relative; display: inline-block; width: 44px; height: 26px; flex: none; }
   .switch input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
   .switch .sl { position: absolute; inset: 0; border-radius: 999px; background: var(--s3); border: 1px solid var(--line); transition: background .2s; }
@@ -274,7 +274,12 @@
     #saveBar { left: calc(50% + 126px); }
   }
   @media print { #tabs, .side, #saveBar, #conn, #toast, button, .caret, .qm, #tools { display: none !important; } body { background: #fff !important; color: #000 !important; } .card { border: 1px solid #999 !important; box-shadow: none !important; break-inside: avoid; } }
-.catbar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 4px 0 10px; margin: 0 0 8px; border-bottom: 1px solid var(--line); } @media (max-width: 999px) { .catbar { top: 0; } }
+  .catbar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 10px 0 8px; margin: -4px 0 14px; border-bottom: 1px solid var(--line); }
+  .catbar .filters { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; gap: 6px; align-items: center; }
+  .catbar .filters::-webkit-scrollbar { display: none; }
+  .catbar .filters button { flex: none; white-space: nowrap; padding: 8px 16px; font-size: 14px; border-radius: 999px; }
+  .catbar .lbl { flex: none; margin-right: 6px; font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; }
+  .card svg.i, .top svg.i, .catbar svg.i { color: var(--accent, var(--open)); } button.white svg.i, button.on svg.i { color: inherit; }
   html.dense body { font-size: 14px; } html.dense .card { padding: 12px 14px; } html.dense .urow { padding: 6px 0; } html.roomy .card { padding: 26px 24px; } html.roomy .urow { padding: 14px 0; }
   html { zoom: var(--ui-scale, 1); } html.nomotion *, html.nomotion *::before, html.nomotion *::after { animation: none !important; transition: none !important; }
   html.hicontrast { --dim: #e2e2e8; --mute: #c2c2ca; --line: #5a5a62; } html.light.hicontrast { --dim: #22252b; --mute: #33373f; --line: #777c86; }
@@ -1065,7 +1070,7 @@
     const cur = curCat();
     const help = (CAT_HELP[tab] || {})[cur];
     bar.replaceChildren(
-      h('div', { class: 'filters', style: 'flex-wrap:wrap' }, h('span', { class: 'muted', style: 'align-self:center;margin-right:4px' }, 'Wat wil je doen?'),
+      h('div', { class: 'filters', style: 'flex-wrap:wrap' }, h('span', { class: 'muted lbl' }, 'Kies'),
         ...names.map((n) => h('button', { class: 'sm' + (cur === n ? ' on' : ''), onclick: () => { store.set('doorCat-' + tab, n); applyFilter(); drawCatBar(); window.scrollTo(0, 0); } }, n)),
         h('button', { class: 'sm ghost' + (cur === '*' ? ' on' : ''), title: 'Alles op één pagina', onclick: () => { store.set('doorCat-' + tab, '*'); applyFilter(); drawCatBar(); } }, 'Alles')),
       help && cur !== '*' ? h('div', { class: 'muted', style: 'margin:8px 2px 0' }, help) : null);
