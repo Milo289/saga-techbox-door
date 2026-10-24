@@ -1749,7 +1749,7 @@ const adminRoutes = {
     merged.publicStatus = { enabled: !!merged.publicStatus.enabled };
     if (![0, 90, 180, 270].includes(merged.layout.rotate)) merged.layout.rotate = 0;
     if (!['auto', 'portrait', 'landscape'].includes(merged.layout.orientation)) merged.layout.orientation = 'auto';
-    if (!['dark', 'light', 'midnight', 'forest', 'graphite', 'paper', 'sky'].includes(merged.theme)) merged.theme = 'dark';
+    if (!['dark', 'light', 'midnight', 'forest', 'graphite', 'paper', 'sky', 'ocean', 'plum', 'mint', 'rose'].includes(merged.theme)) merged.theme = 'dark';
     for (const m of MODES) if (!merged.texts[m].label) merged.texts[m].label = DEFAULT_SETTINGS.texts[m].label;
     for (const k of Object.keys(UI_TEXTS)) merged.ui[k] = str(merged.ui[k], 120).trim();
     for (const m of MODES) if (!/^#[0-9a-f]{6}$/i.test(String(merged.colors[m]))) merged.colors[m] = '';
@@ -2517,6 +2517,12 @@ const QUICK_BUTTONS = [
   { id: 'guest', icon: '🪪', nl: 'Gast aanmelden', en: 'Register a guest', ask: true, askNl: 'Naam van je gast?', askEn: 'Name of your guest?' },
   { id: 'feedback', icon: '💬', nl: 'Tip of klacht', en: 'Tip or complaint', ask: true, askNl: 'Wat wil je ons laten weten?', askEn: 'What would you like to tell us?', replyNl: 'Bedankt, we lezen het.', replyEn: 'Thanks, we will read it.' },
   { id: 'hours', icon: '🕘', nl: 'Openingstijden', en: 'Opening hours', info: 'hours' },
+  { id: 'keys', icon: '🗝', nl: 'Sleutel ophalen of inleveren', en: 'Collect or return a key', ask: true, askNl: 'Welke sleutel of welk lokaal?', askEn: 'Which key or room?' },
+  { id: 'pickup', icon: '🛍', nl: 'Iets komen ophalen', en: 'Pick something up', ask: true, askNl: 'Wat kom je ophalen?', askEn: 'What are you here to pick up?', replyNl: 'Prima, ik kom eraan.', replyEn: 'Fine, I am coming.' },
+  { id: 'interview', icon: '🤝', nl: 'Ik kom voor een gesprek', en: 'I am here for an interview', ask: true, askNl: 'Je naam en met wie heb je afgesproken?', askEn: 'Your name and with whom is your appointment?', replyNl: 'Welkom, ik meld je aan.', replyEn: 'Welcome, I will let them know.' },
+  { id: 'absent', icon: '🤒', nl: 'Ik ben ziek of kan niet komen', en: 'I am ill or cannot come', ask: true, askNl: 'Je naam en wat wil je doorgeven?', askEn: 'Your name and what would you like to pass on?', replyNl: 'Bedankt, beterschap en tot snel.', replyEn: 'Thanks, get well soon.' },
+  { id: 'supplies', icon: '📎', nl: 'Materiaal nodig', en: 'I need supplies', ask: true, askNl: 'Wat heb je nodig?', askEn: 'What do you need?' },
+  { id: 'thanks', icon: '🙏', nl: 'Iets liefs of een bedankje', en: 'Leave a thank-you', ask: true, askNl: 'Wat wil je zeggen?', askEn: 'What would you like to say?', replyNl: 'Wat fijn, dank je wel!', replyEn: 'How lovely, thank you!' },
   { id: 'callme', icon: '📞', nl: 'Bel mij terug als ik er niet ben', en: 'Call me back when you are free', ask: true, askNl: 'Je naam en nummer?', askEn: 'Your name and number?' },
 ];
 const QUICK_IDS = new Set(QUICK_BUTTONS.map((q) => q.id));

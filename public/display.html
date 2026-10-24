@@ -360,6 +360,10 @@
   body[data-theme="forest"] { --bg: #04110a; --s1: #0a1d12; --s2: #10291a; --line: #1b3a28; --fg: #e8f6ec; --dim: #9cc4a8; --mute: #5f8a6b; }
   body[data-theme="graphite"] { --bg: #16171a; --s1: #1f2125; --s2: #2a2d32; --line: #34383e; --fg: #f1f2f4; --dim: #a6abb3; --mute: #6c727b; }
   body.light[data-theme="paper"] { --bg: #f4ecdc; --s1: #fffaf0; --s2: #eadfc8; --line: #dccfb2; --fg: #2a2218; --dim: #6b5d46; --mute: #8f8268; }
+  body[data-theme="ocean"] { --bg: #031417; --s1: #08262b; --s2: #0e353c; --line: #17474f; --fg: #e6fbfc; --dim: #95c8cc; --mute: #5b9298; }
+  body[data-theme="plum"] { --bg: #120716; --s1: #1f0f26; --s2: #2c1736; --line: #402450; --fg: #f6eafa; --dim: #c1a0cc; --mute: #8a6c96; }
+  body.light[data-theme="mint"] { --bg: #e5f6ec; --s1: #ffffff; --s2: #d3eddc; --line: #bfe0cb; --fg: #11301e; --dim: #44705a; --mute: #7aa28d; }
+  body.light[data-theme="rose"] { --bg: #fbe9ee; --s1: #ffffff; --s2: #f6d6df; --line: #ecc0cd; --fg: #3a1020; --dim: #85485c; --mute: #b0808f; }
   body.light[data-theme="sky"] { --bg: #e6f0fb; --s1: #ffffff; --s2: #d9e7f7; --line: #c4d7ee; --fg: #10223a; --dim: #4a6384; --mute: #7b93b3; }
   body[data-boxmode="soft"] .hero, body[data-boxmode="outline"] .hero, body[data-boxmode="dark"] .hero { border-radius: calc(var(--u)*4); padding: calc(var(--u)*5) calc(var(--u)*4); }
   body[data-boxmode="soft"] .hero { background: color-mix(in srgb, var(--c) 16%, var(--s1)); border: calc(var(--u)*.4) solid color-mix(in srgb, var(--c) 45%, transparent); }
@@ -604,7 +608,7 @@
 
   // light or dark: fixed in the settings, or by the clock (light by day, dark at night)
   let lastLight = null;
-  const LIGHT_THEMES = ['light', 'paper', 'sky'];
+  const LIGHT_THEMES = ['light', 'paper', 'sky', 'mint', 'rose'];
   function themeIsLight() {
     const st = S.settings, sch = st.themeSchedule;
     if (!sch || !sch.enabled) return LIGHT_THEMES.includes(st.theme);

@@ -265,13 +265,13 @@ test('more themes and four kinds of status box; the panel shows its pages in cat
   t.after(() => srv.stop());
   const a = await login(srv);
   const pub = async () => (await call(srv, 'GET', '/api/state')).json.settings;
-  for (const th of ['dark', 'light', 'midnight', 'forest', 'graphite', 'paper', 'sky']) { await call(srv, 'POST', '/api/settings', { theme: th }, a); assert.equal((await pub()).theme, th); }
+  for (const th of ['dark', 'light', 'midnight', 'forest', 'graphite', 'paper', 'sky', 'ocean', 'plum', 'mint', 'rose']) { await call(srv, 'POST', '/api/settings', { theme: th }, a); assert.equal((await pub()).theme, th); }
   await call(srv, 'POST', '/api/settings', { theme: 'neon' }, a); assert.equal((await pub()).theme, 'dark', 'an unknown theme becomes dark');
   for (const bx of ['auto', 'none', 'color', 'soft', 'outline', 'dark']) { await call(srv, 'POST', '/api/settings', { look: { ...(await pub()).look, box: bx } }, a); assert.equal((await pub()).look.box, bx); }
   await call(srv, 'POST', '/api/settings', { look: { box: 'zap' } }, a); assert.equal((await pub()).look.box, 'auto');
   const sch = (await call(srv, 'GET', '/api/settings-schema', undefined, a)).json.groups;
   assert.ok(sch.find((g) => g.id === 'weergave').fields.some((f) => f.key === 'look.box'));
-  assert.ok(sch.find((g) => g.id === 'screen').fields.find((f) => f.key === 'theme').options.length === 7);
+  assert.ok(sch.find((g) => g.id === 'screen').fields.find((f) => f.key === 'theme').options.length === 11);
   const panel = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8'), door = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
   for (const part of ['const CATS =', 'function drawCatBar', "'Computer en desktop'", "class: 'muted lbl'", 'ALL_CATS']) assert.ok(panel.includes(part), part);
   for (const part of ['data-boxmode', '[data-theme="paper"]', 'LIGHT_THEMES']) assert.ok(door.includes(part), part);

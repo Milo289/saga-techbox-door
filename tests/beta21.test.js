@@ -85,3 +85,21 @@ test('panel: the installer asks the purpose first and has six steps and the logi
   const adm = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
   assert.match(adm, /const N = 6/); assert.match(adm, /Waarvoor gebruik je deze deur/); assert.match(adm, /id="setupForm"/); assert.match(adm, /\/api\/setup/);
 });
+
+test('more choices: 26 ready-made buttons and 11 themes work end to end', async (t) => {
+  const srv = await startServer({ patch: true, system: true, dir: tmp() });
+  t.after(() => srv.stop());
+  const a = await login(srv);
+  const cur = (await call(srv, 'GET', '/api/admin-state', undefined, a)).json.settings;
+  const ids = ['keys', 'pickup', 'interview', 'absent', 'supplies', 'thanks'];
+  for (const theme of ['ocean', 'plum', 'mint', 'rose']) {
+    assert.equal((await call(srv, 'POST', '/api/settings', { theme, quickButtons: ids, watch: { ...cur.watch, screenMinutes: 10 } }, a)).status, 200);
+    const s = (await call(srv, 'GET', '/api/admin-state', undefined, a)).json.settings;
+    assert.equal(s.theme, theme); assert.equal(s.watch.screenMinutes, 10);
+  }
+  const pub = (await call(srv, 'GET', '/api/state')).json;
+  assert.ok(ids.every((id) => (pub.settings.customButtons || []).some((b) => b.id === 'q_' + id || b.label)), 'the new buttons are on the screen');
+  assert.ok((pub.settings.customButtons || []).length >= 6);
+  const d = fs.readFileSync(path.join(__dirname, '..', 'public', 'display.html'), 'utf8');
+  for (const theme of ['ocean', 'plum', 'mint', 'rose']) assert.ok(d.includes(`data-theme="${theme}"`), theme + ' has colours');
+});

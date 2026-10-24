@@ -98,3 +98,8 @@ Instellingen → Kant-en-klare knoppen: 21 knoppen (pakketje, ik heb een afspraa
 - De kaart "Back-ups, aanvalsbeveiliging en herstart" staat weer netjes uitgelijnd.
 - Emoji op het deurscherm blijven herkenbaar (groene tinten) in plaats van een vlek.
 - De zelftest let nu ook op vreemde woorden (null, undefined) op elke pagina.
+
+## 3.5.0 (stabiel)
+- Meer keuzes: 26 kant-en-klare knoppen (6 nieuwe: sleutel, iets ophalen, gesprek, ziek melden, materiaal, bedankje) en 11 stijlen (4 nieuwe: oceaan, pruim, munt, roos).
+- Meer zekerheid: de installatie zet bij school, kantoor en winkel meteen de waarschuwing aan als het deurscherm wegvalt; de laatste stap legt uit wat er automatisch gebeurt (dagelijkse back-up, tweede kopie op usb).
+- Alles uit beta.19–28: makkelijke versie, installatie met doel, eigen account bij de eerste keer, account verwijderen, nummerpad dat groen wordt, categoriebalk, testscript `Test-Alles`.
