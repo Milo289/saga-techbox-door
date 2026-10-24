@@ -126,6 +126,8 @@ async function launchBrowser(exe) {
       await cdp.send('Page.navigate', { url });
       await sleep(wait + 600);
       if (run) { const r = await cdp.send('Runtime.evaluate', { expression: run, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) consoleErrors.push({ page: name, text: 'script: ' + r.exceptionDetails.text }); await sleep(500); }
+      const junk = await cdp.send('Runtime.evaluate', { expression: `(/(^|\\n)\\s*(null|undefined|NaN|\\[object Object\\])\\s*($|\\n)|undefined|\\[object Object\\]/).test(document.body.innerText)`, returnByValue: true });
+      if (junk.result && junk.result.value === true) consoleErrors.push({ page: name, text: 'er staat een vreemd woord op de pagina (null, undefined of [object Object])' });
       let clip;
       if (full) { const m = await cdp.send('Page.getLayoutMetrics'); clip = { x: 0, y: 0, width, height: Math.min(Math.ceil(m.cssContentSize.height), 4000), scale: 1 }; }
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip, captureBeyondViewport: true } : {}) });

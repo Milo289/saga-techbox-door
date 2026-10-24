@@ -278,8 +278,8 @@
   body[data-dot="none"] .ring { display: none; } body[data-dot="bar"] .ring { width: calc(var(--u)*16); height: calc(var(--u)*1.4); border-radius: 999px; }
   body[data-glow="0"] .ring { box-shadow: none; animation: none; }
   body[data-bsize="small"] .tile { font-size: .8em; padding-top: calc(var(--u)*1.6); padding-bottom: calc(var(--u)*1.6); } body[data-bsize="large"] .tile { font-size: 1.25em; padding-top: calc(var(--u)*4); padding-bottom: calc(var(--u)*4); }
-  .tile .em, body.lk-statusIcon #label::before { color: transparent; text-shadow: 0 0 0 var(--c); } /* every emoji gets the one green of the screen, never its own colours */
-  .tile .em { font-size: 1.5em; line-height: 1; } .tile.tinted { background: color-mix(in srgb, var(--tint) 24%, var(--s1)); } .tile.tinted svg { color: var(--tint); } .tile.tinted .em { text-shadow: 0 0 0 var(--tint); }
+  .tile .em, body.lk-statusIcon #label::before { filter: grayscale(1) brightness(1.15) sepia(1) hue-rotate(80deg) saturate(3.2); } /* every emoji is drawn in green tones of the screen, keeping its shape */
+  .tile .em { font-size: 1.5em; line-height: 1; } .tile.tinted { background: color-mix(in srgb, var(--tint) 24%, var(--s1)); } .tile.tinted svg { color: var(--tint); }
   #xbtns { display: none; z-index: 12; gap: calc(var(--u)*1.2); }
   body[data-xplace="top"] #xbtns { display: grid; position: absolute; top: calc(var(--u)*9); left: calc(var(--u)*4.5); right: calc(var(--u)*4.5); grid-template-columns: repeat(var(--xcols, 3), 1fr); }
   body[data-xplace="side"] #xbtns { display: flex; flex-direction: column; position: absolute; top: 50%; right: calc(var(--u)*1.4); transform: translateY(-50%); width: calc(var(--u)*17); }

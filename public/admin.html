@@ -1105,7 +1105,7 @@
       h('div', { class: 'filters', style: 'flex-wrap:wrap' }, h('span', { class: 'muted lbl' }, 'Kies'),
         ...names.map((n) => h('button', { class: 'sm' + (cur === n ? ' on' : ''), onclick: () => { store.set('doorCat-' + tab, n); applyFilter(); drawCatBar(); window.scrollTo(0, 0); } }, n)),
         h('button', { class: 'sm ghost' + (cur === '*' ? ' on' : ''), title: 'Alles op één pagina', onclick: () => { store.set('doorCat-' + tab, '*'); applyFilter(); drawCatBar(); } }, 'Alles')),
-      help && cur !== '*' ? h('div', { class: 'muted', style: 'margin:8px 2px 0' }, help) : null);
+      ...(help && cur !== '*' ? [h('div', { class: 'muted', style: 'margin:8px 2px 0' }, help)] : []));
     if ($('view').firstElementChild !== bar) $('view').prepend(bar); // inside the page, above the cards
   }
   function addCardHelp(card) {
@@ -2160,7 +2160,7 @@
     box.append(out);
     api('/api/system').then(({ system }) => {
       const a = system.attack || {}, v = { ...system, attack: { ...a } };
-      const num = (label, get, set, min, max, unit) => [h('label', {}, label), h('input', { type: 'number', min, max, value: get(), style: 'width:110px', oninput: (e) => set(Number(e.target.value)) }), unit ? h('span', { class: 'muted' }, ' ' + unit) : null];
+      const num = (label, get, set, min, max, unit) => [h('label', {}, label), h('div', { class: 'row' }, h('input', { type: 'number', min, max, value: get(), style: 'width:110px', oninput: (e) => set(Number(e.target.value)) }), unit ? h('span', { class: 'muted' }, unit) : null)];
       fill(out, h('div', { class: 'form' },
         h('label', {}, 'Tweestapsverificatie verplicht voor'), h('select', { onchange: (e) => { v.require2fa = e.target.value; } }, ...[['off', 'niemand'], ['root', 'het hoofdaccount'], ['privileged', 'iedereen met veel rechten']].map(([k, l]) => h('option', { value: k, selected: v.require2fa === k }, l))),
         h('label', {}, 'Wachtwoord voor back-ups'), h('input', { type: 'password', value: v.backupPassword || '', autocomplete: 'new-password', oninput: (e) => { v.backupPassword = e.target.value; }, placeholder: 'Leeg = niet versleuteld' }),

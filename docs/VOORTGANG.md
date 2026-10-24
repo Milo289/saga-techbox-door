@@ -92,3 +92,9 @@ Instellingen → Kant-en-klare knoppen: 21 knoppen (pakketje, ik heb een afspraa
 ## na beta.27 (nog niet vrijgegeven)
 - Installatie begint met een pop-up "Waarvoor gebruik je deze deur?" (school, kantoor, winkel/praktijk, thuis, anders): vult openingstijden, kant-en-klare knoppen en bezoekersopties in.
 - `Test-Alles.command` / `Test-Alles.bat` (+ `tools/zelftest/`): start een eigen lege server, controleert alles, maakt schermafbeeldingen via een verborgen Chrome/Edge en zet alles in één map + zip op het bureaublad. Zie `docs/TESTEN.md`.
+
+## beta.28 (gevonden met de eigen testrapportmap)
+- Het woord "null" onder de categorieknoppen bij "Alles" is weg.
+- De kaart "Back-ups, aanvalsbeveiliging en herstart" staat weer netjes uitgelijnd.
+- Emoji op het deurscherm blijven herkenbaar (groene tinten) in plaats van een vlek.
+- De zelftest let nu ook op vreemde woorden (null, undefined) op elke pagina.
