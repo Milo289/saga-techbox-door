@@ -81,7 +81,7 @@ test('first start: you make your own account with your own password, once, and a
   assert.equal((await r('POST', '/api/login', { username: 'anna', password: 'een-goed-wachtwoord-1' })).status, 200, 'and she can log in again');
 });
 
-test('panel: the installer has five steps and the login page offers the first-time account', () => {
+test('panel: the installer asks the purpose first and has six steps and the login page offers the first-time account', () => {
   const adm = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8');
-  assert.match(adm, /const N = 5/); assert.match(adm, /id="setupForm"/); assert.match(adm, /\/api\/setup/);
+  assert.match(adm, /const N = 6/); assert.match(adm, /Waarvoor gebruik je deze deur/); assert.match(adm, /id="setupForm"/); assert.match(adm, /\/api\/setup/);
 });

@@ -88,3 +88,7 @@ Instellingen → Kant-en-klare knoppen: 21 knoppen (pakketje, ik heb een afspraa
 - Eerste start: op de inlogpagina staat "Eerste keer? Maak je eigen account". Je kiest zelf je wachtwoord (geen willekeurig startwachtwoord nodig), alleen vanaf je eigen netwerk en maar één keer (`POST /api/setup`).
 - Daarna de installatie: naam van de deur, openingstijden, stijl, melding op je telefoon, klaar.
 - Knoppen onder Overzicht die naar pagina's van de volledige versie wijzen zetten die versie nu zelf aan.
+
+## na beta.27 (nog niet vrijgegeven)
+- Installatie begint met een pop-up "Waarvoor gebruik je deze deur?" (school, kantoor, winkel/praktijk, thuis, anders): vult openingstijden, kant-en-klare knoppen en bezoekersopties in.
+- `Test-Alles.command` / `Test-Alles.bat` (+ `tools/zelftest/`): start een eigen lege server, controleert alles, maakt schermafbeeldingen via een verborgen Chrome/Edge en zet alles in één map + zip op het bureaublad. Zie `docs/TESTEN.md`.

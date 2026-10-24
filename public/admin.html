@@ -284,6 +284,8 @@
   .catbar .filters::-webkit-scrollbar { display: none; }
   .catbar .filters button { flex: none; white-space: nowrap; padding: 8px 16px; font-size: 14px; border-radius: 999px; }
   .catbar .lbl { flex: none; margin-right: 6px; font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; }
+  .card.wiz { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(600px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; z-index: 60; box-shadow: 0 0 0 100vmax rgba(0,0,0,.62), 0 20px 60px rgba(0,0,0,.5); }
+  .tile-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 12px; margin: 0 0 8px; background: var(--s2); } .tile-btn:hover { border-color: var(--accent, var(--open)); }
   .card svg.i, .top svg.i, .catbar svg.i { color: var(--accent, var(--open)); } button.white svg.i, button.on svg.i { color: inherit; }
   html.dense body { font-size: 14px; } html.dense .card { padding: 12px 14px; } html.dense .urow { padding: 6px 0; } html.roomy .card { padding: 26px 24px; } html.roomy .urow { padding: 14px 0; }
   html { zoom: var(--ui-scale, 1); } html.nomotion *, html.nomotion *::before, html.nomotion *::after { animation: none !important; transition: none !important; }
@@ -2181,13 +2183,23 @@
   function wizardCard() {
     const started = store.get('doorWizardStep', '') !== '';
     if (!can('settings') || store.get('doorWizard', '') === 'done' || (S.settings.name !== 'Saga Techbox' && !started)) return null;
-    const N = 5, step = Math.min(Number(store.get('doorWizardStep', '0')) || 0, N - 1);
+    const N = 6, step = Math.min(Number(store.get('doorWizardStep', '0')) || 0, N - 1);
     const go = (n) => { store.set('doorWizardStep', String(n)); renderAll(true); window.scrollTo(0, 0); }, done = () => { store.set('doorWizard', 'done'); renderAll(true); };
     const next = (label, fn) => h('button', { class: 'white', onclick: async () => { try { if (fn) await fn(); } catch { return; } go(step + 1); } }, label || 'Verder');
     const skip = h('button', { class: 'ghost', onclick: () => go(step + 1) }, 'Overslaan');
     const back = step ? h('button', { class: 'ghost', onclick: () => go(step - 1) }, 'Terug') : null;
     const hrs = S.settings.hours, draft = { on: !!hrs.enabled, from: hrs.from || '09:00', to: hrs.to || '17:00' };
+    // what the door is for: one choice fills in sensible hours, ready-made buttons and visitor options (all can be changed later)
+    const PURPOSES = [
+      ['school', 'Lokaal of helpdesk op school', 'Openingstijden op schooldagen, knoppen voor laptop, wachtwoord, wifi en printer.', { from: '08:30', to: '16:00', days: [1, 2, 3, 4, 5], quick: ['help', 'laptop', 'password', 'wifi', 'print', 'borrow', 'return', 'later'], accounts: true, pin: 4 }],
+      ['office', 'Kantoor of receptie', 'Bezoekers melden zich aan: afspraak, pakketje, gast of vergadering.', { from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5], quick: ['checkin', 'parcel', 'guest', 'meeting', 'directions', 'wifi', 'later'], accounts: false, pin: 6 }],
+      ['shop', 'Winkel, praktijk of balie', 'Open op werkdagen en zaterdag, met openingstijden en routebeschrijving.', { from: '09:00', to: '17:30', days: [1, 2, 3, 4, 5, 6], quick: ['checkin', 'help', 'hours', 'directions', 'feedback', 'later'], accounts: false, pin: 6 }],
+      ['home', 'Thuis of een eigen kamer', 'Alleen aanbellen en een bericht achterlaten; geen vaste tijden.', { enabled: false, from: '09:00', to: '17:00', days: [1, 2, 3, 4, 5], quick: ['parcel', 'later', 'callme'], accounts: false, pin: 6 }],
+      ['other', 'Iets anders', 'Niets wordt aangepast; je stelt alles zelf in.', null],
+    ];
+    const applyPurpose = async (pr) => { if (!pr) return; await api('/api/settings', { quickButtons: pr.quick, visitors: { ...S.settings.visitors, accounts: pr.accounts, deleteAccount: pr.accounts, cancel: true, pinLength: pr.pin }, hours: { ...S.settings.hours, enabled: pr.enabled !== false, days: pr.days, from: pr.from, to: pr.to } }); };
     const steps = [
+      () => [h('p', {}, 'Waarvoor gebruik je deze deur? Daar passen we de openingstijden, de knoppen voor bezoekers en de opties op aan. Je kunt straks alles nog veranderen.'), h('div', { class: 'list' }, ...PURPOSES.map(([id, title, text, pr]) => h('button', { class: 'tile-btn', onclick: async () => { try { await applyPurpose(pr); store.set('doorPurpose', id); } catch { return; } go(1); } }, h('b', {}, title), h('span', { class: 'muted' }, text))))],
       () => { const name = h('input', { value: S.settings.name === 'Saga Techbox' ? '' : S.settings.name, placeholder: 'Bijvoorbeeld: Lokaal 2.14 — Meneer De Vries', 'data-keep': 'wiz-name', maxlength: 60 });
         return [h('p', {}, 'Hoe heet deze deur? Dit staat bovenaan op het deurscherm.'), name, h('div', { class: 'row', style: 'margin-top:10px' }, next('Verder', async () => { if (name.value.trim()) await api('/api/settings', { name: name.value.trim() }); }))]; },
       () => { const on = h('input', { type: 'checkbox', checked: draft.on, onchange: (e) => { draft.on = e.target.checked; } }), from = h('input', { type: 'time', value: draft.from, onchange: (e) => { draft.from = e.target.value; } }), to = h('input', { type: 'time', value: draft.to, onchange: (e) => { draft.to = e.target.value; } });
