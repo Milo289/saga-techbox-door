@@ -3,7 +3,7 @@
 Op een computer mét internet:
 1. Download `Saga-Techbox-Deur-OS-amd64.iso` van https://github.com/Milo289/saga-techbox-door/releases/latest
 2. Download https://raw.githubusercontent.com/Milo289/saga-techbox-door/main/tools/proxmox-update.sh
-3. Zet beide bestanden op een usb-stick (formaat exFAT of NTFS; de ISO is groter dan 4 GB niet, maar FAT32 is onhandig).
+3. Zet beide bestanden op een usb-stick (de ISO is ongeveer 620 MB; elk gewoon formaat werkt).
 
 Op de Proxmox-computer (Shell, als root):
 ```
