@@ -12,17 +12,20 @@
 # Een schijf die al in de machine zit wordt nooit aangeraakt. Oude ISO-bestanden worden niet verwijderd.
 #
 #   OPTIES:  123 (het nummer van de machine)   --ja (niet om bevestiging vragen)   --stabiel (alleen gewone versies)
+#            --bestand /pad/naar/schijf.iso (zonder internet: de ISO staat op een usb-stick of in een map)   --usb (zoekt de ISO zelf op een aangesloten usb-stick)
 #            --versie v3.4.0-beta.20 (een bepaalde uitgave in plaats van de nieuwste)   --opslag NAAM (waar de gegevensschijf komt)   --geen-schijf (geen gegevensschijf toevoegen)
 set -uo pipefail
 
-REPO="Milo289/saga-techbox-door"; VMID=""; YES=0; STABLE=0; STORE=""; NODISK=0; WANT=""; ISO_NAME_BASE="Saga-Techbox-Deur-OS-amd64"
+REPO="Milo289/saga-techbox-door"; VMID=""; YES=0; STABLE=0; STORE=""; NODISK=0; WANT=""; LOCAL=""; USB=0; ISO_NAME_BASE="Saga-Techbox-Deur-OS-amd64"
 MIN_MB="${SAGA_MIN_ISO_MB:-200}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --ja|-y) YES=1 ;; --stabiel) STABLE=1 ;; --geen-schijf) NODISK=1 ;;
     --opslag) STORE="${2:-}"; shift ;;
     --versie) WANT="${2:-}"; shift ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    --bestand) LOCAL="${2:-}"; shift ;;
+    --usb) USB=1 ;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
     [0-9]*) VMID="$1" ;;
   esac
   shift
@@ -59,23 +62,39 @@ CFG=$(cfg "$VMID"); [ -n "$CFG" ] || die "Machine $VMID bestaat niet."
 VMNAME=$(awk -F': ' '$1=="name"{print $2}' <<<"$CFG")
 say "Machine: $VMID ($VMNAME)"
 
-# ---------- 2. de nieuwste uitgave ----------
-say "Zoeken naar de nieuwste versie op GitHub…"
-JSON=$(wget -qO- --header="User-Agent: saga-update" "https://api.github.com/repos/$REPO/releases?per_page=30" 2>/dev/null) || die "Geen verbinding met GitHub."
-PICK=$(printf '%s' "$JSON" | STABLE="$STABLE" WANT="$WANT" python3 -c '
-import json, os, sys
-try: rels = json.load(sys.stdin)
-except Exception: sys.exit(1)
-for r in rels:
-    if r.get("draft") or (os.environ.get("STABLE") == "1" and r.get("prerelease")): continue
-    if os.environ.get("WANT") and r.get("tag_name") != os.environ["WANT"]: continue
-    for a in r.get("assets", []):
-        if a.get("name") == "Saga-Techbox-Deur-OS-amd64.iso":
-            print(r["tag_name"], a["browser_download_url"], a.get("size", 0)); sys.exit(0)
-sys.exit(2)') || die "Ik vond geen schijf (ISO) bij de uitgaven."
-TAG=${PICK%% *}; REST=${PICK#* }; URL=${REST%% *}; SIZE=${REST##* }
-ISO_NAME="${ISO_NAME_BASE}-${TAG}.iso"
-say "Versie: $TAG ($((SIZE/1048576)) MB)"
+# ---------- 2. de nieuwste uitgave (van GitHub, of een bestand van een usb-stick) ----------
+if [ "$USB" = 1 ] && [ -z "$LOCAL" ]; then # zoek de ISO op een aangesloten stick of in de gewone aankoppelmappen
+  for d in /media /mnt /run/media /root /tmp; do
+    F=$(find "$d" -maxdepth 4 -type f -name 'Saga-Techbox-Deur-OS-amd64*.iso' 2>/dev/null | head -1)
+    [ -n "$F" ] && { LOCAL="$F"; break; }
+  done
+  [ -n "$LOCAL" ] || die "Ik vond geen Saga-Techbox-Deur-OS-amd64…iso op een usb-stick. Steek de stick in de Proxmox-computer, koppel hem aan (mount /dev/sdb1 /mnt) of geef het bestand mee met --bestand /pad/naar/bestand.iso"
+fi
+if [ -n "$LOCAL" ]; then
+  [ -d "$LOCAL" ] && LOCAL=$(find "$LOCAL" -maxdepth 3 -type f -name 'Saga-Techbox-Deur-OS-amd64*.iso' 2>/dev/null | head -1)
+  [ -n "$LOCAL" ] && [ -f "$LOCAL" ] || die "Dat bestand bestaat niet: ${LOCAL:-(leeg)}"
+  SIZE=$(wc -c < "$LOCAL" | tr -d " "); TAG=$(basename "$LOCAL" .iso); TAG=${TAG#Saga-Techbox-Deur-OS-amd64-}; [ "$TAG" = "Saga-Techbox-Deur-OS-amd64" ] && TAG="usb"
+  [ "$SIZE" -ge $((MIN_MB * 1048576)) ] || die "Dat bestand is maar $((SIZE/1048576)) MB: een onvolledige kopie? Kopieer het opnieuw van de download."
+  ISO_NAME="${ISO_NAME_BASE}-${TAG}.iso"
+  say "Bestand: $LOCAL ($((SIZE/1048576)) MB), geen internet nodig"
+else
+  say "Zoeken naar de nieuwste versie op GitHub…"
+  JSON=$(wget -qO- --header="User-Agent: saga-update" "https://api.github.com/repos/$REPO/releases?per_page=30" 2>/dev/null) || die "Geen verbinding met GitHub."
+  PICK=$(printf '%s' "$JSON" | STABLE="$STABLE" WANT="$WANT" python3 -c '
+  import json, os, sys
+  try: rels = json.load(sys.stdin)
+  except Exception: sys.exit(1)
+  for r in rels:
+      if r.get("draft") or (os.environ.get("STABLE") == "1" and r.get("prerelease")): continue
+      if os.environ.get("WANT") and r.get("tag_name") != os.environ["WANT"]: continue
+      for a in r.get("assets", []):
+          if a.get("name") == "Saga-Techbox-Deur-OS-amd64.iso":
+              print(r["tag_name"], a["browser_download_url"], a.get("size", 0)); sys.exit(0)
+  sys.exit(2)') || die "Ik vond geen schijf (ISO) bij de uitgaven."
+  TAG=${PICK%% *}; REST=${PICK#* }; URL=${REST%% *}; SIZE=${REST##* }
+  ISO_NAME="${ISO_NAME_BASE}-${TAG}.iso"
+  say "Versie: $TAG ($((SIZE/1048576)) MB)"
+fi
 
 # ---------- 3. waar de ISO heen moet ----------
 ISOSTORE="${SAGA_ISO_STORE:-}"
@@ -118,8 +137,9 @@ mkdir -p "$ISODIR"
 TARGET="$ISODIR/$ISO_NAME"
 if [ -s "$TARGET" ] && [ "$(wc -c < "$TARGET" 2>/dev/null | tr -d " " || echo 0)" -ge $((MIN_MB * 1048576)) ]; then say "De schijf staat al klaar: $ISO_NAME"
 else
-  say "Downloaden…"
-  wget -q --show-progress -O "$TARGET.part" "$URL" || { rm -f "$TARGET.part"; die "Downloaden mislukte."; }
+  if [ -n "$LOCAL" ]; then say "Kopiëren van de usb-stick…"; cp "$LOCAL" "$TARGET.part" || { rm -f "$TARGET.part"; die "Kopiëren mislukte (is er genoeg ruimte op de ISO-opslag?)."; }
+  else say "Downloaden…"
+  wget -q --show-progress -O "$TARGET.part" "$URL" || { rm -f "$TARGET.part"; die "Downloaden mislukte."; }; fi
   GOT=$(wc -c < "$TARGET.part" 2>/dev/null | tr -d " " || echo 0)
   [ "$GOT" -ge $((MIN_MB * 1048576)) ] || { rm -f "$TARGET.part"; die "Het gedownloade bestand is te klein ($((GOT/1048576)) MB): er ging iets mis. Er is niets veranderd."; }
   [ "$SIZE" = 0 ] || [ "$GOT" = "$SIZE" ] || { rm -f "$TARGET.part"; die "Het gedownloade bestand is niet compleet. Er is niets veranderd."; }
