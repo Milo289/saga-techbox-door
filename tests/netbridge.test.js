@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const { startServer, call, login } = require('./helpers');
 const nb = require('../netbridge');
+const linuxOnly = { skip: process.platform === 'win32' ? 'the wifi bridge only exists on Linux (the stand-in commands are shell scripts)' : false };
 
 // stand-ins for nmcli and nft: they answer like the real ones and write down every call (with what came in on stdin)
 function stubs() {
@@ -39,7 +40,7 @@ test('wifi bridge: nmcli lines with escaped colons are read correctly, and the N
   assert.doesNotMatch(nb.keyfile('Open net', ''), /wifi-security/);
 });
 
-test('wifi bridge: status, scan (best signal per name, business networks marked), connect without the password in any command, share on and off', async () => {
+test('wifi bridge: status, scan (best signal per name, business networks marked), connect without the password in any command, share on and off', linuxOnly, async () => {
   const s = stubs();
   await withEnv(s.env, async () => {
     const st = await nb.status();
@@ -73,7 +74,7 @@ test('wifi bridge: status, scan (best signal per name, business networks marked)
   });
 });
 
-test('wifi bridge: routes need the main account, report, scan, connect and share', async (t) => {
+test('wifi bridge: routes need the main account, report, scan, connect and share', linuxOnly, async (t) => {
   const s = stubs();
   const srv = await startServer({ patch: true, system: true, dir: path.join(s.dir, 'srv'), env: s.env });
   t.after(() => srv.stop());
@@ -94,7 +95,7 @@ test('wifi bridge: routes need the main account, report, scan, connect and share
   assert.equal((await call(srv, 'POST', '/api/netbridge/share', { on: false }, a)).json.sharing, false);
 });
 
-test('wifi bridge: where it cannot work it says why (no wifi card, no nmcli)', async () => {
+test('wifi bridge: where it cannot work it says why (no wifi card, no nmcli)', linuxOnly, async () => {
   const s = stubs();
   fs.writeFileSync(path.join(s.bin, 'nmcli'), '#!/bin/bash\nif [[ "$*" == *"device status"* ]]; then echo "eth0:ethernet:connected:x"; fi\nexit 0\n', { mode: 0o755 });
   await withEnv(s.env, async () => { const st = await nb.status(); assert.equal(st.available, false); assert.match(st.why, /geen wifi-kaart/); await assert.rejects(nb.scan(), /geen wifi-kaart/); });
