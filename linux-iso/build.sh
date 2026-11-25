@@ -18,7 +18,7 @@ lb config --mode debian --linux-flavours "$FLAVOUR" --linux-packages linux-image
   --mirror-bootstrap http://deb.debian.org/debian --mirror-chroot http://deb.debian.org/debian --mirror-binary http://deb.debian.org/debian \
   --parent-mirror-bootstrap http://deb.debian.org/debian --parent-mirror-chroot http://deb.debian.org/debian --parent-mirror-binary http://deb.debian.org/debian \
   --security false --firmware-chroot false \
-  --keyring-packages debian-archive-keyring --archive-areas main \
+  --keyring-packages debian-archive-keyring --archive-areas "main non-free-firmware" \
   --debian-installer none --apt-recommends false --memtest none \
   --iso-application "Saga Techbox Deur" --iso-volume "SAGA_DOOR" \
   --bootappend-live "boot=live components hostname=saga-deur username=deur"
@@ -26,7 +26,7 @@ lb config --mode debian --linux-flavours "$FLAVOUR" --linux-packages linux-image
 # what is on the disc
 cp -r "$HERE/config/." config/
 mkdir -p config/includes.chroot/opt/saga-door
-(cd "$ROOT" && cp -r package.json boot.js updates.js server.js power.js integrations.js security.js pki.js schedule.js mdns.js settings-schema.js check-selftest.js check-runner.js discover.js seal.js access.js public "$WORK/config/includes.chroot/opt/saga-door/")
+(cd "$ROOT" && cp -r package.json boot.js updates.js server.js power.js integrations.js security.js pki.js schedule.js mdns.js netbridge.js settings-schema.js check-selftest.js check-runner.js discover.js seal.js access.js public "$WORK/config/includes.chroot/opt/saga-door/")
 
 lb build
 mv -f ./*.iso "$ROOT/Saga-Techbox-Deur-OS-$ARCH.iso"

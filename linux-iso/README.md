@@ -14,7 +14,7 @@ Een Linux-schijf (ISO) die zonder iets te installeren opstart, de deurserver sta
 
 **Beveiliging van de schijf:** de computer beantwoordt alleen wat nodig is (poort 8080 voor het paneel, 8443 voor https, vindbaarheid in het netwerk en ping); alles anders wordt geweigerd door een firewall. Inloggen op afstand (ssh) staat uit, het wachtwoord van de console is vergrendeld, de server draait afgeschermd (geen nieuwe rechten, geen thuismappen, geen kernel-wijzigingen) en het netwerk is strenger afgesteld. Een live-schijf installeert zelf geen updates: haal bij een nieuwe release de nieuwste schijf.
 
-**Let op:** alleen Ethernet is ingebouwd; wifi-kaarten die extra firmware nodig hebben werken (nog) niet. Deze schijf is gemaakt zonder hem op echte hardware te kunnen proberen: probeer hem eerst in een virtuele machine.
+**Wifi:** de schijf bevat de gangbare wifi-programma’s (Intel, Atheros, Realtek, Broadcom). In het paneel (Systeem → Netwerk → Wifi-brug) kies je een wifi-netwerk en kun je die verbinding doorgeven aan de netwerkpoort, zodat andere computers via deze computer internet krijgen (zie `docs/WIFI-BRUG.md`). Netwerken met bedrijfsbeveiliging (inloggen met een persoonlijk account, zoals eduroam) werken niet. Deze schijf is gemaakt zonder hem op echte hardware te kunnen proberen: probeer hem eerst in een virtuele machine.
 
 **Welk bestand?** `…-amd64.iso` voor bijna elke pc en laptop (Intel/AMD), `…-i386.iso` voor heel oude 32-bits pc’s, `…-arm64.iso` voor ARM-computers (bijv. mini-pc’s met ARM-chip, en een Mac met Apple-chip in een virtuele machine). Een Raspberry Pi start niet van een ISO: gebruik daar Raspberry Pi OS met het `…-linux-arm64.deb`-bestand.
 

@@ -227,7 +227,7 @@ jobs:
           merge-multiple: true
       - name: The server bundle (the update button in the panel downloads this)
         run: |
-          mkdir -p srv && cp -r package.json boot.js updates.js server.js power.js integrations.js security.js pki.js schedule.js mdns.js settings-schema.js check-selftest.js check-runner.js discover.js seal.js access.js public srv/
+          mkdir -p srv && cp -r package.json boot.js updates.js server.js power.js integrations.js security.js pki.js schedule.js mdns.js netbridge.js settings-schema.js check-selftest.js check-runner.js discover.js seal.js access.js public srv/
           # "version" stays a plain number (older servers compare it with the release and refuse a beta suffix); sagaVersion has the exact version
           (cd srv && TAG="${GITHUB_REF_NAME#v}" && npm pkg set version="${TAG%%-*}" sagaVersion="$TAG")
           tar -czf out/Saga-Techbox-Server.tgz -C srv .

@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 const integ = require('./integrations.js'); // microcontrollers, door lock + NFC tags, camera events, automations (all opt-in)
 const settingsSchema = require('./settings-schema.js'); // every setting described as data, for the apps
+const netbridge = require('./netbridge.js'); // a wifi network handed on to the network port
 const mdns = require('./mdns.js'); // the name saga-deur.local on the local network
 const schedule = require('./schedule.js'); // hours per day, extra buttons, who is told what, auto replies, calendar
 const pki = require('./pki.js'); // an own certificate authority, so https needs no domain
@@ -89,6 +90,7 @@ const DEFAULT_SETTINGS = {
   noteSchedule: [], // a note on the door for a period (shown instead of the note above, by date)
   quiet: { enabled: false, from: '18:00', to: '08:00' }, // no messages to the phone or mail in these hours (the door itself keeps working)
   publicStatus: { enabled: false }, // /status.json, /badge.svg and /widget for a school website
+  netbridge: { share: false }, // the network port hands on the wifi connection (see netbridge.js); the wifi password is never kept here
   ntfyServer: 'https://ntfy.sh',
   ntfyTopic: '',
   webhookUrl: '',
@@ -1747,6 +1749,7 @@ const adminRoutes = {
     merged.noteSchedule = schedule.cleanNoteSchedule('noteSchedule' in b ? b.noteSchedule : state.settings.noteSchedule);
     merged.quiet = { enabled: !!merged.quiet.enabled, from: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.from) ? merged.quiet.from : '18:00', to: /^([01]\d|2[0-3]):[0-5]\d$/.test(merged.quiet.to) ? merged.quiet.to : '08:00' };
     merged.publicStatus = { enabled: !!merged.publicStatus.enabled };
+    merged.netbridge = { share: !!(merged.netbridge && merged.netbridge.share) };
     if (![0, 90, 180, 270].includes(merged.layout.rotate)) merged.layout.rotate = 0;
     if (!['auto', 'portrait', 'landscape'].includes(merged.layout.orientation)) merged.layout.orientation = 'auto';
     if (!['dark', 'light', 'midnight', 'forest', 'graphite', 'paper', 'sky', 'ocean', 'plum', 'mint', 'rose'].includes(merged.theme)) merged.theme = 'dark';
@@ -2013,6 +2016,19 @@ const adminRoutes = {
     securityEvent(`${id.name} werkt de server bij naar ${r.version}`);
     setTimeout(() => { flushSave(); process.exit(0); }, 800); // systemd starts it again, boot.js picks the new code
     return { ok: true, version: r.version };
+  },
+  'GET /api/netbridge': async () => ({ ...(await netbridge.status()), saved: state.settings.netbridge || { share: false } }),
+  'POST /api/netbridge/scan': async () => { try { return { networks: await netbridge.scan() }; } catch (e) { throw e.user ? bad(e.message) : e; } },
+  'POST /api/netbridge/connect': async (b, id) => {
+    try { const s = await netbridge.connect(str(b.ssid, 40), typeof b.password === 'string' ? b.password.slice(0, 80) : ''); securityEvent(`${id.name} verbindt de computer met wifi “${str(b.ssid, 40)}”`); return s; } catch (e) { throw e.user ? bad(e.message) : e; }
+  },
+  'POST /api/netbridge/share': async (b, id) => {
+    try {
+      const s = await netbridge.share(b.on === true);
+      state.settings.netbridge = { share: b.on === true }; changed();
+      securityEvent(`${id.name} zet het delen van wifi via de netwerkpoort ${b.on === true ? 'aan' : 'uit'}`);
+      return s;
+    } catch (e) { throw e.user ? bad(e.message) : e; }
   },
   'POST /api/system/restart': (b, id) => {
     securityEvent(`${id.name} herstart de server`);
@@ -2442,7 +2458,7 @@ const NEED = {
   'POST /api/power/settings': 'power', 'POST /api/power/now': 'power', 'POST /api/power/cancel': 'power', 'POST /api/power/wake/apply': 'power', 'POST /api/power/wake/remove': 'power', 'GET /api/power/wake-status': 'power', 'POST /api/power/wol': 'power',
   'POST /api/weather/lookup': 'settings', 'POST /api/sound': 'settings', 'POST /api/sound/remove': 'settings', 'POST /api/mail/digest-test': 'mail',
   'POST /api/device/report': 'devices', 'GET /api/device/poll': 'devices', 'POST /api/door/tag': 'unlock', 'POST /api/door/rfid': 'unlock', 'POST /api/door/unlock': 'unlock',
-  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/checklist': 'settings', 'POST /api/requests/star': 'inbox', 'POST /api/requests/note': 'inbox', 'POST /api/bell/test': 'status', 'POST /api/people/pin': 'people', 'GET /api/people/export': 'people', 'GET /api/stats/export': 'inbox', 'GET /api/v1/stats': 'inbox', 'GET /api/stats': 'inbox', 'GET /api/requests/export': 'export', 'POST /api/privacy/search': 'people', 'POST /api/privacy/erase': 'people', 'POST /api/update/rollback': 'system', 'POST /api/system/backups/verify': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
+  'POST /api/integrations/save': (b) => (b.lock || b.automations ? 'unlock' : 'cameras'), 'POST /api/devices/remove': 'settings', 'POST /api/alerts/test': 'settings', 'GET /api/form-schema': 'settings', 'GET /api/settings-schema': 'view', 'POST /api/settings-schema/save': 'view', 'GET /api/https': 'settings', 'GET /api/transfer/export': 'system', 'POST /api/transfer/pull': 'system', 'POST /api/transfer/import': 'system', 'GET /api/calendar': 'settings', 'GET /api/mdns': 'view', 'POST /api/calendar/token': 'settings', 'POST /api/mail/weekly-test': 'mail', 'POST /api/https/settings': 'settings', 'POST /api/https/renew': 'settings', 'GET /api/2fa/status': 'view', 'POST /api/2fa/setup': 'view', 'POST /api/2fa/enable': 'view', 'POST /api/2fa/disable': 'view', 'POST /api/2fa/recovery': 'view', 'GET /api/my/sessions': 'view', 'GET /api/passkeys': 'view', 'POST /api/passkeys/options': 'view', 'POST /api/passkeys/add': 'view', 'POST /api/passkeys/remove': 'view', 'POST /api/my/sessions/revoke': 'view', 'GET /api/security/bans': 'settings', 'POST /api/security/unban': 'settings', 'POST /api/security/ban': 'settings', 'GET /api/audit/verify': 'audit', 'GET /api/audit/export': 'audit', 'POST /api/system/restart': 'system', 'GET /api/netbridge': 'system', 'POST /api/netbridge/scan': 'system', 'POST /api/netbridge/connect': 'system', 'POST /api/netbridge/share': 'system', 'GET /api/checklist': 'settings', 'POST /api/requests/star': 'inbox', 'POST /api/requests/note': 'inbox', 'POST /api/bell/test': 'status', 'POST /api/people/pin': 'people', 'GET /api/people/export': 'people', 'GET /api/stats/export': 'inbox', 'GET /api/v1/stats': 'inbox', 'GET /api/stats': 'inbox', 'GET /api/requests/export': 'export', 'POST /api/privacy/search': 'people', 'POST /api/privacy/erase': 'people', 'POST /api/update/rollback': 'system', 'POST /api/system/backups/verify': 'system', 'GET /api/update': 'system', 'POST /api/update/check': 'system', 'POST /api/update/settings': 'system', 'POST /api/update/apply': 'system', 'POST /api/security/fix': 'settings', 'POST /api/form-settings': 'settings', 'POST /api/login/ticket': 'view', 'POST /api/alerts/clear': 'settings',
   'POST /api/camera/event': 'cameras', 'GET /api/camera/snapshot': 'cameras',
   'POST /api/people': 'people',
   'GET /api/export': 'export', 'POST /api/import': 'export',
@@ -3037,6 +3053,7 @@ server.maxHeadersCount = 60;
 const ready = new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(PORT, process.env.HOST || undefined, () => {
+    if (process.platform === 'linux' && state.settings.netbridge && state.settings.netbridge.share) netbridge.reapply().catch(() => {}); // the firewall rules of the wifi bridge are ours to put back
     applyHttps();
     if (process.env.DOOR_MDNS !== 'off') mdns.start(['saga-deur.local', os.hostname().toLowerCase().replace(/\.local$/, '') + '.local'], (m) => console.log(m));
     console.log(`Deurscherm draait op http://localhost:${PORT}  (deur: /  bediening: /admin  telefoon: /visit)  — inloggen met account`);

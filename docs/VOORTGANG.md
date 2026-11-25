@@ -103,3 +103,7 @@ Instellingen → Kant-en-klare knoppen: 21 knoppen (pakketje, ik heb een afspraa
 - Meer keuzes: 26 kant-en-klare knoppen (6 nieuwe: sleutel, iets ophalen, gesprek, ziek melden, materiaal, bedankje) en 11 stijlen (4 nieuwe: oceaan, pruim, munt, roos).
 - Meer zekerheid: de installatie zet bij school, kantoor en winkel meteen de waarschuwing aan als het deurscherm wegvalt; de laatste stap legt uit wat er automatisch gebeurt (dagelijkse back-up, tweede kopie op usb).
 - Alles uit beta.19–28: makkelijke versie, installatie met doel, eigen account bij de eerste keer, account verwijderen, nummerpad dat groen wordt, categoriebalk, testscript `Test-Alles`.
+
+## 3.6.0-beta.1: wifi-brug
+- Systeem → Netwerk → Wifi-brug: een wifi-netwerk kiezen en de verbinding doorgeven aan de netwerkpoort (NetworkManager: eigen adres 10.42.0.1, DHCP, NAT). Alleen Linux en alleen als beheerder; zie `docs/WIFI-BRUG.md`.
+- Saga Linux-schijf: wifi-programma’s en -firmware erbij, firewall heeft lege kettingen die alleen tijdens delen worden gevuld.

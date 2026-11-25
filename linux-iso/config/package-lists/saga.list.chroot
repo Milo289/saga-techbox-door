@@ -21,3 +21,12 @@ dbus
 dbus-x11
 qemu-guest-agent
 nftables
+wpasupplicant
+iw
+wireless-regdb
+dnsmasq-base
+iptables
+firmware-iwlwifi
+firmware-atheros
+firmware-realtek
+firmware-brcm80211

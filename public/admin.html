@@ -285,7 +285,7 @@
   .catbar .filters button { flex: none; white-space: nowrap; padding: 8px 16px; font-size: 14px; border-radius: 999px; }
   .catbar .lbl { flex: none; margin-right: 6px; font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; }
   .card.wiz { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(600px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; z-index: 60; box-shadow: 0 0 0 100vmax rgba(0,0,0,.62), 0 20px 60px rgba(0,0,0,.5); }
-  .tile-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 12px; margin: 0 0 8px; background: var(--s2); } .tile-btn:hover { border-color: var(--accent, var(--open)); }
+  .tile-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 12px; margin: 0 0 8px; background: var(--s2); } .tile-btn.sel { border-color: var(--accent, var(--open)); } .tile-btn:disabled { opacity: .5; } .tile-btn:hover { border-color: var(--accent, var(--open)); }
   .card svg.i, .top svg.i, .catbar svg.i { color: var(--accent, var(--open)); } button.white svg.i, button.on svg.i { color: inherit; }
   html.dense body { font-size: 14px; } html.dense .card { padding: 12px 14px; } html.dense .urow { padding: 6px 0; } html.roomy .card { padding: 26px 24px; } html.roomy .urow { padding: 14px 0; }
   html { zoom: var(--ui-scale, 1); } html.nomotion *, html.nomotion *::before, html.nomotion *::after { animation: none !important; transition: none !important; }
@@ -1012,7 +1012,7 @@
 
   // ---------- comforts: collapsible cards, search, help links, simple/advanced, one save bar ----------
   const HELP_ANCHOR = { 'Bericht op de deur': 'dag', Openingstijden: 'dag', Afwezig: 'dag', Vandaag: 'dag', Deur: 'dag', Bezoekers: 'bezoekers', Bezoekersformulier: 'bezoekers', Afspraken: 'bezoekers', Moderatie: 'bezoekers', 'Automatisch antwoorden': 'bezoekers', Waarschuwingen: 'kapot', Controle: 'kapot', Gegevens: 'kapot', Gevarenzone: 'kapot', 'Back-ups, aanvalsbeveiliging en herstart': 'kapot', Gebruikers: 'veilig', Toegang: 'veilig', 'API-sleutels': 'veilig', Beveiligingsscore: 'veilig', Tweestapsverificatie: 'veilig', Passkeys: 'veilig', 'Beveiligde verbinding (https)': 'veilig', 'Aanvallen en blokkades': 'veilig', Logboek: 'veilig' };
-  const ADVANCED_CARDS = new Set(['Koppelingen', 'API-sleutels', 'Energie', 'Eigen onderdelen', 'Extra’s op het scherm', 'Indeling', 'Gegevens', 'Gevarenzone', 'Server', 'Meer', 'Meer met de desktop-app', 'Opstarten', 'Aanvallen en blokkades', 'Back-ups, aanvalsbeveiliging en herstart', 'Beveiligde verbinding (https)', 'Activiteitenlog', 'Moderatie', 'Beltonen', 'Teksten', 'Controle', 'Weergave', 'Bezoekersformulier', 'Eigen knoppen', 'Slimme antwoorden', 'Openingstijden: uitzonderingen', 'Bericht op de deur per datum', 'Meldingen per soort en persoon', 'Rustige uren en delen', 'Agenda en weekoverzicht', 'Waarschuwingen', 'Dit paneel op dit apparaat', 'Inloggen op een ander apparaat', 'Kleuren']);
+  const ADVANCED_CARDS = new Set(['Koppelingen', 'API-sleutels', 'Energie', 'Eigen onderdelen', 'Extra’s op het scherm', 'Indeling', 'Gegevens', 'Gevarenzone', 'Server', 'Wifi-brug', 'Meer', 'Meer met de desktop-app', 'Opstarten', 'Aanvallen en blokkades', 'Back-ups, aanvalsbeveiliging en herstart', 'Beveiligde verbinding (https)', 'Activiteitenlog', 'Moderatie', 'Beltonen', 'Teksten', 'Controle', 'Weergave', 'Bezoekersformulier', 'Eigen knoppen', 'Slimme antwoorden', 'Openingstijden: uitzonderingen', 'Bericht op de deur per datum', 'Meldingen per soort en persoon', 'Rustige uren en delen', 'Agenda en weekoverzicht', 'Waarschuwingen', 'Dit paneel op dit apparaat', 'Inloggen op een ander apparaat', 'Kleuren']);
   const cardTitle = (card) => { const h2 = card.querySelector(':scope > h2'); return h2 ? [...h2.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim() : ''; }; // the words of the title (not the fold button or the ? link)
   const shutMap = () => { try { return JSON.parse(store.get('doorShut', '{}')) || {}; } catch { return {}; } };
   const isSimple = () => store.get('doorSimple', '1') === '1';
@@ -1029,7 +1029,7 @@
     design: [['Uiterlijk', ['Indeling', 'Kleuren', 'Extra’s op het scherm']], ['Teksten en geluid', ['Teksten', 'Beltonen']], ['Eigen onderdelen', ['Eigen onderdelen']]],
     admin: [['Mensen', ['Gebruikers', 'Ingelogd', 'API-sleutels']], ['Server en logboek', ['Activiteitenlog', 'Server']], ['Privacy', ['Privacy: gegevens van één persoon']]],
     security: [['Overzicht', ['Beveiligingsscore', 'Mijn apparaten']], ['Inloggen', ['Tweestapsverificatie', 'Passkeys']], ['Verbinding', ['Beveiligde verbinding (https)', 'Aanvallen en blokkades']], ['Logboek en back-ups', ['Logboek', 'Back-ups, aanvalsbeveiliging en herstart']]],
-    system: [['Start', ['Eerste keer instellen']], ['Toegang', ['Toegang']], ['Gegevens', ['Gegevens', 'Gegevens overzetten']], ['Bijwerken', ['Server bijwerken']], ['Noodknoppen', ['Gevarenzone']]],
+    system: [['Start', ['Eerste keer instellen']], ['Toegang', ['Toegang']], ['Gegevens', ['Gegevens', 'Gegevens overzetten']], ['Bijwerken', ['Server bijwerken']], ['Netwerk', ['Wifi-brug']], ['Noodknoppen', ['Gevarenzone']]],
   };
   // the groups of “Alle instellingen” belong to the same kinds
   const ALL_CATS = [['Dag', ['deur', 'hours', 'away', 'startup']], ['Bezoekers', ['visitors', 'buttons', 'replies', 'moderation']], ['Scherm', ['weergave', 'screen', 'sound', 'colors']], ['Meldingen', ['notify', 'share', 'notifyRules', 'mail', 'watch']], ['Teksten', []], ['Systeem', ['system']]];
@@ -1054,7 +1054,7 @@
     design: { Uiterlijk: 'Kleuren, indeling en extra’s op het deurscherm.', 'Teksten en geluid': 'De woorden die op het deurscherm staan, en de beltonen.', 'Eigen onderdelen': 'Een eigen tekst of logo op het deurscherm.' },
     admin: { Mensen: 'Wie dit paneel mag gebruiken, met welke rechten, en welke programma’s ermee mogen praten.', 'Server en logboek': 'Wat de server gedaan heeft en hoe hij draait.', Privacy: 'Alles van één persoon opzoeken of wissen (AVG).' },
     security: { Overzicht: 'Hoe goed alles beveiligd is, met een lijstje wat beter kan. En welke apparaten zijn ingelogd.', Inloggen: 'Extra veilig inloggen met een code uit een app of met je vingerafdruk of gezicht.', Verbinding: 'Versleutelde verbinding (https) en bescherming tegen mensen die de server overspoelen.', 'Logboek en back-ups': 'Wat er gebeurd is, en kopieën van je gegevens voor als er iets misgaat.' },
-    system: { Start: 'De dingen die je als eerste moet regelen, met een knop naar de juiste plek.', Toegang: 'Wie mag inloggen, hoelang, en wat er gebeurt bij te veel foute pogingen.', Gegevens: 'Back-ups, hoelang verzoeken bewaard blijven en gegevens naar een andere server zetten.', Bijwerken: 'De nieuwste versie van de server ophalen.', Noodknoppen: 'Alleen voor als het misgaat: de deur sluiten en iedereen uitloggen.' },
+    system: { Start: 'De dingen die je als eerste moet regelen, met een knop naar de juiste plek.', Toegang: 'Wie mag inloggen, hoelang, en wat er gebeurt bij te veel foute pogingen.', Gegevens: 'Back-ups, hoelang verzoeken bewaard blijven en gegevens naar een andere server zetten.', Bijwerken: 'De nieuwste versie van de server ophalen.', Netwerk: 'Een wifi-netwerk kiezen en die verbinding doorgeven aan computers in de netwerkpoort (voor een Raspberry Pi of andere Linux-computer).', Noodknoppen: 'Alleen voor als het misgaat: de deur sluiten en iedereen uitloggen.' },
     all: { Dag: 'De naam, openingstijden en afwezigheid.', Bezoekers: 'Knoppen, antwoorden en regels voor bezoekers.', Scherm: 'Weergave, kleuren en geluid van het deurscherm.', Meldingen: 'Mail, telefoon en waarschuwingen.', Teksten: 'Alle woorden op het deurscherm.', Systeem: 'Inloggen, aanvalsbeveiliging en back-ups.' },
   };
   // a short explanation under the title of a card that has none of its own
@@ -1092,6 +1092,7 @@
     Toegang: 'Wie mag inloggen, hoelang je ingelogd blijft, en wat er gebeurt bij te veel foute pogingen.',
     Gegevens: 'Hoelang bezoekersverzoeken bewaard blijven, en de back-ups van je gegevens.',
     Gevarenzone: 'Alleen als het echt nodig is. Noodstop sluit de deur en zet iedereen buiten het paneel.',
+    'Wifi-brug': 'Kies een wifi-netwerk; de netwerkpoort geeft die verbinding dan aan andere computers door, zoals een kleine router.',
     'Gegevens overzetten': 'Neem alles over van een andere deurserver, bijvoorbeeld bij een nieuwe computer.',
   };
   function drawCatBar() {
@@ -1612,6 +1613,47 @@
     if (updLoading) return; updLoading = true;
     try { updInfo = await api(check ? '/api/update/check' : '/api/update', check ? {} : undefined); } catch { updInfo = updInfo || { checked: false }; }
     updLoading = false; if (tab === 'system') renderAll(true);
+  }
+  // ---------- Wifi-brug: choose a wifi network; the network port hands that connection on to other computers ----------
+  let nb = null, nbNets = null, nbSel = '', nbPw = '', nbBusy = '', nbLoading = false;
+  async function loadNb() {
+    if (nbLoading) return; nbLoading = true;
+    try { nb = await api('/api/netbridge'); } catch { nb = nb || { supported: false, why: 'De server antwoordt niet.' }; }
+    nbLoading = false; if (tab === 'system') renderAll(true);
+  }
+  function netbridgeCard() {
+    if (!nb && !nbLoading) loadNb();
+    const s = nb || {};
+    const busy = (t) => { nbBusy = t; renderAll(true); };
+    if (!nb) return h('div', { class: 'card' }, h('h2', {}, 'Wifi-brug'), h('p', { class: 'muted' }, 'Even kijken wat deze computer kan…'));
+    if (!s.supported || !s.available) return h('div', { class: 'card' }, h('h2', {}, 'Wifi-brug'), h('p', { class: 'muted' }, s.why || 'Dit kan hier niet.'),
+      h('p', { class: 'muted' }, 'De wifi-brug laat een computer met wifi en een netwerkpoort (zoals een Raspberry Pi) de wifi-verbinding doorgeven aan andere computers die je in de netwerkpoort steekt.'));
+    const cur = s.current;
+    const scan = async () => { busy('Zoeken naar netwerken…'); try { nbNets = (await api('/api/netbridge/scan', {})).networks; } catch {} nbBusy = ''; renderAll(true); };
+    const connect = async () => {
+      if (!nbSel) return;
+      busy(`Verbinden met “${nbSel}”… (dit kan een halve minuut duren)`);
+      try { nb = await api('/api/netbridge/connect', { ssid: nbSel, password: nbPw }); nbPw = ''; toast('Verbonden met ' + nbSel); nbSel = ''; nbNets = null; } catch {}
+      nbBusy = ''; renderAll(true);
+    };
+    const toggle = async (on) => {
+      if (on && !confirm(`De netwerkpoort (${s.ethernet}) wordt daarna alleen nog gebruikt om wifi aan andere computers te geven. Deze computer zelf gebruikt dan alleen nog wifi${cur ? ` en is bereikbaar op http://${cur.address || 'saga-deur.local'}:8080` : ''}.\n\nGebruik je het paneel nu via de netwerkkabel van deze computer? Dan verlies je de verbinding; open het paneel dan via wifi. Doorgaan?`)) { renderAll(true); return; }
+      busy(on ? 'Delen aanzetten…' : 'Delen uitzetten…');
+      try { nb = await api('/api/netbridge/share', { on }); toast(on ? 'De netwerkpoort deelt nu de wifi' : 'Delen staat uit'); } catch {}
+      nbBusy = ''; renderAll(true);
+    };
+    const list = nbNets ? h('div', { class: 'list' }, ...nbNets.slice(0, 20).map((n) => h('button', { class: 'tile-btn' + (nbSel === n.ssid ? ' sel' : ''), disabled: n.enterprise, onclick: () => { nbSel = n.ssid; nbPw = ''; renderAll(true); } },
+      h('b', {}, n.ssid + (n.current ? '  ✓ verbonden' : '')), h('span', { class: 'muted' }, `${n.signal}% sterk · ${n.enterprise ? 'bedrijfsbeveiliging (met persoonlijke inlog): niet ondersteund' : n.open ? 'open netwerk' : 'met wachtwoord'}`)))) : null;
+    const sel = nbNets && nbSel ? nbNets.find((n) => n.ssid === nbSel) : null;
+    return h('div', { class: 'card' }, h('h2', {}, 'Wifi-brug', h('span', { class: 'sp' }), h('button', { class: 'sm', onclick: scan, disabled: !!nbBusy }, 'Netwerken zoeken')),
+      h('p', { class: 'muted' }, cur ? `Nu verbonden met wifi “${cur.ssid}” (${cur.signal}% sterk), adres ${cur.address || 'onbekend'}.` : 'Deze computer is nog niet met wifi verbonden.'),
+      nbBusy ? h('p', {}, nbBusy) : null,
+      list,
+      sel ? h('div', { class: 'row', style: 'margin:10px 0' }, sel.open ? h('span', { class: 'muted' }, 'Open netwerk: geen wachtwoord nodig.') : h('input', { type: 'password', placeholder: `Wachtwoord van ${sel.ssid}`, value: nbPw, 'data-keep': 'nb-pw', autocomplete: 'new-password', oninput: (e) => { nbPw = e.target.value; } }), h('button', { class: 'white', onclick: connect, disabled: !!nbBusy }, 'Verbinden')) : null,
+      h('label', { class: 'check', style: 'margin-top:12px' }, h('input', { type: 'checkbox', checked: !!s.sharing, disabled: !!nbBusy || (!cur && !s.sharing), onchange: (e) => toggle(e.target.checked) }), `Deel deze wifi-verbinding met de netwerkpoort (${s.ethernet})`),
+      !cur && !s.sharing ? h('p', { class: 'muted' }, 'Maak eerst verbinding met een wifi-netwerk.') : null,
+      s.sharing ? h('p', { class: 'muted' }, `Computers in de netwerkpoort krijgen vanzelf een adres (10.42.0.x) en internet via de wifi. ${s.clients.length ? 'Nu aangesloten: ' + s.clients.map((c) => c.name || c.ip).join(', ') + '.' : 'Er is nu niets aangesloten.'}`) : null,
+      h('p', { class: 'muted', style: 'font-size:12.5px' }, 'Let op: sommige netwerken (zoals op scholen en bedrijven) verbieden eigen routers of laten maar één apparaat per aansluiting toe. Overleg met de beheerder van het netwerk. Netwerken met bedrijfsbeveiliging (inloggen met een persoonlijk account) werken niet.'));
   }
   function updateCard() {
     if (!updInfo && !updLoading) loadUpdate(false);
@@ -2461,7 +2503,7 @@
       ].filter(Boolean);
     },
 
-    system() { return [checklistCard(false), ...systemView(), sysData ? updateCard() : null, sysData ? transferCard() : null].filter(Boolean); },
+    system() { return [checklistCard(false), ...systemView(), sysData ? updateCard() : null, sysData ? transferCard() : null, netbridgeCard()].filter(Boolean); },
 
     // ---------- Ontwerp: change how the door screen looks and what it says ----------
     design() {
